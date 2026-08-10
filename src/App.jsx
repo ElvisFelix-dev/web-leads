@@ -1,0 +1,94 @@
+import { Routes, Route } from 'react-router-dom';
+
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
+import Layout from './components/Layout';
+
+import SignIn from './pages/SignIn';
+import SignUp from './pages/SignUp';
+import ForgtPassword from './pages/Forgot-Password';
+import ResetPassword from './pages/Reset-Password';
+import Dashboard from './pages/Dashboard';
+import Profile from './pages/Profile';
+import DashboardCorretor from './pages/DashboardCorretor';
+import Hotsite from './pages/Hotsite';
+import PropertyCreate from './pages/PropertyCreate';
+import CreateLead from './pages/Create-Leads';
+import LeadsList from './pages/Lead-List';
+import AssignLeads from './pages/AssignLeads'; // nova página
+import MyLeads from './pages/MyLeads';
+import ManageProperties from './pages/ManageProperties';
+import Brokers from './pages/Brokers';
+import Me from './pages/Me';
+import PropertyDetails from './pages/PropertyDetails';
+import Landing from './pages/Landing';
+import PropertiesMap from './pages/PropertiesMap';
+import Pipeline from './pages/Pipeline';
+import BrokerDashboard from './pages/BrokerDashboard';
+import Visits from './pages/Visits';
+import BrokerPipeline from './pages/BrokerPipeline';
+import BrokerDetails from './pages/BrokerDetails';
+import LeadDetail from './pages/LeadDetail';
+import PropertyList from './pages/PropertyList';
+import AdminVisit from './pages/AdminVisits';
+import VisitDetails from './pages/VisitDetails';
+import Home from './pages/site/Home';
+import Contact from './pages/site/Contact';
+
+export function App() {
+  return (
+    <div className="text-black">
+      <Routes>
+        {/* Páginas SEM sidebar */}
+        <Route path="/" element={<SignIn />} />
+        <Route path="/sign-up" element={<SignUp />} />
+        <Route path="/forgot-password" element={<ForgtPassword />} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
+        <Route path="/hotsite/:name" element={<Hotsite />} />
+        <Route path="/properties/:id" element={<PropertyDetails />} />
+        <Route path="/landing" element={<Landing />} />
+        <Route path="/home" element={<Home />} />
+        <Route path="/contato" element={<Contact />} />
+        <Route path="/map" element={<PropertiesMap />} />
+
+        {/* Páginas COM sidebar (usam Layout) */}
+        <Route element={<Layout />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/pipeline" element={<Pipeline />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/dashboard-corretor" element={<DashboardCorretor />} />
+          <Route path="/create-property" element={<PropertyCreate />} />
+          <Route path="/create-lead" element={<CreateLead />} />
+          <Route path="/leads-list" element={<LeadsList />} />
+          <Route path="/assign-leads" element={<AssignLeads />} />{' '}
+          {/* nova rota */}
+          <Route path="/my-leads" element={<MyLeads />} />
+          <Route path="/manage-properties" element={<ManageProperties />} />
+          <Route path="/brokers" element={<Brokers />} />
+          <Route path="/broker-dashboard" element={<BrokerDashboard />} />
+          <Route path="/me" element={<Me />} />
+          <Route path="/my-visits" element={<Visits />} />
+          <Route path="/my-pipeline" element={<BrokerPipeline />} />
+          <Route path="/broker-details/:id" element={<BrokerDetails />} />
+          <Route path="/lead-detail/:id" element={<LeadDetail />} />
+          <Route path="/property-list" element={<PropertyList />} />
+          <Route path="/visits" element={<AdminVisit />} />
+          <Route path="/visit-details/:id" element={<VisitDetails />} />
+        </Route>
+      </Routes>
+      <ToastContainer
+        position="bottom-center"
+        autoClose={4000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="dark"
+      />
+    </div>
+  );
+}
