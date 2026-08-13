@@ -10,7 +10,6 @@ import {
   FaCalendarAlt,
   FaChevronLeft,
   FaChartLine,
-  FaUsers,
   FaClipboardList,
   FaUser,
   FaGlobe,
@@ -20,6 +19,7 @@ import {
   FaProjectDiagram,
   FaTachometerAlt,
   FaPlusSquare,
+  FaBullseye,
 } from 'react-icons/fa';
 
 export default function Sidebar({ onCollapseChange }) {
@@ -137,6 +137,18 @@ export default function Sidebar({ onCollapseChange }) {
       icon: <FaProjectDiagram />,
     },
 
+    /*
+    =========================================
+    OPORTUNIDADES
+    =========================================
+    */
+
+    {
+      path: '/opportunities',
+      label: 'Oportunidades',
+      icon: <FaBullseye />,
+    },
+
     {
       path: '/visits',
       label: 'Agenda de Visitas',
@@ -169,6 +181,18 @@ export default function Sidebar({ onCollapseChange }) {
           path: '/my-pipeline',
           label: 'Meu Pipeline',
           icon: <FaProjectDiagram />,
+        },
+
+        /*
+        =========================================
+        OPORTUNIDADES
+        =========================================
+        */
+
+        {
+          path: '/opportunities',
+          label: 'Oportunidades',
+          icon: <FaBullseye />,
         },
 
         {

@@ -39,6 +39,9 @@ import Contact from './pages/site/Contact';
 import PropertyCRMDetails from './pages/PropertyCRMDetails';
 import AboutUs from './pages/site/AboutUs';
 import Properties from './pages/site/Properties';
+import Opportunities from './pages/Opportunities';
+import OpportunityCreate from './pages/OpportunityCreate';
+import OpportunityDetails from './pages/OpportunityDetails';
 
 export function App() {
   return (
@@ -90,6 +93,9 @@ export function App() {
             path="/propertycrm-details/:id"
             element={<PropertyCRMDetails />}
           />
+          <Route path="/opportunities" element={<Opportunities />} />
+          <Route path="/opportunities/new" element={<OpportunityCreate />} />
+          <Route path="/opportunities/:id" element={<OpportunityDetails />} />
         </Route>
       </Routes>
       <ToastContainer
