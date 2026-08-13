@@ -10,7 +10,6 @@ import {
   FaCalendarAlt,
   FaChevronLeft,
   FaChartLine,
-  FaHome,
   FaUsers,
   FaClipboardList,
   FaUser,
@@ -75,6 +74,8 @@ export default function Sidebar({ onCollapseChange }) {
     navigate('/');
 
     setMobileOpen(false);
+
+    setDropdownOpen(false);
   };
 
   useEffect(() => {
@@ -141,10 +142,12 @@ export default function Sidebar({ onCollapseChange }) {
       label: 'Agenda de Visitas',
       icon: <FaCalendarAlt />,
     },
+
     {
       path: '/home',
-      label: 'Site da Imóbiliaria',
+      label: 'Site da Imobiliária',
       icon: <FaGlobe />,
+      target: '_blank',
     },
   ];
 
@@ -198,97 +201,96 @@ export default function Sidebar({ onCollapseChange }) {
 
   return (
     <>
-      {/* MOBILE BUTTON */}
+      {/* =========================================
+          MOBILE BUTTON
+      ========================================= */}
 
       <button
         onClick={() => setMobileOpen(!mobileOpen)}
-
         className="
-fixed
-top-4
-left-4
-z-50
-p-3
-rounded-lg
-bg-gray-900
-text-white
-shadow-lg
-sm:hidden
-"
+          fixed
+          top-4
+          left-4
+          z-50
+          p-3
+          rounded-lg
+          bg-gray-900
+          text-white
+          shadow-lg
+          sm:hidden
+        "
       >
         <FaBars />
       </button>
 
-      {/* MOBILE OVERLAY */}
+      {/* =========================================
+          MOBILE OVERLAY
+      ========================================= */}
 
       {mobileOpen && (
         <div
           onClick={() => setMobileOpen(false)}
-
           className="
-fixed
-inset-0
-bg-black/50
-z-30
-sm:hidden
-"
+            fixed
+            inset-0
+            bg-black/50
+            z-30
+            sm:hidden
+          "
         />
       )}
 
-      {/* SIDEBAR */}
+      {/* =========================================
+          SIDEBAR
+      ========================================= */}
 
       <aside
         className={`
+          fixed
+          top-0
+          left-0
+          z-40
+          h-screen
 
-fixed
-top-0
-left-0
-z-40
-h-screen
+          bg-gray-900
 
-bg-gray-900
+          border-r
+          border-gray-800
 
-border-r
-border-gray-800
+          transition-all
+          duration-300
 
-transition-all
-duration-300
+          ${collapsed ? 'w-20' : 'w-64'}
 
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
 
-${collapsed ? 'w-20' : 'w-64'}
+          sm:translate-x-0
 
-
-
-${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
-
-
-
-sm:translate-x-0
-
-flex
-flex-col
-
-`}
+          flex
+          flex-col
+        `}
       >
-        {/* HEADER */}
+        {/* =========================================
+            HEADER
+        ========================================= */}
 
         <div
           className="
-flex
-items-center
-justify-between
-p-4
-border-b
-border-gray-800
-"
+            flex
+            items-center
+            justify-between
+            p-4
+            border-b
+            border-gray-800
+          "
         >
           {!collapsed && (
             <h1
               className="
-text-xl
-font-bold
-text-white
-"
+                text-xl
+                font-bold
+                text-white
+              "
             >
               Leads
               <span className="text-blue-500">NaMão</span>
@@ -297,74 +299,70 @@ text-white
 
           <button
             onClick={handleCollapse}
-
             className="
-hidden
-sm:flex
-text-gray-400
-hover:text-white
-"
+              hidden
+              sm:flex
+              text-gray-400
+              hover:text-white
+            "
           >
             <FaChevronLeft
               className={`
-transition
+                transition
 
-${collapsed ? 'rotate-180' : ''}
-
-`}
+                ${collapsed ? 'rotate-180' : ''}
+              `}
             />
           </button>
         </div>
 
-        {/* USER */}
+        {/* =========================================
+            USER
+        ========================================= */}
 
         <div
           ref={dropdownRef}
-
           className="
-p-4
-border-b
-border-gray-800
-"
+            p-4
+            border-b
+            border-gray-800
+          "
         >
           <button
             onClick={() => setDropdownOpen(!dropdownOpen)}
-
             className="
-flex
-items-center
-gap-3
-w-full
-"
+              flex
+              items-center
+              gap-3
+              w-full
+            "
           >
             {user?.avatar ? (
               <img
                 src={user.avatar}
-
                 alt={user.name}
-
                 className="
-w-12
-h-12
-rounded-full
-object-cover
-border
-border-blue-500
-"
+                  w-12
+                  h-12
+                  rounded-full
+                  object-cover
+                  border
+                  border-blue-500
+                "
               />
             ) : (
               <div
                 className="
-w-12
-h-12
-rounded-full
-bg-blue-600
-flex
-items-center
-justify-center
-text-white
-font-bold
-"
+                  w-12
+                  h-12
+                  rounded-full
+                  bg-blue-600
+                  flex
+                  items-center
+                  justify-center
+                  text-white
+                  font-bold
+                "
               >
                 {getInitials(user?.name)}
               </div>
@@ -374,19 +372,19 @@ font-bold
               <div className="text-left">
                 <p
                   className="
-text-white
-text-sm
-font-semibold
-"
+                    text-white
+                    text-sm
+                    font-semibold
+                  "
                 >
                   {user?.name}
                 </p>
 
                 <span
                   className="
-text-gray-400
-text-xs
-"
+                    text-gray-400
+                    text-xs
+                  "
                 >
                   {user?.isAdmin ? 'Administrador' : 'Corretor'}
                 </span>
@@ -394,42 +392,44 @@ text-xs
             )}
           </button>
 
+          {/* =========================================
+              USER DROPDOWN
+          ========================================= */}
+
           {dropdownOpen && (
             <div
               className="
-mt-3
-bg-gray-800
-rounded-lg
-overflow-hidden
-"
+                mt-3
+                bg-gray-800
+                rounded-lg
+                overflow-hidden
+              "
             >
               <Link
                 to={user?.isAdmin ? '/me' : '/profile'}
-
                 className="
-block
-px-4
-py-2
-text-gray-200
-hover:bg-gray-700
-"
+                  block
+                  px-4
+                  py-2
+                  text-gray-200
+                  hover:bg-gray-700
+                "
               >
                 Perfil
               </Link>
 
               <button
                 onClick={handleLogout}
-
                 className="
-flex
-items-center
-gap-2
-w-full
-px-4
-py-2
-text-gray-200
-hover:bg-gray-700
-"
+                  flex
+                  items-center
+                  gap-2
+                  w-full
+                  px-4
+                  py-2
+                  text-gray-200
+                  hover:bg-gray-700
+                "
               >
                 <FaSignOutAlt />
                 Sair
@@ -438,54 +438,54 @@ hover:bg-gray-700
           )}
         </div>
 
-        {/* MENU */}
+        {/* =========================================
+            MENU
+        ========================================= */}
 
         <nav
           className="
-flex-1
-p-3
-"
+            flex-1
+            p-3
+          "
         >
           <ul className="space-y-2">
             {menu.map((item) => (
               <li key={item.path}>
                 <Link
                   to={item.path}
-
+                  target={item.target}
+                  rel={
+                    item.target === '_blank' ? 'noopener noreferrer' : undefined
+                  }
                   onClick={() => {
                     setMobileOpen(false);
 
                     setDropdownOpen(false);
                   }}
-
                   title={collapsed ? item.label : ''}
-
                   className={`
+                    flex
+                    items-center
+                    gap-3
+                    p-3
+                    rounded-lg
+                    transition
 
-flex
-items-center
-gap-3
-p-3
-rounded-lg
-transition
-
-
-${
-  isActive(item.path)
-    ? 'bg-blue-600 text-white'
-    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-}
-
-`}
+                    ${
+                      isActive(item.path)
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    }
+                  `}
                 >
                   <span className="text-lg">{item.icon}</span>
 
                   {!collapsed && (
                     <span
                       className="
-text-sm
-font-medium
-"
+                        text-sm
+                        font-medium
+                      "
                     >
                       {item.label}
                     </span>
