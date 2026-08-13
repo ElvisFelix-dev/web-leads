@@ -127,9 +127,6 @@ export default function Home() {
         {/* ATENDIMENTO */}
         <PersonalizedService />
 
-        {/* CIDADES */}
-        <CitiesSection />
-
         {/* CTA */}
         <FinalCTA
           onContact={() => {

@@ -12,7 +12,8 @@ import ResetPassword from './pages/Reset-Password';
 import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import DashboardCorretor from './pages/DashboardCorretor';
-import Hotsite from './pages/Hotsite';
+import BrokerHotsite from './pages/hotsite/BrokerHotsite';
+import PropertyPage from './pages/hotsite/PropertyPage';
 import PropertyCreate from './pages/PropertyCreate';
 import CreateLead from './pages/Create-Leads';
 import LeadsList from './pages/Lead-List';
@@ -35,6 +36,9 @@ import AdminVisit from './pages/AdminVisits';
 import VisitDetails from './pages/VisitDetails';
 import Home from './pages/site/Home';
 import Contact from './pages/site/Contact';
+import PropertyCRMDetails from './pages/PropertyCRMDetails';
+import AboutUs from './pages/site/AboutUs';
+import Properties from './pages/site/Properties';
 
 export function App() {
   return (
@@ -45,11 +49,18 @@ export function App() {
         <Route path="/sign-up" element={<SignUp />} />
         <Route path="/forgot-password" element={<ForgtPassword />} />
         <Route path="/reset-password/:token" element={<ResetPassword />} />
-        <Route path="/hotsite/:name" element={<Hotsite />} />
+        <Route path="/broker/:slug" element={<BrokerHotsite />} />
+        <Route
+          path="/broker/:brokerSlug/property/:propertySlug"
+          element={<PropertyPage />}
+        />
+
         <Route path="/properties/:id" element={<PropertyDetails />} />
         <Route path="/landing" element={<Landing />} />
         <Route path="/home" element={<Home />} />
-        <Route path="/contato" element={<Contact />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/about-us" element={<AboutUs />} />
+        <Route path="/imoveis" element={<Properties />} />
         <Route path="/map" element={<PropertiesMap />} />
 
         {/* Páginas COM sidebar (usam Layout) */}
@@ -75,6 +86,10 @@ export function App() {
           <Route path="/property-list" element={<PropertyList />} />
           <Route path="/visits" element={<AdminVisit />} />
           <Route path="/visit-details/:id" element={<VisitDetails />} />
+          <Route
+            path="/propertycrm-details/:id"
+            element={<PropertyCRMDetails />}
+          />
         </Route>
       </Routes>
       <ToastContainer

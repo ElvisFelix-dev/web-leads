@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import {
@@ -11,12 +11,17 @@ import {
   BedDouble,
   MapPin,
   CheckCircle,
+  UserRound,
+  Phone,
+  Mail,
+  Percent,
 } from 'lucide-react';
 
 import { formatCurrency, currencyToNumber } from '../utils/currency';
 import { formatArea, areaToNumber } from '../utils/area';
 
 import useProperties from '../hooks/useProperties';
+import api from '../service/api';
 import PropertyImageUpload from '../components/property/PropertyImageUpload';
 
 const PROPERTY_TYPES = [
@@ -78,79 +83,71 @@ const AVAILABLE_FEATURES = [
   'Aceita Pets',
 ];
 
-/* ==========================================================
-   ESTILO PREMIUM
-========================================================== */
+/*
+==========================================================
+ESTILOS
+==========================================================
+*/
 
 const inputClass = `
-w-full
-rounded-xl
-border
-border-gray-700
-bg-gray-800/70
-
-px-4
-py-3.5
-
-text-sm
-text-gray-100
-
-placeholder:text-gray-500
-
-transition-all
-duration-200
-
-outline-none
-
-hover:border-gray-500
-
-focus:border-blue-500
-focus:ring-4
-focus:ring-blue-500/10
+  w-full
+  rounded-xl
+  border
+  border-gray-700
+  bg-gray-800/70
+  px-4
+  py-3.5
+  text-sm
+  text-gray-100
+  placeholder:text-gray-500
+  transition-all
+  duration-200
+  outline-none
+  hover:border-gray-500
+  focus:border-blue-500
+  focus:ring-4
+  focus:ring-blue-500/10
 `;
 
 const selectClass = inputClass;
 
 const labelClass = `
-mb-2
-block
-text-sm
-font-medium
-text-gray-300
+  mb-2
+  block
+  text-sm
+  font-medium
+  text-gray-300
 `;
 
 const cardClass = `
-group
-
-rounded-2xl
-
-border
-border-gray-800
-
-bg-gray-900
-
-p-8
-
-shadow-xl
-
-transition-all
-duration-300
-
-hover:border-gray-700
-hover:shadow-2xl
+  group
+  rounded-2xl
+  border
+  border-gray-800
+  bg-gray-900
+  p-8
+  shadow-xl
+  transition-all
+  duration-300
+  hover:border-gray-700
+  hover:shadow-2xl
 `;
 
 const sectionTitle = `
-mb-8
-
-flex
-items-center
-gap-4
-
-text-lg
-font-semibold
-text-white
+  mb-8
+  flex
+  items-center
+  gap-4
+  text-lg
+  font-semibold
+  text-white
 `;
+
+/*
+==========================================================
+ESTADO INICIAL
+==========================================================
+*/
 
 const initialState = {
   name: '',
@@ -194,6 +191,30 @@ const initialState = {
   },
 
   features: [],
+
+  /*
+  ========================================================
+  CAPTAÇÃO
+  ========================================================
+  */
+
+  captation: {
+    broker: '',
+    percentage: 0,
+  },
+
+  /*
+  ========================================================
+  PROPRIETÁRIO
+  ========================================================
+  */
+
+  owner: {
+    name: '',
+    phone: '',
+    email: '',
+    document: '',
+  },
 };
 
 export default function PropertyCreate() {
@@ -202,6 +223,147 @@ export default function PropertyCreate() {
   const { create, loading, error } = useProperties(false);
 
   const [form, setForm] = useState(initialState);
+
+  /*
+  ==========================================================
+  CORRETORES
+  ==========================================================
+  */
+
+  const [brokers, setBrokers] = useState([]);
+  const [brokersLoading, setBrokersLoading] = useState(false);
+
+  /*
+  ==========================================================
+  USUÁRIO / ADMIN
+  ==========================================================
+  */
+
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  /*
+  ==========================================================
+  BUSCAR USUÁRIO E CORRETORES
+  ==========================================================
+  */
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadCurrentUserAndBrokers() {
+      try {
+        const storedUser = localStorage.getItem('userInfo');
+
+        if (!storedUser) {
+          console.warn('userInfo não encontrado no localStorage.');
+
+          return;
+        }
+
+        const userInfo = JSON.parse(storedUser);
+
+        const currentUser = userInfo?.user || userInfo?.data || userInfo;
+
+        console.log('USUÁRIO LOGADO:', currentUser);
+
+        /*
+      ======================================================
+      IDENTIFICAR ADMIN
+      ======================================================
+      */
+
+        const admin =
+          currentUser?.isAdmin === true || currentUser?.role === 'admin';
+
+        console.log('É ADMIN?', admin);
+
+        if (!mounted) {
+          return;
+        }
+
+        setIsAdmin(admin);
+
+        /*
+      ======================================================
+      SOMENTE ADMIN CARREGA OS CORRETORES
+      ======================================================
+      */
+
+        if (!admin) {
+          console.warn('Usuário atual não é admin.');
+
+          return;
+        }
+
+        setBrokersLoading(true);
+
+        /*
+      ======================================================
+      BUSCAR CORRETORES
+      ======================================================
+      */
+
+        const response = await api.get('/api/users/brokers');
+
+        console.log('RESPOSTA COMPLETA BROKERS:', response.data);
+
+        /*
+      ======================================================
+      NORMALIZAR RESPOSTA
+      ======================================================
+      */
+
+        const data =
+          response.data?.data?.brokers ||
+          response.data?.brokers ||
+          response.data?.data ||
+          response.data ||
+          [];
+
+        console.log('BROKERS EXTRAÍDOS:', data);
+
+        /*
+      ======================================================
+      GARANTIR ARRAY
+      ======================================================
+      */
+
+        const normalizedBrokers = Array.isArray(data)
+          ? data.filter((broker) => broker && broker._id && broker.name)
+          : [];
+
+        console.log('BROKERS NORMALIZADOS:', normalizedBrokers);
+
+        if (!mounted) {
+          return;
+        }
+
+        setBrokers(normalizedBrokers);
+      } catch (err) {
+        console.error('Erro ao buscar usuário/corretores:', err);
+
+        if (mounted) {
+          setBrokers([]);
+        }
+      } finally {
+        if (mounted) {
+          setBrokersLoading(false);
+        }
+      }
+    }
+
+    loadCurrentUserAndBrokers();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  /*
+  ==========================================================
+  CAMPOS SIMPLES
+  ==========================================================
+  */
 
   function handleChange(e) {
     const { name, value } = e.target;
@@ -212,9 +374,16 @@ export default function PropertyCreate() {
     }));
   }
 
+  /*
+  ==========================================================
+  CAMPOS ANINHADOS
+  ==========================================================
+  */
+
   function handleNestedChange(group, field, value) {
     setForm((prev) => ({
       ...prev,
+
       [group]: {
         ...prev[group],
         [field]: value,
@@ -222,9 +391,51 @@ export default function PropertyCreate() {
     }));
   }
 
+  /*
+  ==========================================================
+  PERCENTUAL DE CAPTAÇÃO
+  ==========================================================
+  */
+
+  function handlePercentageChange(value) {
+    const digits = String(value)
+      .replace(/[^0-9.,]/g, '')
+      .replace(',', '.');
+
+    if (digits === '') {
+      handleNestedChange('captation', 'percentage', 0);
+
+      return;
+    }
+
+    const number = Number(digits);
+
+    if (Number.isNaN(number)) {
+      return;
+    }
+
+    handleNestedChange(
+      'captation',
+      'percentage',
+      Math.min(100, Math.max(0, number)),
+    );
+  }
+
+  /*
+  ==========================================================
+  VALORES
+  ==========================================================
+  */
+
   function handleMoneyChange(field, value) {
     handleNestedChange('prices', field, formatCurrency(value));
   }
+
+  /*
+  ==========================================================
+  CONTADORES
+  ==========================================================
+  */
 
   function updateNumber(field, value) {
     const number = Number(value);
@@ -235,9 +446,21 @@ export default function PropertyCreate() {
     }));
   }
 
+  /*
+  ==========================================================
+  ÁREA
+  ==========================================================
+  */
+
   function handleArea(field, value) {
     handleNestedChange('area', field, formatArea(value));
   }
+
+  /*
+  ==========================================================
+  COMODIDADES
+  ==========================================================
+  */
 
   function toggleFeature(feature) {
     setForm((prev) => ({
@@ -249,11 +472,17 @@ export default function PropertyCreate() {
     }));
   }
 
+  /*
+  ==========================================================
+  SUBMIT
+  ==========================================================
+  */
+
   async function handleSubmit(e) {
     e.preventDefault();
 
     try {
-      await create({
+      const payload = {
         ...form,
 
         prices: {
@@ -279,13 +508,51 @@ export default function PropertyCreate() {
         bathrooms: Number(form.bathrooms),
 
         parkingSpaces: Number(form.parkingSpaces),
-      });
+
+        /*
+        ====================================================
+        CAPTAÇÃO
+        ====================================================
+        */
+
+        captation: {
+          broker: form.captation.broker || null,
+
+          percentage: Number(form.captation.percentage) || 0,
+        },
+
+        /*
+        ====================================================
+        PROPRIETÁRIO
+        ====================================================
+        */
+
+        owner: {
+          name: form.owner.name?.trim() || '',
+
+          phone: form.owner.phone?.trim() || '',
+
+          email: form.owner.email?.trim().toLowerCase() || '',
+
+          document: form.owner.document?.trim() || '',
+        },
+      };
+
+      console.log('Payload do imóvel:', payload);
+
+      await create(payload);
 
       navigate('/property-list');
     } catch (err) {
-      console.error(err);
+      console.error('Erro ao criar imóvel:', err);
     }
   }
+
+  /*
+  ==========================================================
+  COMPONENTE NUMBER INPUT
+  ==========================================================
+  */
 
   function NumberInput({ label, value, onChange }) {
     return (
@@ -294,28 +561,28 @@ export default function PropertyCreate() {
 
         <div
           className="
-        mt-2
-        flex
-        items-center
-        overflow-hidden
-        rounded-xl
-        border
-        border-zinc-700
-        bg-zinc-900
-        "
+            mt-2
+            flex
+            items-center
+            overflow-hidden
+            rounded-xl
+            border
+            border-zinc-700
+            bg-zinc-900
+          "
         >
           <button
             type="button"
             onClick={() => onChange(Math.max(0, value - 1))}
             className="
-          h-12
-          w-12
-          border-r
-          border-zinc-700
-          text-xl
-          text-white
-          hover:bg-zinc-800
-          "
+              h-12
+              w-12
+              border-r
+              border-zinc-700
+              text-xl
+              text-white
+              hover:bg-zinc-800
+            "
           >
             −
           </button>
@@ -324,29 +591,29 @@ export default function PropertyCreate() {
             value={value}
             readOnly
             className="
-          h-12
-          flex-1
-          bg-transparent
-          text-center
-          text-lg
-          font-semibold
-          text-white
-          outline-none
-          "
+              h-12
+              flex-1
+              bg-transparent
+              text-center
+              text-lg
+              font-semibold
+              text-white
+              outline-none
+            "
           />
 
           <button
             type="button"
             onClick={() => onChange(value + 1)}
             className="
-          h-12
-          w-12
-          border-l
-          border-zinc-700
-          text-xl
-          text-white
-          hover:bg-zinc-800
-          "
+              h-12
+              w-12
+              border-l
+              border-zinc-700
+              text-xl
+              text-white
+              hover:bg-zinc-800
+            "
           >
             +
           </button>
@@ -366,11 +633,20 @@ export default function PropertyCreate() {
           md:p-8
         "
       >
-        {/* ==========================================================
+        {/* ======================================================
             HEADER
-        ========================================================== */}
+        ====================================================== */}
 
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+        <div
+          className="
+            flex
+            flex-col
+            gap-6
+            lg:flex-row
+            lg:items-center
+            lg:justify-between
+          "
+        >
           <div className="flex items-center gap-5">
             <button
               type="button"
@@ -428,17 +704,35 @@ export default function PropertyCreate() {
               xl:block
             "
           >
-            <p className="text-xs uppercase tracking-wider text-gray-500">
+            <p
+              className="
+                text-xs
+                uppercase
+                tracking-wider
+                text-gray-500
+              "
+            >
               STATUS
             </p>
 
             <div className="mt-2 flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
+              <span
+                className="
+                  h-2
+                  w-2
+                  rounded-full
+                  bg-emerald-400
+                "
+              />
 
               <span className="font-medium text-gray-200">Novo Cadastro</span>
             </div>
           </div>
         </div>
+
+        {/* ======================================================
+            ERRO
+        ====================================================== */}
 
         {error && (
           <div
@@ -451,14 +745,16 @@ export default function PropertyCreate() {
               text-red-400
             "
           >
-            {error}
+            {typeof error === 'string'
+              ? error
+              : error?.message || 'Não foi possível salvar o imóvel.'}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-8">
-          {/* ==========================================================
+          {/* ======================================================
               INFORMAÇÕES BÁSICAS
-          ========================================================== */}
+          ====================================================== */}
 
           <section className={cardClass}>
             <h2 className={sectionTitle}>
@@ -493,7 +789,14 @@ export default function PropertyCreate() {
                 />
               </div>
 
-              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+              <div
+                className="
+                  grid
+                  gap-6
+                  md:grid-cols-2
+                  xl:grid-cols-4
+                "
+              >
                 <div>
                   <label className={labelClass}>Tipo</label>
 
@@ -508,7 +811,9 @@ export default function PropertyCreate() {
                     }
                   >
                     {PROPERTY_TYPES.map((item) => (
-                      <option key={item}>{item}</option>
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -527,7 +832,9 @@ export default function PropertyCreate() {
                     }
                   >
                     {PROPERTY_CATEGORIES.map((item) => (
-                      <option key={item}>{item}</option>
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -546,7 +853,9 @@ export default function PropertyCreate() {
                     }
                   >
                     {PROPERTY_PURPOSES.map((item) => (
-                      <option key={item}>{item}</option>
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -565,20 +874,21 @@ export default function PropertyCreate() {
                     }
                   >
                     {PROPERTY_CONSTRUCTION_STATUS.map((item) => (
-                      <option key={item}>{item}</option>
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
                     ))}
                   </select>
                 </div>
               </div>
             </div>
           </section>
-          {/* ==========================================================
-              GALERIA + VALORES
-          ========================================================== */}
+
+          {/* ======================================================
+              GALERIA + RESUMO
+          ====================================================== */}
 
           <div className="grid gap-8 xl:grid-cols-5">
-            {/* GALERIA */}
-
             <section className={`${cardClass} xl:col-span-3`}>
               <div className="mb-8 flex items-center gap-4">
                 <div
@@ -618,8 +928,6 @@ export default function PropertyCreate() {
               />
             </section>
 
-            {/* RESUMO */}
-
             <aside className={`${cardClass} xl:col-span-2`}>
               <div className="mb-8 flex items-center gap-4">
                 <div
@@ -647,8 +955,23 @@ export default function PropertyCreate() {
               </div>
 
               <div className="space-y-5">
-                <div className="rounded-xl border border-gray-800 bg-gray-800/40 p-4">
-                  <p className="text-xs uppercase tracking-wider text-gray-500">
+                <div
+                  className="
+                    rounded-xl
+                    border
+                    border-gray-800
+                    bg-gray-800/40
+                    p-4
+                  "
+                >
+                  <p
+                    className="
+                      text-xs
+                      uppercase
+                      tracking-wider
+                      text-gray-500
+                    "
+                  >
                     Tipo
                   </p>
 
@@ -657,8 +980,23 @@ export default function PropertyCreate() {
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-gray-800 bg-gray-800/40 p-4">
-                  <p className="text-xs uppercase tracking-wider text-gray-500">
+                <div
+                  className="
+                    rounded-xl
+                    border
+                    border-gray-800
+                    bg-gray-800/40
+                    p-4
+                  "
+                >
+                  <p
+                    className="
+                      text-xs
+                      uppercase
+                      tracking-wider
+                      text-gray-500
+                    "
+                  >
                     Finalidade
                   </p>
 
@@ -667,8 +1005,23 @@ export default function PropertyCreate() {
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-gray-800 bg-gray-800/40 p-4">
-                  <p className="text-xs uppercase tracking-wider text-gray-500">
+                <div
+                  className="
+                    rounded-xl
+                    border
+                    border-gray-800
+                    bg-gray-800/40
+                    p-4
+                  "
+                >
+                  <p
+                    className="
+                      text-xs
+                      uppercase
+                      tracking-wider
+                      text-gray-500
+                    "
+                  >
                     Cidade
                   </p>
 
@@ -677,8 +1030,23 @@ export default function PropertyCreate() {
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-gray-800 bg-gray-800/40 p-4">
-                  <p className="text-xs uppercase tracking-wider text-gray-500">
+                <div
+                  className="
+                    rounded-xl
+                    border
+                    border-gray-800
+                    bg-gray-800/40
+                    p-4
+                  "
+                >
+                  <p
+                    className="
+                      text-xs
+                      uppercase
+                      tracking-wider
+                      text-gray-500
+                    "
+                  >
                     Fotos
                   </p>
 
@@ -690,9 +1058,9 @@ export default function PropertyCreate() {
             </aside>
           </div>
 
-          {/* ==========================================================
+          {/* ======================================================
               VALORES
-          ========================================================== */}
+          ====================================================== */}
 
           <section className={cardClass}>
             <div className="mb-8 flex items-center gap-4">
@@ -720,7 +1088,14 @@ export default function PropertyCreate() {
               </div>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+            <div
+              className="
+                grid
+                gap-6
+                md:grid-cols-2
+                xl:grid-cols-4
+              "
+            >
               <div>
                 <label className={labelClass}>Valor de Venda</label>
 
@@ -781,9 +1156,9 @@ export default function PropertyCreate() {
             </div>
           </section>
 
-          {/* ==========================================================
+          {/* ======================================================
               CARACTERÍSTICAS
-          ========================================================== */}
+          ====================================================== */}
 
           <section className={cardClass}>
             <div className="mb-8 flex items-center gap-4">
@@ -813,7 +1188,14 @@ export default function PropertyCreate() {
               </div>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+            <div
+              className="
+                grid
+                gap-6
+                md:grid-cols-2
+                xl:grid-cols-4
+              "
+            >
               <NumberInput
                 label="Quartos"
                 value={form.bedrooms}
@@ -867,9 +1249,313 @@ export default function PropertyCreate() {
               </div>
             </div>
           </section>
-          {/* ==========================================================
+
+          {/* ======================================================
+              PROPRIETÁRIO
+          ====================================================== */}
+
+          <section className={cardClass}>
+            <div className="mb-8 flex items-center gap-4">
+              <div
+                className="
+                  flex
+                  h-12
+                  w-12
+                  items-center
+                  justify-center
+                  rounded-xl
+                  bg-amber-600/10
+                  text-amber-400
+                "
+              >
+                <UserRound size={22} />
+              </div>
+
+              <div>
+                <h2 className="text-lg font-semibold text-white">
+                  Proprietário do Imóvel
+                </h2>
+
+                <p className="mt-1 text-sm text-gray-400">
+                  Dados internos do proprietário. Essas informações não serão
+                  exibidas no site público ou nos hotsites dos corretores.
+                </p>
+              </div>
+            </div>
+
+            <div
+              className="
+                mb-6
+                rounded-xl
+                border
+                border-amber-500/20
+                bg-amber-500/5
+                p-4
+              "
+            >
+              <div className="flex items-start gap-3">
+                <UserRound
+                  size={18}
+                  className="mt-0.5 shrink-0 text-amber-400"
+                />
+
+                <div>
+                  <p className="text-sm font-medium text-amber-300">
+                    Informação interna
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-gray-500">
+                    Nome, telefone, e-mail e documento permanecem disponíveis
+                    somente dentro do CRM.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div
+              className="
+                grid
+                gap-6
+                md:grid-cols-2
+              "
+            >
+              {/* NOME */}
+
+              <div>
+                <label className={labelClass}>Nome completo</label>
+
+                <input
+                  type="text"
+                  className={inputClass}
+                  value={form.owner.name}
+                  onChange={(e) =>
+                    handleNestedChange('owner', 'name', e.target.value)
+                  }
+                  placeholder="Nome completo do proprietário"
+                />
+              </div>
+
+              {/* TELEFONE */}
+
+              <div>
+                <label className={labelClass}>Telefone</label>
+
+                <div className="relative">
+                  <Phone
+                    size={18}
+                    className="
+                      absolute
+                      left-4
+                      top-1/2
+                      -translate-y-1/2
+                      text-gray-500
+                    "
+                  />
+
+                  <input
+                    type="tel"
+                    className={`${inputClass} pl-11`}
+                    value={form.owner.phone}
+                    onChange={(e) =>
+                      handleNestedChange('owner', 'phone', e.target.value)
+                    }
+                    placeholder="(11) 99999-9999"
+                  />
+                </div>
+              </div>
+
+              {/* EMAIL */}
+
+              <div>
+                <label className={labelClass}>E-mail</label>
+
+                <div className="relative">
+                  <Mail
+                    size={18}
+                    className="
+                      absolute
+                      left-4
+                      top-1/2
+                      -translate-y-1/2
+                      text-gray-500
+                    "
+                  />
+
+                  <input
+                    type="email"
+                    className={`${inputClass} pl-11`}
+                    value={form.owner.email}
+                    onChange={(e) =>
+                      handleNestedChange('owner', 'email', e.target.value)
+                    }
+                    placeholder="proprietario@email.com"
+                  />
+                </div>
+              </div>
+
+              {/* DOCUMENTO */}
+
+              <div>
+                <label className={labelClass}>CPF / CNPJ</label>
+
+                <input
+                  type="text"
+                  className={inputClass}
+                  value={form.owner.document}
+                  onChange={(e) =>
+                    handleNestedChange('owner', 'document', e.target.value)
+                  }
+                  placeholder="000.000.000-00"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* ======================================================
+              CAPTAÇÃO
+          ====================================================== */}
+
+          <section className={cardClass}>
+            <div className="mb-8 flex items-center gap-4">
+              <div
+                className="
+                  flex
+                  h-12
+                  w-12
+                  items-center
+                  justify-center
+                  rounded-xl
+                  bg-blue-600/10
+                  text-blue-400
+                "
+              >
+                <Percent size={22} />
+              </div>
+
+              <div>
+                <h2 className="text-lg font-semibold text-white">
+                  Captação do Imóvel
+                </h2>
+
+                <p className="mt-1 text-sm text-gray-400">
+                  Defina internamente qual corretor realizou a captação e qual
+                  percentual será destinado a ele quando a venda for concluída.
+                </p>
+              </div>
+            </div>
+
+            <div
+              className="
+                mb-6
+                rounded-xl
+                border
+                border-blue-500/20
+                bg-blue-500/5
+                p-4
+              "
+            >
+              <div className="flex items-start gap-3">
+                <Percent size={18} className="mt-0.5 shrink-0 text-blue-400" />
+
+                <div>
+                  <p className="text-sm font-medium text-blue-300">
+                    Regra de captação
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-gray-500">
+                    Essa informação é exclusivamente interna e não será exibida
+                    para o cliente no site público ou no hotsite.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div
+              className="
+                grid
+                gap-6
+                md:grid-cols-2
+              "
+            >
+              {/* CORRETOR CAPTADOR */}
+              <div>
+                <label className={labelClass}>Captado por</label>
+
+                <select
+                  className={selectClass}
+                  value={form.captation.broker}
+                  onChange={(e) =>
+                    handleNestedChange('captation', 'broker', e.target.value)
+                  }
+                  disabled={brokersLoading}
+                >
+                  <option value="">
+                    {brokersLoading
+                      ? 'Carregando corretores...'
+                      : 'Selecione o corretor captador'}
+                  </option>
+
+                  {brokers.map((broker) => (
+                    <option key={broker._id} value={broker._id}>
+                      {broker.name}
+                      {broker.position ? ` — ${broker.position}` : ''}
+                    </option>
+                  ))}
+                </select>
+
+                {!brokersLoading && brokers.length === 0 && (
+                  <p className="mt-2 text-xs text-amber-400">
+                    Nenhum corretor disponível para seleção.
+                  </p>
+                )}
+              </div>
+              {/* PERCENTUAL */}
+
+              <div>
+                <label className={labelClass}>Percentual de captação</label>
+
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    inputMode="decimal"
+                    className={`
+        ${inputClass}
+        pr-12
+        appearance-none
+        [&::-webkit-inner-spin-button]:appearance-none
+        [&::-webkit-outer-spin-button]:appearance-none
+      `}
+                    value={form.captation.percentage}
+                    onChange={(e) => handlePercentageChange(e.target.value)}
+                    placeholder="Ex.: 10"
+                  />
+
+                  <Percent
+                    size={18}
+                    className="
+        absolute
+        right-4
+        top-1/2
+        -translate-y-1/2
+        text-gray-500
+      "
+                  />
+                </div>
+
+                <p className="mt-2 text-xs text-gray-500">
+                  Informe o percentual da comissão destinado ao corretor
+                  responsável pela captação.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* ======================================================
               LOCALIZAÇÃO
-          ========================================================== */}
+          ====================================================== */}
 
           <section className={cardClass}>
             <div className="mb-8 flex items-center gap-4">
@@ -899,7 +1585,14 @@ export default function PropertyCreate() {
               </div>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+            <div
+              className="
+                grid
+                gap-6
+                md:grid-cols-2
+                xl:grid-cols-4
+              "
+            >
               <div>
                 <label className={labelClass}>CEP</label>
 
@@ -1011,9 +1704,9 @@ export default function PropertyCreate() {
             </div>
           </section>
 
-          {/* ==========================================================
+          {/* ======================================================
               COMODIDADES
-          ========================================================== */}
+          ====================================================== */}
 
           <section className={cardClass}>
             <div className="mb-8 flex items-center gap-4">
@@ -1043,7 +1736,15 @@ export default function PropertyCreate() {
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div
+              className="
+                grid
+                gap-4
+                sm:grid-cols-2
+                lg:grid-cols-3
+                xl:grid-cols-4
+              "
+            >
               {AVAILABLE_FEATURES.map((feature) => {
                 const active = form.features.includes(feature);
 
@@ -1053,51 +1754,51 @@ export default function PropertyCreate() {
                     type="button"
                     onClick={() => toggleFeature(feature)}
                     className={`
-                      group
-                      flex
-                      items-center
-                      gap-3
-                      rounded-xl
-                      border
-                      p-4
-                      transition-all
-                      duration-300
-
-                      ${
-                        active
-                          ? `
-                            border-blue-500
-                            bg-blue-600
-                            text-white
-                            shadow-lg
-                            shadow-blue-600/20
-                          `
-                          : `
-                            border-gray-700
-                            bg-gray-800/60
-                            text-gray-300
-                            hover:border-gray-500
-                            hover:bg-gray-800
-                          `
-                      }
-                    `}
-                  >
-                    <div
-                      className={`
+                        group
                         flex
-                        h-6
-                        w-6
                         items-center
-                        justify-center
-                        rounded-full
+                        gap-3
+                        rounded-xl
+                        border
+                        p-4
                         transition-all
+                        duration-300
 
                         ${
                           active
-                            ? 'bg-white text-blue-600'
-                            : 'bg-gray-700 text-gray-400'
+                            ? `
+                              border-blue-500
+                              bg-blue-600
+                              text-white
+                              shadow-lg
+                              shadow-blue-600/20
+                            `
+                            : `
+                              border-gray-700
+                              bg-gray-800/60
+                              text-gray-300
+                              hover:border-gray-500
+                              hover:bg-gray-800
+                            `
                         }
                       `}
+                  >
+                    <div
+                      className={`
+                          flex
+                          h-6
+                          w-6
+                          items-center
+                          justify-center
+                          rounded-full
+                          transition-all
+
+                          ${
+                            active
+                              ? 'bg-white text-blue-600'
+                              : 'bg-gray-700 text-gray-400'
+                          }
+                        `}
                     >
                       ✓
                     </div>
@@ -1109,30 +1810,34 @@ export default function PropertyCreate() {
             </div>
           </section>
 
-          {/* ==========================================================
+          {/* ======================================================
               FOOTER
-          ========================================================== */}
+          ====================================================== */}
 
           <div
             className="
               sticky
               bottom-4
               z-40
-
               rounded-2xl
               border
               border-gray-800
-
               bg-gray-900/95
-
               p-6
-
               shadow-2xl
-
               backdrop-blur-xl
             "
           >
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div
+              className="
+                flex
+                flex-col
+                gap-6
+                lg:flex-row
+                lg:items-center
+                lg:justify-between
+              "
+            >
               <div>
                 <h3 className="font-semibold text-white">
                   Pronto para publicar?
@@ -1143,7 +1848,14 @@ export default function PropertyCreate() {
                 </p>
               </div>
 
-              <div className="flex flex-col-reverse gap-4 sm:flex-row">
+              <div
+                className="
+                  flex
+                  flex-col-reverse
+                  gap-4
+                  sm:flex-row
+                "
+              >
                 <button
                   type="button"
                   onClick={() => navigate(-1)}
@@ -1152,15 +1864,11 @@ export default function PropertyCreate() {
                     border
                     border-gray-700
                     bg-gray-800
-
                     px-6
                     py-3
-
                     font-medium
                     text-gray-300
-
                     transition-all
-
                     hover:border-gray-600
                     hover:bg-gray-700
                   "
@@ -1176,27 +1884,18 @@ export default function PropertyCreate() {
                     items-center
                     justify-center
                     gap-3
-
                     rounded-xl
-
                     bg-blue-600
-
                     px-8
                     py-3
-
                     font-semibold
                     text-white
-
                     shadow-lg
                     shadow-blue-600/20
-
                     transition-all
-
                     hover:scale-[1.02]
                     hover:bg-blue-500
-
                     active:scale-95
-
                     disabled:cursor-not-allowed
                     disabled:opacity-60
                   "

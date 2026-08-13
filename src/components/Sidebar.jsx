@@ -141,6 +141,11 @@ export default function Sidebar({ onCollapseChange }) {
       label: 'Agenda de Visitas',
       icon: <FaCalendarAlt />,
     },
+    {
+      path: '/home',
+      label: 'Site da Imóbiliaria',
+      icon: <FaGlobe />,
+    },
   ];
 
   const brokerLinks = user
@@ -176,7 +181,13 @@ export default function Sidebar({ onCollapseChange }) {
         },
 
         {
-          path: `/hotsite/${slugify(user.name)}`,
+          path: '/property-list',
+          label: 'Imóveis',
+          icon: <FaBuilding />,
+        },
+
+        {
+          path: `/broker/${slugify(user.name)}`,
           label: 'Meu Site',
           icon: <FaGlobe />,
         },

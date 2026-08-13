@@ -9,7 +9,11 @@ export default function FinalCTA({ onSearch }) {
   };
 
   return (
-    <section className="relative overflow-hidden bg-gray-950 py-20 sm:py-24">
+    <section className="relative overflow-hidden bg-gray-950 pb-8 pt-4 sm:pb-10 sm:pt-5 lg:pb-12 lg:pt-6">
+      {/* =====================================================
+          BACKGROUND
+      ====================================================== */}
+
       {/* Glow principal */}
       <div
         className="
@@ -52,7 +56,10 @@ export default function FinalCTA({ onSearch }) {
           lg:px-8
         "
       >
-        {/* Card */}
+        {/* =====================================================
+            CARD
+        ====================================================== */}
+
         <div
           className="
             relative
@@ -62,14 +69,15 @@ export default function FinalCTA({ onSearch }) {
             border-white/10
             bg-white/[0.03]
             px-6
-            py-14
+            py-10
             shadow-2xl
             backdrop-blur-xl
             sm:px-10
-            sm:py-16
+            sm:py-12
           "
         >
           {/* Linha superior */}
+
           <div
             className="
               absolute
@@ -83,13 +91,16 @@ export default function FinalCTA({ onSearch }) {
             "
           />
 
-          {/* Ícone */}
+          {/* =================================================
+              ÍCONE
+          ================================================== */}
+
           <div
             className="
               mx-auto
               flex
-              h-16
-              w-16
+              h-14
+              w-14
               items-center
               justify-center
               rounded-2xl
@@ -99,22 +110,32 @@ export default function FinalCTA({ onSearch }) {
               text-blue-400
               shadow-lg
               shadow-blue-500/10
+              sm:h-16
+              sm:w-16
             "
           >
-            <MessageCircle size={28} strokeWidth={1.8} />
+            <MessageCircle
+              size={26}
+              strokeWidth={1.8}
+              className="sm:h-7 sm:w-7"
+            />
           </div>
 
-          {/* Título */}
+          {/* =================================================
+              TÍTULO
+          ================================================== */}
+
           <h2
             className="
               mx-auto
-              mt-7
+              mt-6
               max-w-3xl
               text-3xl
               font-bold
               leading-tight
               tracking-tight
               text-white
+              sm:mt-7
               sm:text-4xl
               lg:text-5xl
             "
@@ -123,15 +144,19 @@ export default function FinalCTA({ onSearch }) {
             <span className="text-blue-400"> imóvel ideal?</span>
           </h2>
 
-          {/* Descrição */}
+          {/* =================================================
+              DESCRIÇÃO
+          ================================================== */}
+
           <p
             className="
               mx-auto
-              mt-5
+              mt-4
               max-w-2xl
               text-base
               leading-7
               text-gray-400
+              sm:mt-5
               sm:text-lg
             "
           >
@@ -140,19 +165,24 @@ export default function FinalCTA({ onSearch }) {
             seu momento.
           </p>
 
-          {/* Botões */}
+          {/* =================================================
+              BOTÕES
+          ================================================== */}
+
           <div
             className="
-              mt-9
+              mt-7
               flex
               flex-col
               items-center
               justify-center
               gap-3
+              sm:mt-8
               sm:flex-row
             "
           >
             {/* Contato */}
+
             <button
               type="button"
               onClick={handleContact}
@@ -194,6 +224,7 @@ export default function FinalCTA({ onSearch }) {
             </button>
 
             {/* Buscar imóveis */}
+
             <button
               type="button"
               onClick={onSearch}
@@ -225,16 +256,20 @@ export default function FinalCTA({ onSearch }) {
             </button>
           </div>
 
-          {/* Indicador */}
+          {/* =================================================
+              INDICADOR
+          ================================================== */}
+
           <div
             className="
-              mt-8
+              mt-6
               flex
               items-center
               justify-center
               gap-2
               text-xs
               text-gray-500
+              sm:mt-7
             "
           >
             <span

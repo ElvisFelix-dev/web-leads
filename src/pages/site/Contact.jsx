@@ -11,6 +11,9 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+import Header from '../../components/site/Header';
+import Footer from '../../components/site/Footer';
+
 import api from '../../service/api';
 
 export default function Contact() {
@@ -73,40 +76,26 @@ export default function Contact() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white">
-      {/* ================================
+    <div>
+      <Header />
+
+      <main className="min-h-screen bg-gray-950 text-white">
+        {/* ================================
           HERO
       ================================= */}
 
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-950/30 via-gray-950 to-gray-950" />
+        <section className="relative overflow-hidden ">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-950/30 via-gray-950 to-gray-950" />
 
-        <div className="relative mx-auto max-w-7xl px-6 py-16 lg:px-8 lg:py-24">
-          <Link
-            to="/home"
-            className="
-              mb-10
-              inline-flex
-              items-center
-              gap-2
-              text-sm
-              text-gray-400
-              transition
-              hover:text-white
-            "
-          >
-            <ArrowLeft size={17} />
-            Voltar para o site
-          </Link>
-
-          <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
-            {/* ============================
+          <div className="relative mx-auto max-w-7xl px-6 py-16 lg:px-8 lg:py-24 ">
+            <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+              {/* ============================
                 TEXTO
             ============================= */}
 
-            <div>
-              <div
-                className="
+              <div>
+                <div
+                  className="
                   mb-6
                   inline-flex
                   items-center
@@ -120,13 +109,13 @@ export default function Contact() {
                   text-sm
                   text-blue-400
                 "
-              >
-                <Building2 size={16} />
-                Atendimento personalizado
-              </div>
+                >
+                  <Building2 size={16} />
+                  Atendimento personalizado
+                </div>
 
-              <h1
-                className="
+                <h1
+                  className="
                   max-w-2xl
                   text-4xl
                   font-bold
@@ -134,70 +123,71 @@ export default function Contact() {
                   sm:text-5xl
                   lg:text-6xl
                 "
-              >
-                Encontre o imóvel
-                <span className="block text-blue-500">ideal para você.</span>
-              </h1>
+                >
+                  Encontre o imóvel
+                  <span className="block text-blue-500">ideal para você.</span>
+                </h1>
 
-              <p
-                className="
+                <p
+                  className="
                   mt-6
                   max-w-xl
                   text-lg
                   leading-8
                   text-gray-400
                 "
-              >
-                Conte para nós o que você procura. Nossa equipe vai analisar
-                suas necessidades e entrar em contato para ajudar você a
-                encontrar as melhores opções.
-              </p>
+                >
+                  Conte para nós o que você procura. Nossa equipe vai analisar
+                  suas necessidades e entrar em contato para ajudar você a
+                  encontrar as melhores opções.
+                </p>
 
-              <div className="mt-10 grid gap-4 sm:grid-cols-2">
-                <div
-                  className="
+                <div className="mt-10 grid gap-4 sm:grid-cols-2">
+                  <div
+                    className="
                     rounded-2xl
                     border
                     border-white/10
                     bg-white/[0.03]
                     p-5
                   "
-                >
-                  <CheckCircle2 size={22} className="mb-3 text-blue-500" />
+                  >
+                    <CheckCircle2 size={22} className="mb-3 text-blue-500" />
 
-                  <h3 className="font-semibold">Atendimento personalizado</h3>
+                    <h3 className="font-semibold">Atendimento personalizado</h3>
 
-                  <p className="mt-1 text-sm text-gray-500">
-                    Entendemos suas necessidades antes de apresentar os imóveis.
-                  </p>
-                </div>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Entendemos suas necessidades antes de apresentar os
+                      imóveis.
+                    </p>
+                  </div>
 
-                <div
-                  className="
+                  <div
+                    className="
                     rounded-2xl
                     border
                     border-white/10
                     bg-white/[0.03]
                     p-5
                   "
-                >
-                  <CheckCircle2 size={22} className="mb-3 text-blue-500" />
+                  >
+                    <CheckCircle2 size={22} className="mb-3 text-blue-500" />
 
-                  <h3 className="font-semibold">Resposta rápida</h3>
+                    <h3 className="font-semibold">Resposta rápida</h3>
 
-                  <p className="mt-1 text-sm text-gray-500">
-                    Seu contato chega diretamente para nossa equipe.
-                  </p>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Seu contato chega diretamente para nossa equipe.
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* ============================
+              {/* ============================
                 FORMULÁRIO
             ============================= */}
 
-            <div
-              className="
+              <div
+                className="
                 rounded-3xl
                 border
                 border-white/10
@@ -207,11 +197,11 @@ export default function Contact() {
                 backdrop-blur-xl
                 sm:p-8
               "
-            >
-              {success ? (
-                <div className="flex min-h-[480px] flex-col items-center justify-center text-center">
-                  <div
-                    className="
+              >
+                {success ? (
+                  <div className="flex min-h-[480px] flex-col items-center justify-center text-center">
+                    <div
+                      className="
                       mb-6
                       flex
                       h-20
@@ -222,21 +212,21 @@ export default function Contact() {
                       bg-green-500/10
                       text-green-500
                     "
-                  >
-                    <CheckCircle2 size={42} />
-                  </div>
+                    >
+                      <CheckCircle2 size={42} />
+                    </div>
 
-                  <h2 className="text-2xl font-bold">Mensagem enviada!</h2>
+                    <h2 className="text-2xl font-bold">Mensagem enviada!</h2>
 
-                  <p className="mt-3 max-w-md text-gray-400">
-                    Recebemos seus dados com sucesso. Nossa equipe entrará em
-                    contato com você em breve.
-                  </p>
+                    <p className="mt-3 max-w-md text-gray-400">
+                      Recebemos seus dados com sucesso. Nossa equipe entrará em
+                      contato com você em breve.
+                    </p>
 
-                  <button
-                    type="button"
-                    onClick={() => setSuccess(false)}
-                    className="
+                    <button
+                      type="button"
+                      onClick={() => setSuccess(false)}
+                      className="
                       mt-8
                       rounded-xl
                       bg-blue-600
@@ -246,48 +236,48 @@ export default function Contact() {
                       transition
                       hover:bg-blue-700
                     "
-                  >
-                    Enviar outra mensagem
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleSubmit} className="space-y-5">
-                  <div>
-                    <h2 className="text-2xl font-bold">
-                      Fale com um especialista
-                    </h2>
-
-                    <p className="mt-2 text-sm text-gray-400">
-                      Preencha seus dados e entraremos em contato.
-                    </p>
+                    >
+                      Enviar outra mensagem
+                    </button>
                   </div>
+                ) : (
+                  <form onSubmit={handleSubmit} className="space-y-5">
+                    <div>
+                      <h2 className="text-2xl font-bold">
+                        Fale com um especialista
+                      </h2>
 
-                  {/* NOME */}
+                      <p className="mt-2 text-sm text-gray-400">
+                        Preencha seus dados e entraremos em contato.
+                      </p>
+                    </div>
 
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-gray-300">
-                      Nome
-                    </label>
+                    {/* NOME */}
 
-                    <div className="relative">
-                      <User
-                        size={18}
-                        className="
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">
+                        Nome
+                      </label>
+
+                      <div className="relative">
+                        <User
+                          size={18}
+                          className="
                           absolute
                           left-4
                           top-1/2
                           -translate-y-1/2
                           text-gray-500
                         "
-                      />
+                        />
 
-                      <input
-                        type="text"
-                        value={form.name}
-                        onChange={(e) => handleChange('name', e.target.value)}
-                        placeholder="Seu nome"
-                        required
-                        className="
+                        <input
+                          type="text"
+                          value={form.name}
+                          onChange={(e) => handleChange('name', e.target.value)}
+                          placeholder="Seu nome"
+                          required
+                          className="
                           w-full
                           rounded-xl
                           border
@@ -304,36 +294,38 @@ export default function Contact() {
                           focus:ring-2
                           focus:ring-blue-500/20
                         "
-                      />
+                        />
+                      </div>
                     </div>
-                  </div>
 
-                  {/* EMAIL */}
+                    {/* EMAIL */}
 
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-gray-300">
-                      E-mail
-                    </label>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">
+                        E-mail
+                      </label>
 
-                    <div className="relative">
-                      <Mail
-                        size={18}
-                        className="
+                      <div className="relative">
+                        <Mail
+                          size={18}
+                          className="
                           absolute
                           left-4
                           top-1/2
                           -translate-y-1/2
                           text-gray-500
                         "
-                      />
+                        />
 
-                      <input
-                        type="email"
-                        value={form.email}
-                        onChange={(e) => handleChange('email', e.target.value)}
-                        placeholder="seu@email.com"
-                        required
-                        className="
+                        <input
+                          type="email"
+                          value={form.email}
+                          onChange={(e) =>
+                            handleChange('email', e.target.value)
+                          }
+                          placeholder="seu@email.com"
+                          required
+                          className="
                           w-full
                           rounded-xl
                           border
@@ -350,36 +342,38 @@ export default function Contact() {
                           focus:ring-2
                           focus:ring-blue-500/20
                         "
-                      />
+                        />
+                      </div>
                     </div>
-                  </div>
 
-                  {/* TELEFONE */}
+                    {/* TELEFONE */}
 
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-gray-300">
-                      WhatsApp / Telefone
-                    </label>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">
+                        WhatsApp / Telefone
+                      </label>
 
-                    <div className="relative">
-                      <Phone
-                        size={18}
-                        className="
+                      <div className="relative">
+                        <Phone
+                          size={18}
+                          className="
                           absolute
                           left-4
                           top-1/2
                           -translate-y-1/2
                           text-gray-500
                         "
-                      />
+                        />
 
-                      <input
-                        type="tel"
-                        value={form.phone}
-                        onChange={(e) => handleChange('phone', e.target.value)}
-                        placeholder="(11) 99999-9999"
-                        required
-                        className="
+                        <input
+                          type="tel"
+                          value={form.phone}
+                          onChange={(e) =>
+                            handleChange('phone', e.target.value)
+                          }
+                          placeholder="(11) 99999-9999"
+                          required
+                          className="
                           w-full
                           rounded-xl
                           border
@@ -396,36 +390,36 @@ export default function Contact() {
                           focus:ring-2
                           focus:ring-blue-500/20
                         "
-                      />
+                        />
+                      </div>
                     </div>
-                  </div>
 
-                  {/* MENSAGEM */}
+                    {/* MENSAGEM */}
 
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-gray-300">
-                      Como podemos ajudar?
-                    </label>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">
+                        Como podemos ajudar?
+                      </label>
 
-                    <div className="relative">
-                      <MessageSquare
-                        size={18}
-                        className="
+                      <div className="relative">
+                        <MessageSquare
+                          size={18}
+                          className="
                           absolute
                           left-4
                           top-4
                           text-gray-500
                         "
-                      />
+                        />
 
-                      <textarea
-                        rows={5}
-                        value={form.message}
-                        onChange={(e) =>
-                          handleChange('message', e.target.value)
-                        }
-                        placeholder="Ex.: Procuro um apartamento de 2 quartos para comprar..."
-                        className="
+                        <textarea
+                          rows={5}
+                          value={form.message}
+                          onChange={(e) =>
+                            handleChange('message', e.target.value)
+                          }
+                          placeholder="Ex.: Procuro um apartamento de 2 quartos para comprar..."
+                          className="
                           w-full
                           resize-none
                           rounded-xl
@@ -443,15 +437,15 @@ export default function Contact() {
                           focus:ring-2
                           focus:ring-blue-500/20
                         "
-                      />
+                        />
+                      </div>
                     </div>
-                  </div>
 
-                  {/* ERRO */}
+                    {/* ERRO */}
 
-                  {error && (
-                    <div
-                      className="
+                    {error && (
+                      <div
+                        className="
                         rounded-xl
                         border
                         border-red-500/20
@@ -461,17 +455,17 @@ export default function Contact() {
                         text-sm
                         text-red-400
                       "
-                    >
-                      {error}
-                    </div>
-                  )}
+                      >
+                        {error}
+                      </div>
+                    )}
 
-                  {/* BOTÃO */}
+                    {/* BOTÃO */}
 
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="
                       flex
                       w-full
                       items-center
@@ -490,11 +484,11 @@ export default function Contact() {
                       disabled:cursor-not-allowed
                       disabled:opacity-50
                     "
-                  >
-                    {loading ? (
-                      <>
-                        <span
-                          className="
+                    >
+                      {loading ? (
+                        <>
+                          <span
+                            className="
                             h-5
                             w-5
                             animate-spin
@@ -503,27 +497,30 @@ export default function Contact() {
                             border-white/30
                             border-t-white
                           "
-                        />
-                        Enviando...
-                      </>
-                    ) : (
-                      <>
-                        <Send size={18} />
-                        Quero falar com um corretor
-                      </>
-                    )}
-                  </button>
+                          />
+                          Enviando...
+                        </>
+                      ) : (
+                        <>
+                          <Send size={18} />
+                          Quero falar com um corretor
+                        </>
+                      )}
+                    </button>
 
-                  <p className="text-center text-xs text-gray-600">
-                    Seus dados serão enviados com segurança para nossa equipe
-                    comercial.
-                  </p>
-                </form>
-              )}
+                    <p className="text-center text-xs text-gray-600">
+                      Seus dados serão enviados com segurança para nossa equipe
+                      comercial.
+                    </p>
+                  </form>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      </section>
-    </main>
+        </section>
+      </main>
+
+      <Footer />
+    </div>
   );
 }

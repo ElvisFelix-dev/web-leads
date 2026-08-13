@@ -625,7 +625,7 @@ export default function PropertyList() {
 
                   <div className="flex gap-2">
                     <Link
-                      to={`/properties/${property._id}`}
+                      to={`/propertycrm-details/${property._id}`}
                       className="
                       rounded-xl
                       bg-slate-800
