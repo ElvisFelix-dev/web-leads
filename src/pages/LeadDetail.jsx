@@ -1,15 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import {
   ArrowLeft,
-  Edit,
-  User,
-  Mail,
-  Phone,
-  MapPin,
+  ArrowRight,
   Calendar,
+  Edit,
+  ExternalLink,
+  FileText,
+  History,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Phone,
+  User,
   Building2,
+  BriefcaseBusiness,
+  Target,
+  Clock3,
+  AlertCircle,
+  ChevronRight,
+  CheckCircle2,
 } from 'lucide-react';
 
 import api from '../service/api';
@@ -21,420 +32,1924 @@ export default function LeadDetails() {
   const navigate = useNavigate();
 
   const [lead, setLead] = useState(null);
+  const [proposals, setProposals] = useState([]);
+
   const [loading, setLoading] = useState(true);
+  const [loadingProposals, setLoadingProposals] = useState(false);
+
   const [error, setError] = useState(null);
+
+  /*
+   * ============================================================
+   * CARREGAR LEAD
+   * ============================================================
+   */
 
   useEffect(() => {
     async function loadLead() {
       try {
         setLoading(true);
+        setError(null);
 
-        const { data } = await api.get(`/api/leads/${id}`);
+        const response = await api.get(`/api/leads/${id}`);
 
-        setLead(data);
+        const payload = response?.data;
+
+        /*
+         * Compatível com:
+         *
+         * { success: true, data: {...} }
+         *
+         * { lead: {...} }
+         *
+         * {...}
+         */
+
+        const loadedLead =
+          payload?.data?.lead || payload?.data || payload?.lead || payload;
+
+        setLead(loadedLead || null);
       } catch (error) {
         console.error('Erro ao carregar lead:', error);
 
-        setError('Não foi possível carregar o lead.');
+        setError(
+          error?.response?.data?.message || 'Não foi possível carregar o lead.',
+        );
       } finally {
         setLoading(false);
       }
     }
 
-    loadLead();
+    if (id) {
+      loadLead();
+    }
   }, [id]);
 
-  const formatDate = (date) => {
+  /*
+   * ============================================================
+   * CARREGAR PROPOSTAS DO LEAD
+   * ============================================================
+   *
+   * Mesmo que o LeadDetails não venha com:
+   *
+   * lead.proposals
+   *
+   * fazemos uma chamada específica:
+   *
+   * GET /api/proposals/lead/:leadId
+   *
+   * Isso evita depender do populate do Lead.
+   */
+
+  useEffect(() => {
+    async function loadProposals() {
+      if (!id) return;
+
+      try {
+        setLoadingProposals(true);
+
+        const response = await api.get(`/api/proposals/lead/${id}`);
+
+        const payload = response?.data;
+
+        const loadedProposals =
+          payload?.data?.proposals || payload?.data || payload?.proposals || [];
+
+        if (Array.isArray(loadedProposals)) {
+          setProposals(loadedProposals);
+        } else {
+          setProposals([]);
+        }
+      } catch (error) {
+        /*
+         * Não bloqueamos o LeadDetails se a busca das propostas
+         * falhar.
+         *
+         * O restante da página continua funcionando.
+         */
+
+        console.error('Erro ao carregar propostas do lead:', error);
+
+        setProposals([]);
+      } finally {
+        setLoadingProposals(false);
+      }
+    }
+
+    loadProposals();
+  }, [id]);
+
+  /*
+   * ============================================================
+   * PROPOSTAS NORMALIZADAS
+   * ============================================================
+   */
+
+  const normalizedProposals = useMemo(() => {
+    /*
+     * Se a API do Lead futuramente já devolver proposals,
+     * podemos aproveitar também.
+     */
+
+    const leadProposals = Array.isArray(lead?.proposals) ? lead.proposals : [];
+
+    const source = proposals.length > 0 ? proposals : leadProposals;
+
+    return [...source].sort((a, b) => {
+      const dateA = getProposalDateValue(a);
+      const dateB = getProposalDateValue(b);
+
+      return dateB - dateA;
+    });
+  }, [proposals, lead?.proposals]);
+
+  /*
+   * ============================================================
+   * PROPOSTA MAIS RECENTE
+   * ============================================================
+   */
+
+  const latestProposal = useMemo(() => {
+    if (!normalizedProposals.length) {
+      return null;
+    }
+
+    return normalizedProposals[0];
+  }, [normalizedProposals]);
+
+  /*
+   * ============================================================
+   * DATA DA PROPOSTA
+   * ============================================================
+   */
+
+  const proposalDate = useMemo(() => {
+    /*
+     * 1. Primeiro tentamos a data salva diretamente no Lead.
+     */
+
+    if (lead?.proposalDate) {
+      return lead.proposalDate;
+    }
+
+    /*
+     * 2. Caso não exista, usamos a proposta mais recente.
+     */
+
+    if (latestProposal) {
+      return getProposalDate(latestProposal);
+    }
+
+    return null;
+  }, [lead?.proposalDate, latestProposal]);
+
+  /*
+   * ============================================================
+   * VALOR DA PROPOSTA
+   * ============================================================
+   */
+
+  const latestProposalValue = useMemo(() => {
+    if (!latestProposal) {
+      return null;
+    }
+
+    return getProposalValue(latestProposal);
+  }, [latestProposal]);
+
+  /*
+   * ============================================================
+   * FORMATADORES
+   * ============================================================
+   */
+
+  const formatDate = (date, withTime = false) => {
     if (!date) return '-';
 
-    return new Date(date).toLocaleDateString('pt-BR');
+    const parsedDate = new Date(date);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return '-';
+    }
+
+    return parsedDate.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+
+      ...(withTime
+        ? {
+            hour: '2-digit',
+            minute: '2-digit',
+          }
+        : {}),
+    });
   };
 
+  const formatCurrency = (value) => {
+    if (
+      value === undefined ||
+      value === null ||
+      value === '' ||
+      Number.isNaN(Number(value))
+    ) {
+      return '-';
+    }
+
+    return Number(value).toLocaleString('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    });
+  };
+
+  /*
+   * ============================================================
+   * WHATSAPP
+   * ============================================================
+   */
+
+  const normalizePhone = (phone) => {
+    if (!phone) return '';
+
+    return String(phone).replace(/\D/g, '');
+  };
+
+  const whatsappUrl = useMemo(() => {
+    const phone = normalizePhone(lead?.phone);
+
+    if (!phone) return null;
+
+    if (phone.startsWith('55')) {
+      return `https://wa.me/${phone}`;
+    }
+
+    return `https://wa.me/55${phone}`;
+  }, [lead?.phone]);
+
+  /*
+   * ============================================================
+   * AÇÕES
+   * ============================================================
+   */
+
+  const handleCreateProposal = () => {
+    if (!lead?._id) return;
+
+    navigate(`/proposals/create?lead=${lead._id}`);
+  };
+
+  const handleEdit = () => {
+    if (!lead?._id) return;
+
+    navigate(`/leads/${lead._id}/edit`);
+  };
+
+  /*
+   * ============================================================
+   * LOADING
+   * ============================================================
+   */
+
   if (loading) {
-    return (
-      <div
-        className="
-        min-h-[400px]
-        flex
-        items-center
-        justify-center
-        text-slate-400
-      "
-      >
-        Carregando informações do lead...
-      </div>
-    );
+    return <LeadDetailsSkeleton />;
   }
+
+  /*
+   * ============================================================
+   * ERROR
+   * ============================================================
+   */
 
   if (error) {
     return (
-      <div
-        className="
-        p-6
-        text-red-400
-      "
-      >
-        {error}
+      <div className="min-h-screen bg-slate-950 p-6">
+        <div className="mx-auto max-w-7xl">
+          <button
+            onClick={() => navigate(-1)}
+            className="
+              mb-6
+              flex
+              items-center
+              gap-2
+              text-sm
+              text-slate-400
+              transition
+              hover:text-white
+            "
+          >
+            <ArrowLeft size={18} />
+            Voltar
+          </button>
+
+          <div
+            className="
+              rounded-2xl
+              border
+              border-red-500/20
+              bg-red-500/5
+              p-8
+            "
+          >
+            <div className="flex items-start gap-4">
+              <div
+                className="
+                  flex
+                  h-11
+                  w-11
+                  shrink-0
+                  items-center
+                  justify-center
+                  rounded-xl
+                  bg-red-500/10
+                  text-red-400
+                "
+              >
+                <AlertCircle size={22} />
+              </div>
+
+              <div>
+                <h2 className="font-semibold text-white">
+                  Não foi possível carregar o lead
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-400">{error}</p>
+
+                <button
+                  onClick={() => window.location.reload()}
+                  className="
+                    mt-4
+                    rounded-lg
+                    border
+                    border-slate-700
+                    bg-slate-900
+                    px-4
+                    py-2
+                    text-sm
+                    font-medium
+                    text-slate-200
+                    transition
+                    hover:bg-slate-800
+                  "
+                >
+                  Tentar novamente
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
-  if (!lead) return null;
+  if (!lead) {
+    return null;
+  }
+
+  /*
+   * ============================================================
+   * DADOS RELACIONADOS
+   * ============================================================
+   */
+
+  const property = lead.property;
+  const assignedTo = lead.assignedTo;
+  const createdBy = lead.createdBy;
+  const sourceBroker = lead.sourceBroker;
+
+  /*
+   * ============================================================
+   * RENDER
+   * ============================================================
+   */
 
   return (
-    <div
-      className="
-      min-h-screen
-      bg-slate-950
-      p-6
-      space-y-6
-    "
-    >
-      {/* HEADER */}
+    <div className="min-h-screen bg-slate-950">
+      <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
+        {/* ======================================================
+            TOP BAR
+        ======================================================= */}
 
-      <div
-        className="
-        flex
-        items-center
-        justify-between
-      "
-      >
-        <button
-          onClick={() => navigate(-1)}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            onClick={() => navigate(-1)}
+            className="
+              flex
+              w-fit
+              items-center
+              gap-2
+              text-sm
+              font-medium
+              text-slate-400
+              transition
+              hover:text-white
+            "
+          >
+            <ArrowLeft size={18} />
+            Voltar
+          </button>
 
+          <div className="flex flex-wrap items-center gap-2">
+            {whatsappUrl && (
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="
+                  inline-flex
+                  items-center
+                  gap-2
+                  rounded-lg
+                  border
+                  border-emerald-500/20
+                  bg-emerald-500/10
+                  px-4
+                  py-2
+                  text-sm
+                  font-medium
+                  text-emerald-400
+                  transition
+                  hover:bg-emerald-500/20
+                "
+              >
+                <MessageCircle size={17} />
+                WhatsApp
+              </a>
+            )}
+
+            <button
+              onClick={handleEdit}
+              className="
+                inline-flex
+                items-center
+                gap-2
+                rounded-lg
+                border
+                border-slate-700
+                bg-slate-900
+                px-4
+                py-2
+                text-sm
+                font-medium
+                text-slate-200
+                transition
+                hover:bg-slate-800
+              "
+            >
+              <Edit size={17} />
+              Editar
+            </button>
+
+            <button
+              onClick={handleCreateProposal}
+              className="
+                inline-flex
+                items-center
+                gap-2
+                rounded-lg
+                bg-blue-600
+                px-4
+                py-2
+                text-sm
+                font-semibold
+                text-white
+                shadow-lg
+                shadow-blue-900/20
+                transition
+                hover:bg-blue-500
+              "
+            >
+              <FileText size={17} />
+              Fazer proposta
+            </button>
+          </div>
+        </div>
+
+        {/* ======================================================
+            LEAD HEADER
+        ======================================================= */}
+
+        <section
           className="
-            flex
-            items-center
-            gap-2
-            text-slate-400
-            hover:text-white
-            transition
+            overflow-hidden
+            rounded-2xl
+            border
+            border-slate-800
+            bg-slate-900
+            shadow-xl
           "
         >
-          <ArrowLeft size={18} />
-          Voltar
-        </button>
+          <div className="p-6 lg:p-8">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex items-start gap-4">
+                <div
+                  className="
+                    flex
+                    h-14
+                    w-14
+                    shrink-0
+                    items-center
+                    justify-center
+                    rounded-2xl
+                    bg-blue-500/10
+                    text-blue-400
+                  "
+                >
+                  <User size={26} />
+                </div>
 
-        <button
-          className="
-            flex
-            items-center
-            gap-2
-            bg-blue-600
-            hover:bg-blue-700
-            text-white
-            px-4
-            py-2
-            rounded-lg
-            transition
-          "
-        >
-          <Edit size={18} />
-          Editar
-        </button>
+                <div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h1 className="text-2xl font-bold text-white sm:text-3xl">
+                      {lead.name}
+                    </h1>
+
+                    <Badge
+                      text={formatLabel(lead.status)}
+                      type={getStatusBadgeType(lead.status)}
+                    />
+                  </div>
+
+                  <p className="mt-2 text-sm text-slate-400">
+                    Lead criado em {formatDate(lead.createdAt, true)}
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Badge text={formatLabel(lead.stage)} type="blue" />
+
+                    <Badge
+                      text={`Prioridade: ${formatLabel(lead.priority)}`}
+                      type={getPriorityBadgeType(lead.priority)}
+                    />
+
+                    {lead.sourceType && (
+                      <Badge text={formatLabel(lead.sourceType)} type="gray" />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:min-w-[420px]">
+                <MetricCard
+                  label="Score"
+                  value={lead.score ?? 0}
+                  icon={<Target size={17} />}
+                />
+
+                <MetricCard
+                  label="Proposta"
+                  value={
+                    latestProposalValue !== null
+                      ? formatCurrency(latestProposalValue)
+                      : lead.proposalValue
+                        ? formatCurrency(lead.proposalValue)
+                        : '0'
+                  }
+                  icon={<FileText size={17} />}
+                />
+
+                <MetricCard
+                  label="Data proposta"
+                  value={proposalDate ? formatDate(proposalDate) : '-'}
+                  icon={<Calendar size={17} />}
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ======================================================
+            PRÓXIMA AÇÃO
+        ======================================================= */}
+
+        {(lead.nextAction || lead.nextActionDate) && (
+          <section
+            className="
+              rounded-2xl
+              border
+              border-blue-500/20
+              bg-blue-500/5
+              p-5
+            "
+          >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 text-blue-400">
+                  <Clock3 size={20} />
+                </div>
+
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wider text-blue-400">
+                    Próxima ação
+                  </p>
+
+                  <p className="mt-1 font-medium text-white">
+                    {lead.nextAction || 'Ação não definida'}
+                  </p>
+
+                  {lead.nextActionDate && (
+                    <p className="mt-1 text-sm text-slate-400">
+                      Agendada para {formatDate(lead.nextActionDate, true)}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <button
+                onClick={() => navigate('/calendar')}
+                className="
+                  inline-flex
+                  items-center
+                  justify-center
+                  gap-2
+                  rounded-lg
+                  border
+                  border-blue-500/20
+                  bg-blue-500/10
+                  px-4
+                  py-2
+                  text-sm
+                  font-medium
+                  text-blue-400
+                  transition
+                  hover:bg-blue-500/20
+                "
+              >
+                Ver agenda
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ======================================================
+            GRID PRINCIPAL
+        ======================================================= */}
+
+        <div className="grid gap-6 xl:grid-cols-3">
+          {/* ====================================================
+              COLUNA PRINCIPAL
+          ===================================================== */}
+
+          <div className="space-y-6 xl:col-span-2">
+            {/* ==================================================
+                INFORMAÇÕES DO LEAD
+            =================================================== */}
+
+            <Card title="Informações do Lead" icon={<User size={18} />}>
+              <div className="grid gap-6 md:grid-cols-2">
+                <Info
+                  icon={<User size={18} />}
+                  label="Nome"
+                  value={lead.name}
+                />
+
+                <Info
+                  icon={<Mail size={18} />}
+                  label="Email"
+                  value={lead.email}
+                  href={lead.email ? `mailto:${lead.email}` : null}
+                />
+
+                <Info
+                  icon={<Phone size={18} />}
+                  label="Telefone"
+                  value={lead.phone}
+                  href={lead.phone ? `tel:${lead.phone}` : null}
+                />
+
+                <Info
+                  icon={<MapPin size={18} />}
+                  label="Região"
+                  value={formatLabel(lead.region)}
+                />
+
+                <Info
+                  icon={<Building2 size={18} />}
+                  label="Origem"
+                  value={formatLabel(lead.source)}
+                />
+
+                <Info
+                  icon={<Target size={18} />}
+                  label="Tipo de origem"
+                  value={formatLabel(lead.sourceType)}
+                />
+
+                {lead.sourceSite && (
+                  <Info
+                    icon={<ExternalLink size={18} />}
+                    label="Site de origem"
+                    value={lead.sourceSite}
+                  />
+                )}
+
+                {lead.landingPage && (
+                  <Info
+                    icon={<ExternalLink size={18} />}
+                    label="Landing page"
+                    value={lead.landingPage}
+                  />
+                )}
+              </div>
+            </Card>
+
+            {/* ==================================================
+                IMÓVEL
+            =================================================== */}
+
+            <PropertyCard
+              property={property}
+              onCreateProposal={handleCreateProposal}
+              navigate={navigate}
+            />
+
+            {/* ==================================================
+                PROPOSTAS
+            =================================================== */}
+
+            <ProposalCard
+              proposals={normalizedProposals}
+              loading={loadingProposals}
+              onCreateProposal={handleCreateProposal}
+              navigate={navigate}
+            />
+
+            {/* ==================================================
+                OBSERVAÇÕES
+            =================================================== */}
+
+            <Card title="Observações" icon={<MessageCircle size={18} />}>
+              {lead.notes ? (
+                <div className="space-y-4">
+                  <p
+                    className="
+                      whitespace-pre-line
+                      text-sm
+                      leading-7
+                      text-slate-300
+                    "
+                  >
+                    {lead.notes}
+                  </p>
+
+                  {lead.updatedAt && (
+                    <p className="text-xs text-slate-600">
+                      Última atualização: {formatDate(lead.updatedAt, true)}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <EmptyState
+                  icon={<MessageCircle size={20} />}
+                  text="Nenhuma observação cadastrada."
+                />
+              )}
+            </Card>
+
+            {/* ==================================================
+                DATAS COMERCIAIS
+            =================================================== */}
+
+            <Card title="Datas comerciais" icon={<Calendar size={18} />}>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <CommercialDate
+                  label="Último contato"
+                  value={lead.lastContactAt}
+                  icon={<Phone size={16} />}
+                />
+
+                <CommercialDate
+                  label="Visita"
+                  value={lead.visitDate}
+                  icon={<Calendar size={16} />}
+                />
+
+                <CommercialDate
+                  label="Proposta"
+                  value={proposalDate}
+                  icon={<FileText size={16} />}
+                  highlight
+                />
+
+                <CommercialDate
+                  label="Fechamento"
+                  value={lead.closeDate}
+                  icon={<CheckCircle2 size={16} />}
+                />
+              </div>
+
+              {latestProposal && (
+                <div
+                  className="
+                    mt-5
+                    rounded-xl
+                    border
+                    border-blue-500/10
+                    bg-blue-500/5
+                    p-4
+                  "
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-500">
+                        Última proposta
+                      </p>
+
+                      <p className="mt-1 font-medium text-white">
+                        {latestProposal.code ||
+                          latestProposal.number ||
+                          `#${String(latestProposal._id || '').slice(-6)}`}
+                      </p>
+                    </div>
+
+                    <div className="sm:text-right">
+                      <p className="text-xs text-slate-500">Valor</p>
+
+                      <p className="font-semibold text-blue-400">
+                        {formatCurrency(latestProposalValue)}
+                      </p>
+                    </div>
+
+                    <Badge
+                      text={formatLabel(latestProposal.status)}
+                      type={getProposalBadgeType(latestProposal.status)}
+                    />
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            {/* ==================================================
+                HISTÓRICO
+            =================================================== */}
+
+            <Card title="Histórico" icon={<History size={18} />} noPadding>
+              <LeadHistory lead={lead} />
+            </Card>
+          </div>
+
+          {/* ====================================================
+              SIDEBAR
+          ===================================================== */}
+
+          <div className="space-y-6">
+            <UserCard
+              title="Corretor responsável"
+              icon={<BriefcaseBusiness size={18} />}
+              user={assignedTo}
+            />
+
+            <UserCard
+              title="Lead criado por"
+              icon={<User size={18} />}
+              user={createdBy}
+            />
+
+            {/* ==================================================
+                CAPTAÇÃO
+            =================================================== */}
+
+            <Card title="Captação" icon={<Target size={18} />}>
+              <div className="space-y-5">
+                <Info label="Origem" value={formatLabel(lead.source)} />
+
+                <Info label="Tipo" value={formatLabel(lead.sourceType)} />
+
+                {sourceBroker && (
+                  <Info label="Corretor de origem" value={sourceBroker.name} />
+                )}
+
+                {lead.referrer && (
+                  <Info label="Referência" value={lead.referrer} />
+                )}
+
+                {lead.sourceUrl && <Info label="URL" value={lead.sourceUrl} />}
+              </div>
+            </Card>
+
+            {/* ==================================================
+                DISTRIBUIÇÃO
+            =================================================== */}
+
+            <Card title="Distribuição" icon={<BriefcaseBusiness size={18} />}>
+              <div className="space-y-5">
+                <Info label="Tipo" value={formatLabel(lead.assignmentType)} />
+
+                <Info
+                  label="Atribuído em"
+                  value={formatDate(lead.assignedAt, true)}
+                />
+
+                <Info
+                  label="Aguardando distribuição"
+                  value={lead.awaitingAssignment ? 'Sim' : 'Não'}
+                />
+
+                {lead.assignedBy && (
+                  <Info
+                    label="Distribuído por"
+                    value={
+                      lead.assignedBy?.name || lead.assignedBy?.email || '-'
+                    }
+                  />
+                )}
+              </div>
+            </Card>
+
+            {/* ==================================================
+                RESUMO DA PROPOSTA
+            =================================================== */}
+
+            <Card title="Resumo da proposta" icon={<FileText size={18} />}>
+              {latestProposal ? (
+                <div className="space-y-4">
+                  <Info
+                    label="Status"
+                    value={
+                      <Badge
+                        text={formatLabel(latestProposal.status)}
+                        type={getProposalBadgeType(latestProposal.status)}
+                      />
+                    }
+                  />
+
+                  <Info
+                    label="Valor"
+                    value={formatCurrency(latestProposalValue)}
+                  />
+
+                  <Info label="Data" value={formatDate(proposalDate, true)} />
+
+                  <button
+                    onClick={() => navigate(`/proposals/${latestProposal._id}`)}
+                    className="
+                      mt-2
+                      flex
+                      w-full
+                      items-center
+                      justify-center
+                      gap-2
+                      rounded-lg
+                      border
+                      border-slate-700
+                      bg-slate-800
+                      px-4
+                      py-2.5
+                      text-sm
+                      font-medium
+                      text-slate-200
+                      transition
+                      hover:bg-slate-700
+                    "
+                  >
+                    Ver proposta
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              ) : (
+                <EmptyState
+                  icon={<FileText size={20} />}
+                  text="Nenhuma proposta cadastrada."
+                />
+              )}
+            </Card>
+
+            {/* ==================================================
+                AÇÕES RÁPIDAS
+            =================================================== */}
+
+            <Card title="Ações rápidas" icon={<ArrowRight size={18} />}>
+              <div className="space-y-2">
+                {whatsappUrl && (
+                  <QuickAction
+                    icon={<MessageCircle size={17} />}
+                    label="Conversar no WhatsApp"
+                    onClick={() =>
+                      window.open(whatsappUrl, '_blank', 'noopener,noreferrer')
+                    }
+                  />
+                )}
+
+                {lead.email && (
+                  <QuickAction
+                    icon={<Mail size={17} />}
+                    label="Enviar email"
+                    onClick={() => {
+                      window.location.href = `mailto:${lead.email}`;
+                    }}
+                  />
+                )}
+
+                <QuickAction
+                  icon={<Calendar size={17} />}
+                  label="Abrir agenda"
+                  onClick={() => navigate('/calendar')}
+                />
+
+                <QuickAction
+                  icon={<Edit size={17} />}
+                  label="Editar lead"
+                  onClick={handleEdit}
+                />
+
+                <QuickAction
+                  icon={<FileText size={17} />}
+                  label="Criar proposta"
+                  onClick={handleCreateProposal}
+                />
+              </div>
+            </Card>
+          </div>
+        </div>
       </div>
+    </div>
+  );
+}
 
-      {/* HEADER LEAD */}
+/* ================================================================
+   CARD
+================================================================ */
 
-      <div
-        className="
-        bg-slate-900
+function Card({ title, icon, children, noPadding = false }) {
+  return (
+    <section
+      className="
+        overflow-hidden
+        rounded-2xl
         border
         border-slate-800
-        rounded-xl
+        bg-slate-900
         shadow-lg
-        p-6
       "
-      >
-        <h1
-          className="
-          text-2xl
-          font-bold
-          text-white
-        "
-        >
-          {lead.name}
-        </h1>
-
-        <div
-          className="
-          flex
-          flex-wrap
-          gap-3
-          mt-4
-        "
-        >
-          <Badge text={lead.stage} type="blue" />
-
-          <Badge text={lead.priority} type="yellow" />
-
-          <Badge text={lead.status} type="gray" />
-        </div>
-      </div>
-
-      {/* INFORMAÇÕES */}
-
-      <Card title="Informações do Lead">
-        <div
-          className="
-          grid
-          md:grid-cols-2
-          gap-6
-        "
-        >
-          <Info icon={<User size={18} />} label="Nome" value={lead.name} />
-
-          <Info icon={<Mail size={18} />} label="Email" value={lead.email} />
-
-          <Info
-            icon={<Phone size={18} />}
-            label="Telefone"
-            value={lead.phone}
-          />
-
-          <Info
-            icon={<MapPin size={18} />}
-            label="Região"
-            value={lead.region}
-          />
-
-          <Info
-            icon={<Building2 size={18} />}
-            label="Origem"
-            value={lead.source}
-          />
-
-          <Info
-            icon={<Calendar size={18} />}
-            label="Criado em"
-            value={formatDate(lead.createdAt)}
-          />
-        </div>
-      </Card>
-
-      {/* OBSERVAÇÕES */}
-
-      <Card title="Observações">
-        <p
-          className="
-          text-slate-400
-          whitespace-pre-line
-        "
-        >
-          {lead.notes || 'Nenhuma observação cadastrada.'}
-        </p>
-      </Card>
-
-      {/* USUÁRIOS */}
-
+    >
       <div
         className="
-        grid
-        md:grid-cols-2
-        gap-6
-      "
+          flex
+          items-center
+          gap-2
+          border-b
+          border-slate-800
+          px-6
+          py-4
+        "
       >
-        <UserCard
-          title="Criado por"
+        {icon && <span className="text-blue-400">{icon}</span>}
 
-          user={lead.createdBy}
-        />
-
-        <UserCard
-          title="Responsável"
-
-          user={lead.assignedTo}
-        />
+        <h2 className="font-semibold text-white">{title}</h2>
       </div>
 
-      {/* DATAS */}
-
-      <Card title="Datas importantes">
-        <div
-          className="
-          grid
-          md:grid-cols-3
-          gap-6
-        "
-        >
-          <Info
-            label="Último contato"
-
-            value={formatDate(lead.lastContactAt)}
-          />
-
-          <Info
-            label="Visita"
-
-            value={formatDate(lead.visitDate)}
-          />
-
-          <Info
-            label="Proposta"
-
-            value={formatDate(lead.proposalDate)}
-          />
-        </div>
-      </Card>
-
-      {/* HISTÓRICO */}
-
-      <LeadHistory lead={lead} />
-    </div>
+      <div className={noPadding ? '' : 'p-6'}>{children}</div>
+    </section>
   );
 }
 
-function Card({ title, children }) {
-  return (
-    <div
-      className="
-      bg-slate-900
-      border
-      border-slate-800
-      rounded-xl
-      shadow-lg
-      p-6
-    "
-    >
-      <h2
-        className="
-        text-lg
-        font-semibold
-        text-white
-        mb-5
-      "
-      >
-        {title}
-      </h2>
+/* ================================================================
+   INFO
+================================================================ */
 
-      {children}
-    </div>
-  );
-}
+function Info({ icon, label, value, href = null }) {
+  const content = (
+    <>
+      {icon && <div className="mt-0.5 shrink-0 text-slate-500">{icon}</div>}
 
-function Info({ icon, label, value }) {
-  return (
-    <div
-      className="
-      flex
-      gap-3
-      items-start
-    "
-    >
-      {icon && (
-        <div
-          className="
-            text-blue-400
-            mt-1
-          "
-        >
-          {icon}
-        </div>
-      )}
-
-      <div>
-        <p
-          className="
-          text-xs
-          text-slate-500
-        "
-        >
+      <div className="min-w-0">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
           {label}
         </p>
 
-        <p
+        <div
           className="
-          text-slate-200
-          font-medium
-        "
+            mt-1
+            break-words
+            text-sm
+            font-medium
+            text-slate-200
+          "
         >
           {value || '-'}
-        </p>
+        </div>
       </div>
+    </>
+  );
+
+  if (href && value) {
+    return (
+      <a
+        href={href}
+        className="
+          flex
+          items-start
+          gap-3
+          rounded-lg
+          transition
+          hover:bg-slate-800/50
+        "
+      >
+        {content}
+      </a>
+    );
+  }
+
+  return <div className="flex items-start gap-3">{content}</div>;
+}
+
+/* ================================================================
+   COMMERCIAL DATE
+================================================================ */
+
+function CommercialDate({ label, value, icon, highlight = false }) {
+  return (
+    <div
+      className={`
+        rounded-xl
+        border
+        p-4
+        ${
+          highlight && value
+            ? 'border-blue-500/20 bg-blue-500/5'
+            : 'border-slate-800 bg-slate-950/40'
+        }
+      `}
+    >
+      <div
+        className={`
+          flex
+          items-center
+          gap-2
+          ${highlight && value ? 'text-blue-400' : 'text-slate-500'}
+        `}
+      >
+        {icon}
+
+        <span className="text-xs font-medium uppercase tracking-wide">
+          {label}
+        </span>
+      </div>
+
+      <p
+        className={`
+          mt-3
+          text-sm
+          font-semibold
+          ${highlight && value ? 'text-blue-300' : 'text-slate-200'}
+        `}
+      >
+        {value
+          ? new Date(value).toLocaleDateString('pt-BR', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+            })
+          : '-'}
+      </p>
+
+      {!value && <p className="mt-1 text-xs text-slate-600">Não registrada</p>}
     </div>
   );
 }
 
-function UserCard({ title, user }) {
+/* ================================================================
+   USER CARD
+================================================================ */
+
+function UserCard({ title, icon, user }) {
   return (
-    <Card title={title}>
+    <Card title={title} icon={icon}>
       {user ? (
-        <div
-          className="
-            flex
-            items-center
-            gap-4
-          "
-        >
-          <img
-            src={user.avatar}
-
-            alt={user.name}
-
-            className="
-                w-12
+        <div className="flex items-center gap-4">
+          {user.avatar ? (
+            <img
+              src={user.avatar}
+              alt={user.name || 'Usuário'}
+              className="
                 h-12
+                w-12
+                shrink-0
                 rounded-full
-                object-cover
                 border
                 border-slate-700
+                object-cover
               "
-          />
-
-          <div>
-            <p
+            />
+          ) : (
+            <div
               className="
-                text-white
-                font-medium
-              "
-            >
-              {user.name}
-            </p>
-
-            <p
-              className="
-                text-sm
+                flex
+                h-12
+                w-12
+                shrink-0
+                items-center
+                justify-center
+                rounded-full
+                bg-slate-800
                 text-slate-400
               "
             >
-              {user.email}
+              <User size={20} />
+            </div>
+          )}
+
+          <div className="min-w-0">
+            <p className="truncate font-medium text-white">
+              {user.name || 'Usuário'}
             </p>
+
+            {user.email && (
+              <p className="truncate text-sm text-slate-400">{user.email}</p>
+            )}
+
+            {user.position && (
+              <p className="mt-0.5 text-xs text-slate-500">{user.position}</p>
+            )}
           </div>
         </div>
       ) : (
-        <p
-          className="
-            text-slate-500
-          "
-        >
-          Não atribuído
-        </p>
+        <EmptyState
+          icon={<User size={20} />}
+          text="Nenhum responsável atribuído."
+        />
       )}
     </Card>
   );
 }
 
-function Badge({ text, type }) {
+/* ================================================================
+   PROPERTY CARD
+================================================================ */
+
+function PropertyCard({ property, onCreateProposal, navigate }) {
+  if (!property) {
+    return (
+      <Card title="Imóvel de interesse" icon={<Building2 size={18} />}>
+        <EmptyState
+          icon={<Building2 size={20} />}
+          text="Nenhum imóvel vinculado a este lead."
+        />
+      </Card>
+    );
+  }
+
+  const address = property.address || {};
+
+  const propertyTitle = property.title || property.name || 'Imóvel sem título';
+
+  const propertyPrice = property.price;
+
+  return (
+    <Card title="Imóvel de interesse" icon={<Building2 size={18} />}>
+      <div className="space-y-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-lg font-semibold text-white">
+                {propertyTitle}
+              </h3>
+
+              {property.code && (
+                <span
+                  className="
+                    rounded-md
+                    border
+                    border-slate-700
+                    bg-slate-800
+                    px-2
+                    py-1
+                    text-xs
+                    font-medium
+                    text-slate-400
+                  "
+                >
+                  {property.code}
+                </span>
+              )}
+            </div>
+
+            {(address.street || address.city) && (
+              <div className="mt-2 flex items-start gap-2 text-sm text-slate-400">
+                <MapPin size={16} className="mt-0.5 shrink-0" />
+
+                <span>{formatPropertyAddress(address)}</span>
+              </div>
+            )}
+          </div>
+
+          {propertyPrice !== undefined && (
+            <div className="sm:text-right">
+              <p className="text-xs uppercase tracking-wide text-slate-500">
+                Valor
+              </p>
+
+              <p className="mt-1 text-xl font-bold text-white">
+                {formatCurrencyStatic(propertyPrice)}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {property.type && (
+            <PropertyStat label="Tipo" value={formatLabel(property.type)} />
+          )}
+
+          {property.bedrooms !== undefined && (
+            <PropertyStat label="Quartos" value={property.bedrooms} />
+          )}
+
+          {property.bathrooms !== undefined && (
+            <PropertyStat label="Banheiros" value={property.bathrooms} />
+          )}
+
+          {property.area?.total !== undefined && (
+            <PropertyStat label="Área" value={`${property.area.total} m²`} />
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {property._id && (
+            <button
+              onClick={() => navigate(`/properties/${property._id}`)}
+              className="
+                inline-flex
+                flex-1
+                items-center
+                justify-center
+                gap-2
+                rounded-lg
+                border
+                border-slate-700
+                bg-slate-800
+                px-4
+                py-2.5
+                text-sm
+                font-medium
+                text-slate-200
+                transition
+                hover:bg-slate-700
+              "
+            >
+              Ver imóvel
+              <ChevronRight size={16} />
+            </button>
+          )}
+
+          <button
+            onClick={onCreateProposal}
+            className="
+              inline-flex
+              flex-1
+              items-center
+              justify-center
+              gap-2
+              rounded-lg
+              bg-blue-600
+              px-4
+              py-2.5
+              text-sm
+              font-semibold
+              text-white
+              transition
+              hover:bg-blue-500
+            "
+          >
+            <FileText size={17} />
+            Fazer proposta
+          </button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* ================================================================
+   PROPOSAL CARD
+================================================================ */
+
+function ProposalCard({ proposals, loading, onCreateProposal, navigate }) {
+  return (
+    <Card title="Propostas" icon={<FileText size={18} />}>
+      {loading ? (
+        <div className="space-y-3">
+          <ProposalSkeleton />
+          <ProposalSkeleton />
+        </div>
+      ) : proposals.length > 0 ? (
+        <div className="space-y-3">
+          {proposals.map((proposal) => (
+            <ProposalItem
+              key={proposal._id}
+              proposal={proposal}
+              onClick={() => navigate(`/proposals/${proposal._id}`)}
+            />
+          ))}
+
+          <button
+            onClick={onCreateProposal}
+            className="
+              mt-3
+              inline-flex
+              items-center
+              gap-2
+              text-sm
+              font-medium
+              text-blue-400
+              transition
+              hover:text-blue-300
+            "
+          >
+            <FileText size={16} />
+            Criar nova proposta
+          </button>
+        </div>
+      ) : (
+        <div
+          className="
+            flex
+            flex-col
+            items-center
+            justify-center
+            rounded-xl
+            border
+            border-dashed
+            border-slate-700
+            bg-slate-950/40
+            px-6
+            py-8
+            text-center
+          "
+        >
+          <div
+            className="
+              flex
+              h-12
+              w-12
+              items-center
+              justify-center
+              rounded-xl
+              bg-blue-500/10
+              text-blue-400
+            "
+          >
+            <FileText size={22} />
+          </div>
+
+          <h3 className="mt-4 font-medium text-white">
+            Nenhuma proposta criada
+          </h3>
+
+          <p className="mt-1 max-w-sm text-sm text-slate-500">
+            Crie uma proposta para este lead e envie para aprovação do
+            administrador.
+          </p>
+
+          <button
+            onClick={onCreateProposal}
+            className="
+              mt-5
+              inline-flex
+              items-center
+              gap-2
+              rounded-lg
+              bg-blue-600
+              px-4
+              py-2.5
+              text-sm
+              font-semibold
+              text-white
+              transition
+              hover:bg-blue-500
+            "
+          >
+            <FileText size={17} />
+            Fazer proposta
+          </button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* ================================================================
+   PROPOSAL ITEM
+================================================================ */
+
+function ProposalItem({ proposal, onClick }) {
+  const proposalValue = getProposalValue(proposal);
+
+  const proposalDate = getProposalDate(proposal);
+
+  return (
+    <button
+      onClick={onClick}
+      className="
+        group
+        w-full
+        rounded-xl
+        border
+        border-slate-800
+        bg-slate-950/50
+        p-4
+        text-left
+        transition
+        hover:border-slate-700
+        hover:bg-slate-800/60
+      "
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="font-medium text-white">
+            Proposta{' '}
+            {proposal.code ||
+              proposal.number ||
+              `#${String(proposal._id || '').slice(-6)}`}
+          </p>
+
+          <div className="mt-1 flex flex-wrap items-center gap-3">
+            <span className="text-sm text-slate-400">
+              {formatCurrencyStatic(proposalValue)}
+            </span>
+
+            {proposalDate && (
+              <span className="text-xs text-slate-600">
+                {formatDateStatic(proposalDate)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Badge
+            text={formatLabel(proposal.status)}
+            type={getProposalBadgeType(proposal.status)}
+          />
+
+          <ChevronRight
+            size={18}
+            className="
+              text-slate-600
+              transition
+              group-hover:text-slate-300
+            "
+          />
+        </div>
+      </div>
+    </button>
+  );
+}
+
+/* ================================================================
+   PROPOSAL SKELETON
+================================================================ */
+
+function ProposalSkeleton() {
+  return <div className="h-20 animate-pulse rounded-xl bg-slate-950/60" />;
+}
+
+/* ================================================================
+   PROPERTY STAT
+================================================================ */
+
+function PropertyStat({ label, value }) {
+  return (
+    <div className="rounded-lg bg-slate-950/60 p-3">
+      <p className="text-xs text-slate-500">{label}</p>
+
+      <p className="mt-1 text-sm font-medium text-slate-200">{value}</p>
+    </div>
+  );
+}
+
+/* ================================================================
+   METRIC CARD
+================================================================ */
+
+function MetricCard({ label, value, icon }) {
+  return (
+    <div
+      className="
+        rounded-xl
+        border
+        border-slate-800
+        bg-slate-950/50
+        p-4
+      "
+    >
+      <div className="flex items-center gap-2 text-slate-500">
+        {icon}
+        <span className="text-xs">{label}</span>
+      </div>
+
+      <p className="mt-2 truncate text-sm font-bold text-white">{value}</p>
+    </div>
+  );
+}
+
+/* ================================================================
+   QUICK ACTION
+================================================================ */
+
+function QuickAction({ icon, label, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="
+        flex
+        w-full
+        items-center
+        gap-3
+        rounded-lg
+        border
+        border-transparent
+        px-3
+        py-2.5
+        text-left
+        text-sm
+        text-slate-300
+        transition
+        hover:border-slate-800
+        hover:bg-slate-800
+        hover:text-white
+      "
+    >
+      <span className="text-slate-500">{icon}</span>
+
+      {label}
+    </button>
+  );
+}
+
+/* ================================================================
+   EMPTY STATE
+================================================================ */
+
+function EmptyState({ icon, text }) {
+  return (
+    <div className="flex items-center gap-3 py-2 text-sm text-slate-500">
+      <span className="text-slate-600">{icon}</span>
+
+      {text}
+    </div>
+  );
+}
+
+/* ================================================================
+   BADGE
+================================================================ */
+
+function Badge({ text, type = 'gray' }) {
   const styles = {
-    blue: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    blue: 'border-blue-500/20 bg-blue-500/10 text-blue-400',
 
-    yellow: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+    green: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
 
-    gray: 'bg-slate-800 text-slate-300 border-slate-700',
+    yellow: 'border-yellow-500/20 bg-yellow-500/10 text-yellow-400',
+
+    red: 'border-red-500/20 bg-red-500/10 text-red-400',
+
+    gray: 'border-slate-700 bg-slate-800 text-slate-300',
+
+    purple: 'border-purple-500/20 bg-purple-500/10 text-purple-400',
   };
 
   return (
     <span
       className={`
-      px-3
-      py-1
-      rounded-full
-      text-sm
-      border
-      ${styles[type]}
-    `}
+        inline-flex
+        items-center
+        rounded-full
+        border
+        px-2.5
+        py-1
+        text-xs
+        font-medium
+        ${styles[type] || styles.gray}
+      `}
     >
-      {text}
+      {text || '-'}
     </span>
   );
+}
+
+/* ================================================================
+   SKELETON
+================================================================ */
+
+function LeadDetailsSkeleton() {
+  return (
+    <div className="min-h-screen bg-slate-950 p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <div className="h-6 w-24 animate-pulse rounded bg-slate-800" />
+
+        <div className="h-48 animate-pulse rounded-2xl bg-slate-900" />
+
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+
+          <div className="space-y-6">
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SkeletonCard() {
+  return <div className="h-48 animate-pulse rounded-2xl bg-slate-900" />;
+}
+
+/* ================================================================
+   HELPERS
+================================================================ */
+
+function formatLabel(value) {
+  if (!value) return '-';
+
+  return String(value)
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatCurrencyStatic(value) {
+  if (
+    value === undefined ||
+    value === null ||
+    value === '' ||
+    Number.isNaN(Number(value))
+  ) {
+    return '-';
+  }
+
+  return Number(value).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  });
+}
+
+function formatDateStatic(date) {
+  if (!date) return '-';
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return '-';
+  }
+
+  return parsedDate.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+function formatPropertyAddress(address = {}) {
+  const parts = [
+    address.street || address.logradouro,
+
+    address.number || address.numero,
+
+    address.district || address.neighborhood || address.bairro,
+
+    address.city || address.cidade,
+
+    address.state || address.uf,
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(', ') : 'Endereço não informado';
+}
+
+/* ================================================================
+   PROPOSAL HELPERS
+================================================================ */
+
+function getProposalDate(proposal) {
+  if (!proposal) return null;
+
+  /*
+   * Ordem de prioridade.
+   *
+   * Caso seu Proposal model use outro campo,
+   * adicionamos aqui sem quebrar os atuais.
+   */
+
+  return (
+    proposal.proposalDate ||
+    proposal.submittedAt ||
+    proposal.sentAt ||
+    proposal.createdAt ||
+    proposal.updatedAt ||
+    null
+  );
+}
+
+function getProposalDateValue(proposal) {
+  const date = getProposalDate(proposal);
+
+  if (!date) return 0;
+
+  const timestamp = new Date(date).getTime();
+
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function getProposalValue(proposal) {
+  if (!proposal) return null;
+
+  /*
+   * Compatibilidade com diferentes estruturas
+   * possíveis do Proposal model.
+   */
+
+  return (
+    proposal.values?.proposalPrice ??
+    proposal.values?.price ??
+    proposal.proposalPrice ??
+    proposal.price ??
+    proposal.amount ??
+    proposal.value ??
+    null
+  );
+}
+
+/* ================================================================
+   LEAD STATUS
+================================================================ */
+
+function getStatusBadgeType(status) {
+  switch (status) {
+    case 'novo':
+      return 'blue';
+
+    case 'em andamento':
+    case 'in_progress':
+      return 'yellow';
+
+    case 'convertido':
+      return 'green';
+
+    case 'perdido':
+      return 'red';
+
+    default:
+      return 'gray';
+  }
+}
+
+/* ================================================================
+   PRIORITY
+================================================================ */
+
+function getPriorityBadgeType(priority) {
+  switch (priority) {
+    case 'alta':
+    case 'high':
+      return 'red';
+
+    case 'media':
+    case 'medium':
+      return 'yellow';
+
+    case 'baixa':
+    case 'low':
+      return 'blue';
+
+    default:
+      return 'gray';
+  }
+}
+
+/* ================================================================
+   PROPOSAL STATUS
+================================================================ */
+
+function getProposalBadgeType(status) {
+  switch (status) {
+    case 'accepted':
+    case 'aprovada':
+      return 'green';
+
+    case 'pending':
+    case 'pendente':
+      return 'yellow';
+
+    case 'rejected':
+    case 'rejeitada':
+      return 'red';
+
+    case 'draft':
+    case 'rascunho':
+      return 'gray';
+
+    case 'cancelled':
+    case 'cancelada':
+      return 'purple';
+
+    default:
+      return 'gray';
+  }
 }

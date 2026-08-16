@@ -144,8 +144,8 @@ export default function Sidebar({ onCollapseChange }) {
     */
 
     {
-      path: '/opportunities',
-      label: 'Oportunidades',
+      path: '/proposals',
+      label: 'Propostas',
       icon: <FaBullseye />,
     },
 
@@ -189,11 +189,11 @@ export default function Sidebar({ onCollapseChange }) {
         =========================================
         */
 
-        {
+        /*{
           path: '/opportunities',
           label: 'Oportunidades',
           icon: <FaBullseye />,
-        },
+        },*/
 
         {
           path: '/my-visits',
@@ -216,6 +216,7 @@ export default function Sidebar({ onCollapseChange }) {
         {
           path: `/broker/${slugify(user.name)}`,
           label: 'Meu Site',
+          target: '_blank',
           icon: <FaGlobe />,
         },
       ]

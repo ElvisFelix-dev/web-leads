@@ -42,6 +42,10 @@ import Properties from './pages/site/Properties';
 import Opportunities from './pages/Opportunities';
 import OpportunityCreate from './pages/OpportunityCreate';
 import OpportunityDetails from './pages/OpportunityDetails';
+import Proposals from './pages/Proposals';
+import ProposalCreate from './pages/ProposalCreate';
+import ProposalDetails from './pages/ProposalDetails';
+import ProposalEdit from './pages/ProposalEdit';
 
 export function App() {
   return (
@@ -96,6 +100,10 @@ export function App() {
           <Route path="/opportunities" element={<Opportunities />} />
           <Route path="/opportunities/new" element={<OpportunityCreate />} />
           <Route path="/opportunities/:id" element={<OpportunityDetails />} />
+          <Route path="/proposals" element={<Proposals />} />
+          <Route path="/proposals/create" element={<ProposalCreate />} />
+          <Route path="/proposals/:id" element={<ProposalDetails />} />
+          <Route path="/proposals/:id/edit" element={<ProposalEdit />} />
         </Route>
       </Routes>
       <ToastContainer
