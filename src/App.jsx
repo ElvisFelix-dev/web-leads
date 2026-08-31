@@ -46,6 +46,9 @@ import Proposals from './pages/Proposals';
 import ProposalCreate from './pages/ProposalCreate';
 import ProposalDetails from './pages/ProposalDetails';
 import ProposalEdit from './pages/ProposalEdit';
+import SalesAdmin from './pages/admin/SalesAdmin';
+import SaleDetailsAdmin from './pages/admin/SaleDetailsAdmin';
+import CommissionApproval from './pages/admin/CommissionApproval';
 
 export function App() {
   return (
@@ -104,6 +107,9 @@ export function App() {
           <Route path="/proposals/create" element={<ProposalCreate />} />
           <Route path="/proposals/:id" element={<ProposalDetails />} />
           <Route path="/proposals/:id/edit" element={<ProposalEdit />} />
+          <Route path="/sales" element={<SalesAdmin />} />
+          <Route path="/sales/:id" element={<SaleDetailsAdmin />} />
+          <Route path="/commissions" element={<CommissionApproval />} />
         </Route>
       </Routes>
       <ToastContainer

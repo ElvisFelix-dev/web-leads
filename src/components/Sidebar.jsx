@@ -20,21 +20,23 @@ import {
   FaTachometerAlt,
   FaPlusSquare,
   FaBullseye,
+  FaMoneyBillWave, // NOVO
+  FaHandshake, // NOVO
+  FaChevronDown, // NOVO
+  FaChevronRight, // NOVO
+  FaShoppingCart, // NOVO
+  FaCheckCircle, // NOVO
+  FaClock, // NOVO
 } from 'react-icons/fa';
 
 export default function Sidebar({ onCollapseChange }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-
   const [collapsed, setCollapsed] = useState(false);
-
   const [dropdownOpen, setDropdownOpen] = useState(false);
-
+  const [salesMenuOpen, setSalesMenuOpen] = useState(false); // NOVO
   const dropdownRef = useRef(null);
-
   const location = useLocation();
-
   const navigate = useNavigate();
-
   const { user, logout } = useContext(UserContext);
 
   /*
@@ -45,7 +47,6 @@ export default function Sidebar({ onCollapseChange }) {
 
   const getInitials = (name) => {
     if (!name) return 'U';
-
     return name
       .split(' ')
       .map((n) => n[0])
@@ -62,19 +63,14 @@ export default function Sidebar({ onCollapseChange }) {
 
   const handleCollapse = () => {
     const value = !collapsed;
-
     setCollapsed(value);
-
     onCollapseChange?.(value);
   };
 
   const handleLogout = () => {
     logout();
-
     navigate('/');
-
     setMobileOpen(false);
-
     setDropdownOpen(false);
   };
 
@@ -86,13 +82,24 @@ export default function Sidebar({ onCollapseChange }) {
     };
 
     document.addEventListener('mousedown', closeDropdown);
-
     return () => {
       document.removeEventListener('mousedown', closeDropdown);
     };
   }, []);
 
   const isActive = (path) => location.pathname === path;
+  const isActivePath = (paths) =>
+    paths.some((path) => location.pathname === path);
+
+  // Verifica se está em uma página de vendas para abrir o submenu
+  const isSalesActive = isActivePath(['/sales', '/sales/:id', '/commissions']);
+
+  // Abre o submenu automaticamente se estiver em uma página de vendas
+  useEffect(() => {
+    if (isSalesActive) {
+      setSalesMenuOpen(true);
+    }
+  }, [location.pathname]);
 
   /*
   =========================
@@ -100,61 +107,74 @@ export default function Sidebar({ onCollapseChange }) {
   =========================
   */
 
+  // 🔥 NOVO: Menu de Vendas com subitens
+  const salesMenu = {
+    path: '#',
+    label: 'Vendas',
+    icon: <FaHandshake />,
+    subItems: [
+      {
+        path: '/sales',
+        label: 'Todas as Vendas',
+        icon: <FaShoppingCart />,
+        badge: null, // Poderia mostrar contagem de vendas pendentes
+      },
+      {
+        path: '/commissions',
+        label: 'Comissões',
+        icon: <FaMoneyBillWave />,
+        badge: null, // Poderia mostrar contagem de comissões pendentes
+      },
+      {
+        path: '/commissions?status=pending',
+        label: 'Aprovar Comissões',
+        icon: <FaCheckCircle />,
+        badge: null, // Poderia mostrar contagem de comissões pendentes
+      },
+    ],
+  };
+
   const adminLinks = [
     {
       path: '/dashboard',
       label: 'Dashboard',
       icon: <FaTachometerAlt />,
     },
-
     {
       path: '/create-property',
       label: 'Criar Imóvel',
       icon: <FaPlusSquare />,
     },
-
     {
       path: '/property-list',
       label: 'Imóveis',
       icon: <FaBuilding />,
     },
-
     {
       path: '/brokers',
       label: 'Corretores',
       icon: <FaUserTie />,
     },
-
     {
       path: '/leads-list',
       label: 'Leads',
       icon: <FaClipboardList />,
     },
-
     {
       path: '/pipeline',
       label: 'Pipeline',
       icon: <FaProjectDiagram />,
     },
-
-    /*
-    =========================================
-    OPORTUNIDADES
-    =========================================
-    */
-
     {
       path: '/proposals',
       label: 'Propostas',
       icon: <FaBullseye />,
     },
-
     {
       path: '/visits',
       label: 'Agenda de Visitas',
       icon: <FaCalendarAlt />,
     },
-
     {
       path: '/home',
       label: 'Site da Imobiliária',
@@ -170,49 +190,31 @@ export default function Sidebar({ onCollapseChange }) {
           label: 'Meu Dashboard',
           icon: <FaChartLine />,
         },
-
         {
           path: '/my-leads',
           label: 'Meus Leads',
           icon: <FaClipboardList />,
         },
-
         {
           path: '/my-pipeline',
           label: 'Meu Pipeline',
           icon: <FaProjectDiagram />,
         },
-
-        /*
-        =========================================
-        OPORTUNIDADES
-        =========================================
-        */
-
-        /*{
-          path: '/opportunities',
-          label: 'Oportunidades',
-          icon: <FaBullseye />,
-        },*/
-
         {
           path: '/my-visits',
           label: 'Minhas Visitas',
           icon: <FaCalendarCheck />,
         },
-
         {
           path: '/profile',
           label: 'Perfil',
           icon: <FaUser />,
         },
-
         {
           path: '/property-list',
           label: 'Imóveis',
           icon: <FaBuilding />,
         },
-
         {
           path: `/broker/${slugify(user.name)}`,
           label: 'Meu Site',
@@ -223,6 +225,140 @@ export default function Sidebar({ onCollapseChange }) {
     : [];
 
   const menu = user?.isAdmin ? adminLinks : brokerLinks;
+
+  // ============================================
+  // RENDERIZA ITEM DO MENU
+  // ============================================
+  const renderMenuItem = (item) => {
+    // Se for o menu de Vendas (admin), renderiza com submenu
+    if (user?.isAdmin && item.label === 'Vendas') {
+      return renderSalesMenu();
+    }
+
+    // Item normal
+    return (
+      <li key={item.path}>
+        <Link
+          to={item.path}
+          target={item.target}
+          rel={item.target === '_blank' ? 'noopener noreferrer' : undefined}
+          onClick={() => {
+            setMobileOpen(false);
+            setDropdownOpen(false);
+          }}
+          title={collapsed ? item.label : ''}
+          className={`
+            flex
+            items-center
+            gap-3
+            p-3
+            rounded-lg
+            transition
+
+            ${
+              isActive(item.path)
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+            }
+          `}
+        >
+          <span className="text-lg">{item.icon}</span>
+
+          {!collapsed && (
+            <span className="text-sm font-medium">{item.label}</span>
+          )}
+        </Link>
+      </li>
+    );
+  };
+
+  // ============================================
+  // RENDERIZA SUBMENU DE VENDAS
+  // ============================================
+  const renderSalesMenu = () => {
+    const isSalesActive = isActivePath(['/admin/sales', '/admin/commissions']);
+
+    return (
+      <li>
+        {/* Botão do menu Vendas */}
+        <button
+          onClick={() => !collapsed && setSalesMenuOpen(!salesMenuOpen)}
+          className={`
+            w-full
+            flex
+            items-center
+            gap-3
+            p-3
+            rounded-lg
+            transition
+            ${
+              isSalesActive
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+            }
+          `}
+          title={collapsed ? 'Vendas' : ''}
+        >
+          <span className="text-lg">
+            <FaHandshake />
+          </span>
+
+          {!collapsed && (
+            <>
+              <span className="text-sm font-medium flex-1 text-left">
+                Vendas
+              </span>
+
+              <span className="text-xs">
+                {salesMenuOpen ? <FaChevronDown /> : <FaChevronRight />}
+              </span>
+            </>
+          )}
+        </button>
+
+        {/* Subitens */}
+        {!collapsed && salesMenuOpen && (
+          <ul className="ml-6 mt-1 space-y-1 border-l-2 border-gray-700 pl-3">
+            {salesMenu.subItems.map((subItem) => (
+              <li key={subItem.path}>
+                <Link
+                  to={subItem.path}
+                  onClick={() => {
+                    setMobileOpen(false);
+                    setDropdownOpen(false);
+                  }}
+                  className={`
+                    flex
+                    items-center
+                    gap-3
+                    p-2.5
+                    rounded-lg
+                    text-sm
+                    transition
+                    ${
+                      isActive(subItem.path)
+                        ? 'bg-blue-600/30 text-blue-400'
+                        : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                    }
+                  `}
+                >
+                  <span className="text-sm">{subItem.icon}</span>
+                  <span className="flex-1">{subItem.label}</span>
+
+                  {/* Badge para itens pendentes */}
+                  {subItem.badge && (
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-red-500/20 text-red-400">
+                      {subItem.badge}
+                    </span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </li>
+    );
+  };
 
   return (
     <>
@@ -334,7 +470,6 @@ export default function Sidebar({ onCollapseChange }) {
             <FaChevronLeft
               className={`
                 transition
-
                 ${collapsed ? 'rotate-180' : ''}
               `}
             />
@@ -471,55 +606,34 @@ export default function Sidebar({ onCollapseChange }) {
           className="
             flex-1
             p-3
+            overflow-y-auto
           "
         >
           <ul className="space-y-2">
-            {menu.map((item) => (
-              <li key={item.path}>
-                <Link
-                  to={item.path}
-                  target={item.target}
-                  rel={
-                    item.target === '_blank' ? 'noopener noreferrer' : undefined
-                  }
-                  onClick={() => {
-                    setMobileOpen(false);
+            {/* Menu para ADMIN */}
+            {user?.isAdmin ? (
+              <>
+                {/* Itens principais */}
+                {adminLinks.map((item) => renderMenuItem(item))}
 
-                    setDropdownOpen(false);
-                  }}
-                  title={collapsed ? item.label : ''}
-                  className={`
-                    flex
-                    items-center
-                    gap-3
-                    p-3
-                    rounded-lg
-                    transition
-
-                    ${
-                      isActive(item.path)
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    }
-                  `}
-                >
-                  <span className="text-lg">{item.icon}</span>
-
-                  {!collapsed && (
-                    <span
-                      className="
-                        text-sm
-                        font-medium
-                      "
-                    >
-                      {item.label}
-                    </span>
-                  )}
-                </Link>
-              </li>
-            ))}
+                {/* 🔥 Menu de Vendas (com submenu) */}
+                {renderSalesMenu()}
+              </>
+            ) : (
+              /* Menu para CORRETOR */
+              brokerLinks.map((item) => renderMenuItem(item))
+            )}
           </ul>
         </nav>
+
+        {/* =========================================
+            FOOTER (opcional)
+        ========================================= */}
+        {!collapsed && (
+          <div className="p-4 border-t border-gray-800">
+            <p className="text-xs text-gray-500 text-center">LeadsNaMão v1.0</p>
+          </div>
+        )}
       </aside>
     </>
   );
