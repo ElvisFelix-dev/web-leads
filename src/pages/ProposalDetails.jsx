@@ -24,6 +24,13 @@ import {
   Hash,
   RefreshCw,
   ChevronRight,
+  BedDouble,
+  Bath,
+  Car,
+  Ruler,
+  Home,
+  Image as ImageIcon,
+  ExternalLink,
 } from 'lucide-react';
 
 import api from '../service/api';
@@ -33,8 +40,10 @@ export default function ProposalDetails() {
   const navigate = useNavigate();
 
   const [proposal, setProposal] = useState(null);
+  const [property, setProperty] = useState(null);
 
   const [loading, setLoading] = useState(true);
+  const [propertyLoading, setPropertyLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -42,6 +51,180 @@ export default function ProposalDetails() {
   const [success, setSuccess] = useState('');
 
   const [confirmAction, setConfirmAction] = useState(null);
+
+  /*
+  |--------------------------------------------------------------------------
+  | HELPERS
+  |--------------------------------------------------------------------------
+  */
+
+  const getId = useCallback((value) => {
+    if (!value) return '';
+
+    if (typeof value === 'string') {
+      return value;
+    }
+
+    if (typeof value === 'object') {
+      return value._id || value.id || '';
+    }
+
+    return '';
+  }, []);
+
+  const getName = useCallback((value, fallback = '-') => {
+    if (!value) return fallback;
+
+    if (typeof value === 'string') {
+      return value;
+    }
+
+    return (
+      value.name ||
+      value.fullName ||
+      value.title ||
+      value.propertyName ||
+      value.description ||
+      value.companyName ||
+      fallback
+    );
+  }, []);
+
+  const toNumber = useCallback((value) => {
+    if (value === null || value === undefined || value === '') {
+      return 0;
+    }
+
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : 0;
+    }
+
+    let normalized = String(value).replace(/\s/g, '').replace(/R\$/gi, '');
+
+    if (normalized.includes(',')) {
+      normalized = normalized.replace(/\./g, '').replace(',', '.');
+    }
+
+    const number = Number(normalized);
+
+    return Number.isFinite(number) ? number : 0;
+  }, []);
+
+  const formatCurrency = useCallback(
+    (value) => {
+      return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      }).format(toNumber(value));
+    },
+    [toNumber],
+  );
+
+  const formatNumber = useCallback(
+    (value) => {
+      const number = toNumber(value);
+
+      if (!number) return '-';
+
+      return new Intl.NumberFormat('pt-BR').format(number);
+    },
+    [toNumber],
+  );
+
+  const formatDate = useCallback((value) => {
+    if (!value) return '-';
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return '-';
+    }
+
+    return new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  }, []);
+
+  const normalizeStatus = useCallback((value) => {
+    if (!value) return 'draft';
+
+    return String(value)
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_')
+      .replace(/-/g, '_');
+  }, []);
+
+  /*
+  |--------------------------------------------------------------------------
+  | LOAD PROPERTY
+  |--------------------------------------------------------------------------
+  */
+
+  const loadProperty = useCallback(async (propertyReference) => {
+    if (!propertyReference) {
+      setProperty(null);
+      return null;
+    }
+
+    // Extrai o ID do imóvel de qualquer lugar que possa estar
+    let propertyId = null;
+
+    if (typeof propertyReference === 'string') {
+      propertyId = propertyReference;
+    } else if (typeof propertyReference === 'object') {
+      propertyId =
+        propertyReference._id ||
+        propertyReference.id ||
+        propertyReference.propertyId;
+    }
+
+    if (!propertyId) {
+      setProperty(null);
+      return null;
+    }
+
+    try {
+      setPropertyLoading(true);
+
+      /*
+       * SEMPRE busca o imóvel completo via API
+       * Isso garante que teremos todos os dados
+       */
+      const response = await api.get(`/api/properties/${propertyId}`);
+
+      const responseData = response?.data;
+
+      // Tenta extrair os dados do imóvel de diferentes formatos de resposta
+      const propertyData =
+        responseData?.data?.property ||
+        responseData?.data ||
+        responseData?.property ||
+        responseData;
+
+      if (
+        propertyData &&
+        typeof propertyData === 'object' &&
+        !Array.isArray(propertyData)
+      ) {
+        setProperty(propertyData);
+        return propertyData;
+      }
+
+      setProperty(null);
+      return null;
+    } catch (err) {
+      console.error('Erro ao carregar imóvel da proposta:', err);
+      setProperty(null);
+      return null;
+    } finally {
+      setPropertyLoading(false);
+    }
+  }, []);
 
   /*
   |--------------------------------------------------------------------------
@@ -68,40 +251,72 @@ export default function ProposalDetails() {
 
         const response = await api.get(`/api/proposals/${id}`);
 
-        const data = response?.data;
+        const responseData = response?.data;
 
         /*
          * Compatibilidade com diferentes formatos:
          *
          * {
-         *   proposal: {...}
+         *   success: true,
+         *   data: {...}
          * }
          *
          * {
+         *   success: true,
          *   data: {
          *     proposal: {...}
          *   }
          * }
          *
          * {
-         *   data: {...}
+         *   proposal: {...}
          * }
          *
          * {...}
          */
 
         const proposalData =
-          data?.proposal || data?.data?.proposal || data?.data || data;
+          responseData?.data?.proposal ||
+          responseData?.data ||
+          responseData?.proposal ||
+          responseData;
 
-        if (!proposalData) {
+        if (!proposalData || typeof proposalData !== 'object') {
           setProposal(null);
+          setProperty(null);
           setError('Proposta não encontrada.');
           return;
         }
 
         setProposal(proposalData);
+
+        /*
+         * ================================================================
+         * IMÓVEL
+         * ================================================================
+         *
+         * Primeiro tentamos descobrir se o imóvel já veio populado.
+         */
+
+        // Verifica se o imóvel está em qualquer lugar possível
+        const proposalProperty =
+          proposalData.property ||
+          proposalData.propertyId ||
+          proposalData.propertyData ||
+          proposalData.immobile ||
+          proposalData.imovel ||
+          null;
+
+        if (proposalProperty) {
+          await loadProperty(proposalProperty);
+        } else {
+          setProperty(null);
+        }
       } catch (err) {
         console.error('Erro ao carregar proposta:', err);
+
+        setProposal(null);
+        setProperty(null);
 
         setError(
           err?.response?.data?.message ||
@@ -113,7 +328,7 @@ export default function ProposalDetails() {
         setRefreshing(false);
       }
     },
-    [id],
+    [id, loadProperty],
   );
 
   useEffect(() => {
@@ -122,113 +337,7 @@ export default function ProposalDetails() {
 
   /*
   |--------------------------------------------------------------------------
-  | HELPERS
-  |--------------------------------------------------------------------------
-  */
-
-  const getId = (value) => {
-    if (!value) return '';
-
-    if (typeof value === 'string') {
-      return value;
-    }
-
-    return value._id || value.id || '';
-  };
-
-  const getName = (value, fallback = '-') => {
-    if (!value) return fallback;
-
-    if (typeof value === 'string') {
-      return value;
-    }
-
-    return (
-      value.name ||
-      value.fullName ||
-      value.title ||
-      value.companyName ||
-      fallback
-    );
-  };
-
-  const toNumber = (value) => {
-    if (value === null || value === undefined || value === '') {
-      return 0;
-    }
-
-    if (typeof value === 'number') {
-      return Number.isFinite(value) ? value : 0;
-    }
-
-    let normalized = String(value).replace(/\s/g, '').replace(/R\$/gi, '');
-
-    /*
-     * 500.000,00
-     */
-    if (normalized.includes(',')) {
-      normalized = normalized.replace(/\./g, '').replace(',', '.');
-    }
-
-    const number = Number(normalized);
-
-    return Number.isFinite(number) ? number : 0;
-  };
-
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(toNumber(value));
-  };
-
-  const formatDate = (value) => {
-    if (!value) return '-';
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return '-';
-    }
-
-    return new Intl.DateTimeFormat('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date);
-  };
-
-  const formatDateOnly = (value) => {
-    if (!value) return '-';
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return '-';
-    }
-
-    return new Intl.DateTimeFormat('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    }).format(date);
-  };
-
-  const normalizeStatus = (value) => {
-    if (!value) return 'draft';
-
-    return String(value)
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, '_')
-      .replace(/-/g, '_');
-  };
-
-  /*
-  |--------------------------------------------------------------------------
-  | PROPOSAL DATA
+  | LEAD
   |--------------------------------------------------------------------------
   */
 
@@ -236,16 +345,253 @@ export default function ProposalDetails() {
     return proposal?.lead || proposal?.client || null;
   }, [proposal]);
 
-  const property = useMemo(() => {
-    return proposal?.property || null;
-  }, [proposal]);
+  /*
+  |--------------------------------------------------------------------------
+  | PROPERTY NORMALIZATION
+  |--------------------------------------------------------------------------
+  */
+
+  const propertyData = useMemo(() => {
+    /*
+     * Prioridade:
+     *
+     * 1. imóvel carregado diretamente via API (completo)
+     * 2. imóvel populado dentro da proposta (parcial)
+     */
+
+    const rawProperty =
+      property ||
+      (proposal?.property && typeof proposal.property === 'object'
+        ? proposal.property
+        : null);
+
+    if (!rawProperty) {
+      return {
+        id: '',
+        title: 'Imóvel não informado',
+        code: '',
+        type: '-',
+        purpose: '-',
+        status: '-',
+        price: 0,
+        area: 0,
+        bedrooms: 0,
+        suites: 0,
+        bathrooms: 0,
+        parkingSpaces: 0,
+        location: '-',
+        address: null,
+        neighborhood: '',
+        city: '',
+        state: '',
+        zipCode: '',
+        description: '',
+        images: [],
+        mainImage: '',
+      };
+    }
+
+    const address =
+      rawProperty.address ||
+      rawProperty.location?.address ||
+      rawProperty.endereco ||
+      null;
+
+    const images = Array.isArray(rawProperty.images)
+      ? rawProperty.images
+      : Array.isArray(rawProperty.photos)
+        ? rawProperty.photos
+        : Array.isArray(rawProperty.gallery)
+          ? rawProperty.gallery
+          : Array.isArray(rawProperty.media)
+            ? rawProperty.media
+            : [];
+
+    const title =
+      rawProperty.title ||
+      rawProperty.name ||
+      rawProperty.propertyName ||
+      rawProperty.reference ||
+      rawProperty.code ||
+      'Imóvel';
+
+    const price =
+      rawProperty.price ??
+      rawProperty.salePrice ??
+      rawProperty.sellingPrice ??
+      rawProperty.value ??
+      rawProperty.propertyPrice ??
+      0;
+
+    const area =
+      rawProperty.area ??
+      rawProperty.totalArea ??
+      rawProperty.privateArea ??
+      rawProperty.builtArea ??
+      rawProperty.areaTotal ??
+      0;
+
+    const bedrooms =
+      rawProperty.bedrooms ??
+      rawProperty.dormitories ??
+      rawProperty.rooms ??
+      rawProperty.quartos ??
+      0;
+
+    const suites =
+      rawProperty.suites ?? rawProperty.suiteCount ?? rawProperty.suite ?? 0;
+
+    const bathrooms =
+      rawProperty.bathrooms ??
+      rawProperty.bathroomCount ??
+      rawProperty.banheiros ??
+      0;
+
+    const parkingSpaces =
+      rawProperty.parkingSpaces ??
+      rawProperty.garages ??
+      rawProperty.parking ??
+      rawProperty.vacancies ??
+      rawProperty.vagas ??
+      0;
+
+    const mainImage =
+      rawProperty.mainImage ||
+      rawProperty.coverImage ||
+      rawProperty.thumbnail ||
+      rawProperty.image ||
+      '';
+
+    return {
+      ...rawProperty,
+
+      id: getId(rawProperty),
+
+      title,
+
+      code:
+        rawProperty.code ||
+        rawProperty.reference ||
+        rawProperty.codigo ||
+        rawProperty.referenceCode ||
+        '',
+
+      type:
+        rawProperty.type ||
+        rawProperty.propertyType ||
+        rawProperty.category ||
+        rawProperty.tipo ||
+        '-',
+
+      purpose:
+        rawProperty.purpose ||
+        rawProperty.transactionType ||
+        rawProperty.businessType ||
+        rawProperty.finality ||
+        '-',
+
+      status: rawProperty.status || rawProperty.propertyStatus || '-',
+
+      price: toNumber(price),
+
+      area: toNumber(area),
+
+      bedrooms: toNumber(bedrooms),
+
+      suites: toNumber(suites),
+
+      bathrooms: toNumber(bathrooms),
+
+      parkingSpaces: toNumber(parkingSpaces),
+
+      address,
+
+      location: getPropertyLocation(rawProperty),
+
+      neighborhood:
+        rawProperty.neighborhood ||
+        rawProperty.bairro ||
+        rawProperty.location?.neighborhood ||
+        '',
+
+      city:
+        rawProperty.city ||
+        rawProperty.cidade ||
+        rawProperty.location?.city ||
+        '',
+
+      state:
+        rawProperty.state ||
+        rawProperty.estado ||
+        rawProperty.uf ||
+        rawProperty.location?.state ||
+        '',
+
+      zipCode:
+        rawProperty.zipCode ||
+        rawProperty.cep ||
+        rawProperty.location?.zipCode ||
+        '',
+
+      description:
+        rawProperty.description ||
+        rawProperty.details ||
+        rawProperty.observations ||
+        '',
+
+      images,
+
+      mainImage,
+    };
+  }, [property, proposal, getId, toNumber]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | PROPERTY IMAGE
+  |--------------------------------------------------------------------------
+  */
+
+  const getImageUrl = useCallback((image) => {
+    if (!image) return '';
+
+    if (typeof image === 'string') {
+      return image;
+    }
+
+    return (
+      image?.url ||
+      image?.secure_url ||
+      image?.src ||
+      image?.path ||
+      image?.imageUrl ||
+      ''
+    );
+  }, []);
+
+  const propertyMainImage = useMemo(() => {
+    if (propertyData.mainImage) {
+      return getImageUrl(propertyData.mainImage);
+    }
+
+    if (propertyData.images?.length) {
+      return getImageUrl(propertyData.images[0]);
+    }
+
+    return '';
+  }, [propertyData, getImageUrl]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | FINANCIAL DATA
+  |--------------------------------------------------------------------------
+  */
 
   const values = useMemo(() => {
     return proposal?.values || proposal?.financial || proposal?.amounts || {};
   }, [proposal]);
 
   const propertyPrice = toNumber(
-    values.propertyPrice || proposal?.propertyPrice || property?.price || 0,
+    values.propertyPrice || proposal?.propertyPrice || propertyData.price || 0,
   );
 
   const proposalPrice = toNumber(
@@ -277,21 +623,21 @@ export default function ProposalDetails() {
   const discountPercentage =
     propertyPrice > 0 && discount > 0 ? (discount / propertyPrice) * 100 : 0;
 
-  const status = normalizeStatus(
-    proposal?.status || proposal?.stage || proposal?.state,
-  );
-
   /*
   |--------------------------------------------------------------------------
   | STATUS
   |--------------------------------------------------------------------------
   */
 
+  const status = normalizeStatus(
+    proposal?.status || proposal?.stage || proposal?.state,
+  );
+
   const statusConfig = getStatusConfig(status);
 
   /*
   |--------------------------------------------------------------------------
-  | PERMISSIONS / AVAILABLE ACTIONS
+  | PERMISSIONS
   |--------------------------------------------------------------------------
   */
 
@@ -306,7 +652,7 @@ export default function ProposalDetails() {
     'canceled',
     'cancelada',
     'accepted',
-    'accepted',
+    'approved',
     'completed',
     'concluida',
   ].includes(status);
@@ -329,7 +675,9 @@ export default function ProposalDetails() {
 
       setSuccess('Proposta enviada para aprovação.');
 
-      await loadProposal({ silent: true });
+      await loadProposal({
+        silent: true,
+      });
     } catch (err) {
       console.error('Erro ao enviar proposta:', err);
 
@@ -354,7 +702,9 @@ export default function ProposalDetails() {
 
       setSuccess('Proposta cancelada com sucesso.');
 
-      await loadProposal({ silent: true });
+      await loadProposal({
+        silent: true,
+      });
     } catch (err) {
       console.error('Erro ao cancelar proposta:', err);
 
@@ -434,7 +784,7 @@ export default function ProposalDetails() {
 
   /*
   |--------------------------------------------------------------------------
-  | ERROR / NOT FOUND
+  | ERROR
   |--------------------------------------------------------------------------
   */
 
@@ -585,7 +935,11 @@ export default function ProposalDetails() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => loadProposal({ silent: true })}
+              onClick={() =>
+                loadProposal({
+                  silent: true,
+                })
+              }
               disabled={refreshing || actionLoading}
               className="
                 flex
@@ -714,7 +1068,12 @@ export default function ProposalDetails() {
                 </p>
 
                 <p
-                  className={`text-lg font-semibold mt-1 ${statusConfig.text}`}
+                  className={`
+                    text-lg
+                    font-semibold
+                    mt-1
+                    ${statusConfig.text}
+                  `}
                 >
                   {statusConfig.label}
                 </p>
@@ -740,7 +1099,9 @@ export default function ProposalDetails() {
         ========================================================== */}
 
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* CLIENT */}
+          {/* ========================================================
+              CLIENT
+          ======================================================== */}
 
           <Card title="Cliente / Lead" icon={<User size={18} />}>
             <div className="space-y-5">
@@ -782,7 +1143,7 @@ export default function ProposalDetails() {
               {getId(lead) && (
                 <button
                   type="button"
-                  onClick={() => navigate(`/leads/${getId(lead)}`)}
+                  onClick={() => navigate(`/lead-detail/${getId(lead)}`)}
                   className="
                     inline-flex
                     items-center
@@ -800,66 +1161,341 @@ export default function ProposalDetails() {
             </div>
           </Card>
 
-          {/* PROPERTY */}
+          {/* ========================================================
+              PROPERTY
+          ======================================================== */}
 
           <Card title="Imóvel" icon={<Building2 size={18} />}>
-            <div className="space-y-5">
-              <div>
-                <p className="text-xs text-slate-500 mb-1">
-                  Imóvel relacionado
-                </p>
+            {propertyLoading ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-400">
+                <Loader2 size={28} className="animate-spin text-blue-400" />
 
-                <p className="text-lg font-semibold text-white">
-                  {getName(property, 'Imóvel não informado')}
-                </p>
+                <p className="text-sm">Carregando informações do imóvel...</p>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {/* PROPERTY IMAGE */}
 
-                {property?.code && (
-                  <p className="text-sm text-slate-400 mt-1">
-                    Código: {property.code}
-                  </p>
+                {propertyMainImage && (
+                  <div
+                    className="
+                      relative
+                      aspect-[16/9]
+                      rounded-2xl
+                      overflow-hidden
+                      border
+                      border-slate-800
+                      bg-slate-950
+                    "
+                  >
+                    <img
+                      src={propertyMainImage}
+                      alt={propertyData.title}
+                      className="
+                        w-full
+                        h-full
+                        object-cover
+                      "
+                      loading="lazy"
+                    />
+
+                    <div
+                      className="
+                        absolute
+                        inset-x-0
+                        bottom-0
+                        p-4
+                        bg-gradient-to-t
+                        from-black/80
+                        via-black/30
+                        to-transparent
+                      "
+                    >
+                      <p className="text-white font-semibold">
+                        {propertyData.title}
+                      </p>
+
+                      {propertyData.code && (
+                        <p className="text-xs text-slate-300 mt-1">
+                          Código: {propertyData.code}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 )}
-              </div>
 
-              <div className="grid sm:grid-cols-2 gap-4">
-                <Info
-                  label="Valor atual"
-                  value={formatCurrency(propertyPrice)}
-                  icon={<DollarSign size={15} />}
-                />
+                {/* PROPERTY HEADER */}
 
-                <Info
-                  label="Tipo"
-                  value={property?.type || property?.propertyType || '-'}
-                />
+                <div className="flex items-start gap-4">
+                  <div
+                    className="
+                      w-12
+                      h-12
+                      rounded-xl
+                      bg-blue-500/10
+                      border
+                      border-blue-500/20
+                      flex
+                      items-center
+                      justify-center
+                      shrink-0
+                    "
+                  >
+                    <Building2 size={22} className="text-blue-400" />
+                  </div>
 
-                <Info
-                  label="Localização"
-                  value={getPropertyLocation(property)}
-                  icon={<MapPin size={15} />}
-                />
+                  <div className="min-w-0">
+                    <p className="text-xs text-slate-500 mb-1">
+                      Imóvel relacionado
+                    </p>
 
-                <Info label="Status" value={property?.status || '-'} />
-              </div>
+                    <p className="text-lg font-semibold text-white break-words">
+                      {propertyData.title}
+                    </p>
 
-              {getId(property) && (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/properties/${getId(property)}`)}
+                    {propertyData.code && (
+                      <p className="text-sm text-slate-400 mt-1">
+                        Código:{' '}
+                        <span className="text-slate-300">
+                          {propertyData.code}
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* PROPERTY PRICE */}
+
+                <div
                   className="
-                    inline-flex
-                    items-center
-                    gap-2
-                    text-sm
-                    text-blue-400
-                    hover:text-blue-300
-                    transition
+                    rounded-xl
+                    border
+                    border-emerald-500/20
+                    bg-emerald-500/5
+                    p-4
                   "
                 >
-                  Ver detalhes do imóvel
-                  <ChevronRight size={15} />
-                </button>
-              )}
-            </div>
+                  <p className="text-xs text-slate-500">
+                    Valor atual do imóvel
+                  </p>
+
+                  <p className="text-2xl font-bold text-emerald-400 mt-1">
+                    {formatCurrency(propertyData.price || propertyPrice)}
+                  </p>
+                </div>
+
+                {/* PROPERTY DETAILS */}
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Info
+                    label="Tipo"
+                    value={propertyData.type}
+                    icon={<Home size={15} />}
+                  />
+
+                  <Info label="Finalidade" value={propertyData.purpose} />
+
+                  <Info label="Status" value={propertyData.status} />
+
+                  <Info
+                    label="Código"
+                    value={propertyData.code || '-'}
+                    icon={<Hash size={15} />}
+                  />
+                </div>
+
+                {/* PROPERTY CHARACTERISTICS */}
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <PropertyMetric
+                    icon={<Ruler size={16} />}
+                    label="Área"
+                    value={
+                      propertyData.area > 0
+                        ? `${formatNumber(propertyData.area)} m²`
+                        : '-'
+                    }
+                  />
+
+                  <PropertyMetric
+                    icon={<BedDouble size={16} />}
+                    label="Quartos"
+                    value={
+                      propertyData.bedrooms > 0
+                        ? formatNumber(propertyData.bedrooms)
+                        : '-'
+                    }
+                  />
+
+                  <PropertyMetric
+                    icon={<Bath size={16} />}
+                    label="Banheiros"
+                    value={
+                      propertyData.bathrooms > 0
+                        ? formatNumber(propertyData.bathrooms)
+                        : '-'
+                    }
+                  />
+
+                  <PropertyMetric
+                    icon={<Car size={16} />}
+                    label="Vagas"
+                    value={
+                      propertyData.parkingSpaces > 0
+                        ? formatNumber(propertyData.parkingSpaces)
+                        : '-'
+                    }
+                  />
+                </div>
+
+                {/* SUITES */}
+
+                {propertyData.suites > 0 && (
+                  <Info
+                    label="Suítes"
+                    value={formatNumber(propertyData.suites)}
+                  />
+                )}
+
+                {/* LOCATION */}
+
+                <div
+                  className="
+                    rounded-xl
+                    border
+                    border-slate-800
+                    bg-slate-950
+                    p-4
+                  "
+                >
+                  <p className="text-xs text-slate-500 mb-2 flex items-center gap-1.5">
+                    <MapPin size={14} />
+                    Localização
+                  </p>
+
+                  <p className="text-sm text-slate-200 leading-6">
+                    {propertyData.location}
+                  </p>
+                </div>
+
+                {/* ADDRESS DETAILS */}
+
+                {(propertyData.neighborhood ||
+                  propertyData.city ||
+                  propertyData.state ||
+                  propertyData.zipCode) && (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <Info label="Bairro" value={propertyData.neighborhood} />
+
+                    <Info label="Cidade" value={propertyData.city} />
+
+                    <Info label="Estado" value={propertyData.state} />
+
+                    <Info label="CEP" value={propertyData.zipCode} />
+                  </div>
+                )}
+
+                {/* DESCRIPTION */}
+
+                {propertyData.description && (
+                  <div>
+                    <p className="text-xs text-slate-500 mb-2">Descrição</p>
+
+                    <div
+                      className="
+                        rounded-xl
+                        border
+                        border-slate-800
+                        bg-slate-950
+                        p-4
+                      "
+                    >
+                      <p className="text-sm text-slate-300 leading-7 whitespace-pre-wrap">
+                        {propertyData.description}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* IMAGE GALLERY */}
+
+                {propertyData.images.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <ImageIcon size={16} className="text-blue-400" />
+
+                      <p className="text-xs text-slate-500">
+                        Imagens do imóvel
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      {propertyData.images.slice(0, 6).map((image, index) => {
+                        const imageUrl = getImageUrl(image);
+
+                        if (!imageUrl) {
+                          return null;
+                        }
+
+                        return (
+                          <div
+                            key={`${imageUrl}-${index}`}
+                            className="
+                                  aspect-[4/3]
+                                  rounded-xl
+                                  overflow-hidden
+                                  border
+                                  border-slate-800
+                                  bg-slate-950
+                                "
+                          >
+                            <img
+                              src={imageUrl}
+                              alt={`Imóvel - imagem ${index + 1}`}
+                              className="
+                                    w-full
+                                    h-full
+                                    object-cover
+                                    hover:scale-105
+                                    transition
+                                    duration-300
+                                  "
+                              loading="lazy"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* PROPERTY DETAILS BUTTON */}
+
+                {propertyData.id ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/properties/${propertyData.id}`)}
+                    className="
+                      inline-flex
+                      items-center
+                      gap-2
+                      text-sm
+                      text-blue-400
+                      hover:text-blue-300
+                      transition
+                    "
+                  >
+                    Ver detalhes completos do imóvel
+                    <ChevronRight size={15} />
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <AlertCircle size={15} />
+                    Imóvel não possui identificação disponível.
+                  </div>
+                )}
+              </div>
+            )}
           </Card>
         </div>
 
@@ -868,8 +1504,6 @@ export default function ProposalDetails() {
         ========================================================== */}
 
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* VALUES */}
-
           <div className="lg:col-span-2">
             <Card title="Valores da proposta" icon={<DollarSign size={18} />}>
               <div className="grid sm:grid-cols-2 gap-5">
@@ -936,8 +1570,6 @@ export default function ProposalDetails() {
               )}
             </Card>
           </div>
-
-          {/* SUMMARY */}
 
           <Card title="Resumo financeiro" icon={<Calculator size={18} />}>
             <div className="space-y-4">
@@ -1347,6 +1979,34 @@ function Info({ label, value, icon }) {
 
 /*
 |--------------------------------------------------------------------------
+| PROPERTY METRIC
+|--------------------------------------------------------------------------
+*/
+
+function PropertyMetric({ icon, label, value }) {
+  return (
+    <div
+      className="
+        rounded-xl
+        border
+        border-slate-800
+        bg-slate-950
+        p-3
+      "
+    >
+      <div className="flex items-center gap-2 text-slate-500">
+        {icon}
+
+        <span className="text-[11px]">{label}</span>
+      </div>
+
+      <p className="text-sm font-semibold text-slate-200 mt-1">{value}</p>
+    </div>
+  );
+}
+
+/*
+|--------------------------------------------------------------------------
 | FINANCIAL BOX
 |--------------------------------------------------------------------------
 */
@@ -1643,6 +2303,16 @@ function getStatusConfig(status) {
       iconSmall: <Send size={13} />,
     },
 
+    pending: {
+      label: 'Pendente',
+      description: 'A proposta aguarda análise ou aprovação.',
+      text: 'text-blue-300',
+      badge: 'bg-blue-500/10 border-blue-500/20 text-blue-300',
+      container: 'bg-blue-500/5 border-blue-500/20',
+      icon: <Clock3 size={22} />,
+      iconSmall: <Clock3 size={13} />,
+    },
+
     under_review: {
       label: 'Em análise',
       description: 'A proposta está sendo analisada.',
@@ -1808,7 +2478,8 @@ function getPropertyLocation(property) {
     return '-';
   }
 
-  const address = property.address;
+  const address =
+    property.address || property.location?.address || property.endereco;
 
   if (typeof address === 'string') {
     return address;
@@ -1816,11 +2487,19 @@ function getPropertyLocation(property) {
 
   if (address && typeof address === 'object') {
     const parts = [
-      address.street || address.logradouro || address.address,
-      address.number,
+      address.street || address.logradouro || address.rua || address.address,
+
+      address.number || address.numero,
+
+      address.complement,
+
       address.neighborhood || address.bairro,
+
       address.city || address.cidade,
-      address.state || address.estado,
+
+      address.state || address.estado || address.uf,
+
+      address.zipCode || address.cep,
     ].filter(Boolean);
 
     if (parts.length) {
@@ -1828,7 +2507,30 @@ function getPropertyLocation(property) {
     }
   }
 
-  return property.neighborhood || property.city || property.location || '-';
+  const location = property.location;
+
+  if (location && typeof location === 'object') {
+    const parts = [
+      location.neighborhood || location.bairro,
+
+      location.city || location.cidade,
+
+      location.state || location.estado || location.uf,
+    ].filter(Boolean);
+
+    if (parts.length) {
+      return parts.join(', ');
+    }
+  }
+
+  return (
+    property.neighborhood ||
+    property.bairro ||
+    property.city ||
+    property.cidade ||
+    property.location ||
+    '-'
+  );
 }
 
 /*
