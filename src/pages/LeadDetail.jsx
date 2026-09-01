@@ -1043,7 +1043,7 @@ export default function LeadDetails() {
                 <QuickAction
                   icon={<Calendar size={17} />}
                   label="Abrir agenda"
-                  onClick={() => navigate('/calendar')}
+                  onClick={() => navigate('/my-visits')}
                 />
 
                 <QuickAction

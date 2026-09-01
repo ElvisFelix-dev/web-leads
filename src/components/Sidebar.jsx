@@ -6,6 +6,7 @@ import { UserContext } from '../context/UserContext';
 
 import {
   FaBars,
+  FaGem,
   FaCalendarCheck,
   FaCalendarAlt,
   FaChevronLeft,
@@ -166,6 +167,11 @@ export default function Sidebar({ onCollapseChange }) {
       icon: <FaProjectDiagram />,
     },
     {
+      path: '/opportunities',
+      label: 'Oportunidades',
+      icon: <FaGem />,
+    },
+    {
       path: '/proposals',
       label: 'Propostas',
       icon: <FaBullseye />,
@@ -206,9 +212,9 @@ export default function Sidebar({ onCollapseChange }) {
           icon: <FaCalendarCheck />,
         },
         {
-          path: '/profile',
-          label: 'Perfil',
-          icon: <FaUser />,
+          path: '/opportunities',
+          label: 'Oportunidades',
+          icon: <FaBullseye />,
         },
         {
           path: '/property-list',
