@@ -1,3 +1,4 @@
+// src/pages/Contact.jsx
 import { useState } from 'react';
 import {
   User,
@@ -8,6 +9,7 @@ import {
   CheckCircle2,
   ArrowLeft,
   Building2,
+  MapPin,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -21,12 +23,24 @@ export default function Contact() {
     name: '',
     email: '',
     phone: '',
+    region: 'central', // 🔥 NOVO: Região padrão
     message: '',
   });
 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+
+  // 🔥 REGIÕES DISPONÍVEIS
+  const regions = [
+    { value: 'central', label: 'Centro' },
+    { value: 'zona_sul', label: 'Zona Sul' },
+    { value: 'zona_norte', label: 'Zona Norte' },
+    { value: 'zona_oeste', label: 'Zona Oeste' },
+    { value: 'zona_leste', label: 'Zona Leste' },
+    { value: 'abc', label: 'ABC' },
+    { value: 'grande_sp', label: 'Grande SP' },
+  ];
 
   const handleChange = (field, value) => {
     setForm((prev) => ({
@@ -43,17 +57,21 @@ export default function Contact() {
     setLoading(true);
 
     try {
-      await api.post('/api/leads', {
+      // 🔥 ENVIAR COM REGIÃO
+      const response = await api.post('/api/leads', {
         name: form.name,
         email: form.email,
         phone: form.phone,
-
+        region: form.region, // 🔥 REGIÃO
         source: 'public',
-
+        sourceType: 'company_site', // 🔥 TIPO DE ORIGEM
         notes: form.message,
-
         message: form.message,
+        // 🔥 CAMPOS PARA DISTRIBUIÇÃO AUTOMÁTICA
+        awaitingAssignment: true,
       });
+
+      console.log('✅ Lead criado:', response.data);
 
       setSuccess(true);
 
@@ -61,6 +79,7 @@ export default function Contact() {
         name: '',
         email: '',
         phone: '',
+        region: 'central',
         message: '',
       });
     } catch (err) {
@@ -80,101 +99,42 @@ export default function Contact() {
       <Header />
 
       <main className="min-h-screen bg-gray-950 text-white">
-        {/* ================================
-          HERO
-      ================================= */}
-
-        <section className="relative overflow-hidden ">
+        <section className="relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-blue-950/30 via-gray-950 to-gray-950" />
 
-          <div className="relative mx-auto max-w-7xl px-6 py-16 lg:px-8 lg:py-24 ">
+          <div className="relative mx-auto max-w-7xl px-6 py-16 lg:px-8 lg:py-24">
             <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
-              {/* ============================
-                TEXTO
-            ============================= */}
-
+              {/* TEXTO */}
               <div>
-                <div
-                  className="
-                  mb-6
-                  inline-flex
-                  items-center
-                  gap-2
-                  rounded-full
-                  border
-                  border-blue-500/20
-                  bg-blue-500/10
-                  px-4
-                  py-2
-                  text-sm
-                  text-blue-400
-                "
-                >
+                <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm text-blue-400">
                   <Building2 size={16} />
                   Atendimento personalizado
                 </div>
 
-                <h1
-                  className="
-                  max-w-2xl
-                  text-4xl
-                  font-bold
-                  tracking-tight
-                  sm:text-5xl
-                  lg:text-6xl
-                "
-                >
+                <h1 className="max-w-2xl text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
                   Encontre o imóvel
                   <span className="block text-blue-500">ideal para você.</span>
                 </h1>
 
-                <p
-                  className="
-                  mt-6
-                  max-w-xl
-                  text-lg
-                  leading-8
-                  text-gray-400
-                "
-                >
+                <p className="mt-6 max-w-xl text-lg leading-8 text-gray-400">
                   Conte para nós o que você procura. Nossa equipe vai analisar
                   suas necessidades e entrar em contato para ajudar você a
                   encontrar as melhores opções.
                 </p>
 
                 <div className="mt-10 grid gap-4 sm:grid-cols-2">
-                  <div
-                    className="
-                    rounded-2xl
-                    border
-                    border-white/10
-                    bg-white/[0.03]
-                    p-5
-                  "
-                  >
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
                     <CheckCircle2 size={22} className="mb-3 text-blue-500" />
-
                     <h3 className="font-semibold">Atendimento personalizado</h3>
-
                     <p className="mt-1 text-sm text-gray-500">
                       Entendemos suas necessidades antes de apresentar os
                       imóveis.
                     </p>
                   </div>
 
-                  <div
-                    className="
-                    rounded-2xl
-                    border
-                    border-white/10
-                    bg-white/[0.03]
-                    p-5
-                  "
-                  >
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
                     <CheckCircle2 size={22} className="mb-3 text-blue-500" />
-
                     <h3 className="font-semibold">Resposta rápida</h3>
-
                     <p className="mt-1 text-sm text-gray-500">
                       Seu contato chega diretamente para nossa equipe.
                     </p>
@@ -182,42 +142,15 @@ export default function Contact() {
                 </div>
               </div>
 
-              {/* ============================
-                FORMULÁRIO
-            ============================= */}
-
-              <div
-                className="
-                rounded-3xl
-                border
-                border-white/10
-                bg-gray-900/80
-                p-6
-                shadow-2xl
-                backdrop-blur-xl
-                sm:p-8
-              "
-              >
+              {/* FORMULÁRIO */}
+              <div className="rounded-3xl border border-white/10 bg-gray-900/80 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
                 {success ? (
-                  <div className="flex min-h-[480px] flex-col items-center justify-center text-center">
-                    <div
-                      className="
-                      mb-6
-                      flex
-                      h-20
-                      w-20
-                      items-center
-                      justify-center
-                      rounded-full
-                      bg-green-500/10
-                      text-green-500
-                    "
-                    >
+                  <div className="flex min-h-[520px] flex-col items-center justify-center text-center">
+                    <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-green-500/10 text-green-500">
                       <CheckCircle2 size={42} />
                     </div>
 
                     <h2 className="text-2xl font-bold">Mensagem enviada!</h2>
-
                     <p className="mt-3 max-w-md text-gray-400">
                       Recebemos seus dados com sucesso. Nossa equipe entrará em
                       contato com você em breve.
@@ -226,16 +159,7 @@ export default function Contact() {
                     <button
                       type="button"
                       onClick={() => setSuccess(false)}
-                      className="
-                      mt-8
-                      rounded-xl
-                      bg-blue-600
-                      px-6
-                      py-3
-                      font-semibold
-                      transition
-                      hover:bg-blue-700
-                    "
+                      className="mt-8 rounded-xl bg-blue-600 px-6 py-3 font-semibold transition hover:bg-blue-700"
                     >
                       Enviar outra mensagem
                     </button>
@@ -246,77 +170,42 @@ export default function Contact() {
                       <h2 className="text-2xl font-bold">
                         Fale com um especialista
                       </h2>
-
                       <p className="mt-2 text-sm text-gray-400">
                         Preencha seus dados e entraremos em contato.
                       </p>
                     </div>
 
                     {/* NOME */}
-
                     <div>
                       <label className="mb-2 block text-sm font-medium text-gray-300">
                         Nome
                       </label>
-
                       <div className="relative">
                         <User
                           size={18}
-                          className="
-                          absolute
-                          left-4
-                          top-1/2
-                          -translate-y-1/2
-                          text-gray-500
-                        "
+                          className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"
                         />
-
                         <input
                           type="text"
                           value={form.name}
                           onChange={(e) => handleChange('name', e.target.value)}
                           placeholder="Seu nome"
                           required
-                          className="
-                          w-full
-                          rounded-xl
-                          border
-                          border-white/10
-                          bg-gray-950
-                          py-3.5
-                          pl-11
-                          pr-4
-                          text-white
-                          outline-none
-                          transition
-                          placeholder:text-gray-600
-                          focus:border-blue-500
-                          focus:ring-2
-                          focus:ring-blue-500/20
-                        "
+                          className="w-full rounded-xl border border-white/10 bg-gray-950 py-3.5 pl-11 pr-4 text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                         />
                       </div>
                     </div>
 
                     {/* EMAIL */}
-
                     <div>
                       <label className="mb-2 block text-sm font-medium text-gray-300">
                         E-mail
                       </label>
-
                       <div className="relative">
                         <Mail
                           size={18}
-                          className="
-                          absolute
-                          left-4
-                          top-1/2
-                          -translate-y-1/2
-                          text-gray-500
-                        "
+                          className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"
                         />
-
                         <input
                           type="email"
                           value={form.email}
@@ -325,46 +214,21 @@ export default function Contact() {
                           }
                           placeholder="seu@email.com"
                           required
-                          className="
-                          w-full
-                          rounded-xl
-                          border
-                          border-white/10
-                          bg-gray-950
-                          py-3.5
-                          pl-11
-                          pr-4
-                          text-white
-                          outline-none
-                          transition
-                          placeholder:text-gray-600
-                          focus:border-blue-500
-                          focus:ring-2
-                          focus:ring-blue-500/20
-                        "
+                          className="w-full rounded-xl border border-white/10 bg-gray-950 py-3.5 pl-11 pr-4 text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                         />
                       </div>
                     </div>
 
                     {/* TELEFONE */}
-
                     <div>
                       <label className="mb-2 block text-sm font-medium text-gray-300">
                         WhatsApp / Telefone
                       </label>
-
                       <div className="relative">
                         <Phone
                           size={18}
-                          className="
-                          absolute
-                          left-4
-                          top-1/2
-                          -translate-y-1/2
-                          text-gray-500
-                        "
+                          className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"
                         />
-
                         <input
                           type="tel"
                           value={form.phone}
@@ -373,131 +237,76 @@ export default function Contact() {
                           }
                           placeholder="(11) 99999-9999"
                           required
-                          className="
-                          w-full
-                          rounded-xl
-                          border
-                          border-white/10
-                          bg-gray-950
-                          py-3.5
-                          pl-11
-                          pr-4
-                          text-white
-                          outline-none
-                          transition
-                          placeholder:text-gray-600
-                          focus:border-blue-500
-                          focus:ring-2
-                          focus:ring-blue-500/20
-                        "
+                          className="w-full rounded-xl border border-white/10 bg-gray-950 py-3.5 pl-11 pr-4 text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                         />
                       </div>
                     </div>
 
-                    {/* MENSAGEM */}
+                    {/* 🔥 REGIÃO - NOVO CAMPO */}
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">
+                        Região de interesse
+                      </label>
+                      <div className="relative">
+                        <MapPin
+                          size={18}
+                          className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"
+                        />
+                        <select
+                          value={form.region}
+                          onChange={(e) =>
+                            handleChange('region', e.target.value)
+                          }
+                          required
+                          className="w-full rounded-xl border border-white/10 bg-gray-950 py-3.5 pl-11 pr-4 text-white outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                        >
+                          {regions.map((region) => (
+                            <option key={region.value} value={region.value}>
+                              {region.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
 
+                    {/* MENSAGEM */}
                     <div>
                       <label className="mb-2 block text-sm font-medium text-gray-300">
                         Como podemos ajudar?
                       </label>
-
                       <div className="relative">
                         <MessageSquare
                           size={18}
-                          className="
-                          absolute
-                          left-4
-                          top-4
-                          text-gray-500
-                        "
+                          className="absolute left-4 top-4 text-gray-500"
                         />
-
                         <textarea
-                          rows={5}
+                          rows={4}
                           value={form.message}
                           onChange={(e) =>
                             handleChange('message', e.target.value)
                           }
                           placeholder="Ex.: Procuro um apartamento de 2 quartos para comprar..."
-                          className="
-                          w-full
-                          resize-none
-                          rounded-xl
-                          border
-                          border-white/10
-                          bg-gray-950
-                          py-3.5
-                          pl-11
-                          pr-4
-                          text-white
-                          outline-none
-                          transition
-                          placeholder:text-gray-600
-                          focus:border-blue-500
-                          focus:ring-2
-                          focus:ring-blue-500/20
-                        "
+                          className="w-full resize-none rounded-xl border border-white/10 bg-gray-950 py-3.5 pl-11 pr-4 text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                         />
                       </div>
                     </div>
 
                     {/* ERRO */}
-
                     {error && (
-                      <div
-                        className="
-                        rounded-xl
-                        border
-                        border-red-500/20
-                        bg-red-500/10
-                        px-4
-                        py-3
-                        text-sm
-                        text-red-400
-                      "
-                      >
+                      <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
                         {error}
                       </div>
                     )}
 
                     {/* BOTÃO */}
-
                     <button
                       type="submit"
                       disabled={loading}
-                      className="
-                      flex
-                      w-full
-                      items-center
-                      justify-center
-                      gap-2
-                      rounded-xl
-                      bg-blue-600
-                      px-6
-                      py-4
-                      font-semibold
-                      text-white
-                      shadow-lg
-                      shadow-blue-600/20
-                      transition
-                      hover:bg-blue-700
-                      disabled:cursor-not-allowed
-                      disabled:opacity-50
-                    "
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-4 font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {loading ? (
                         <>
-                          <span
-                            className="
-                            h-5
-                            w-5
-                            animate-spin
-                            rounded-full
-                            border-2
-                            border-white/30
-                            border-t-white
-                          "
-                          />
+                          <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                           Enviando...
                         </>
                       ) : (
