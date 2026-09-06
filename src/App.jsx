@@ -15,11 +15,12 @@ import DashboardCorretor from './pages/DashboardCorretor';
 import BrokerHotsite from './pages/hotsite/BrokerHotsite';
 import PropertyPage from './pages/hotsite/PropertyPage';
 import PropertyCreate from './pages/PropertyCreate';
+import PropertyEdit from './pages/PropertyEdit';
 import CreateLead from './pages/Create-Leads';
 import LeadsList from './pages/Lead-List';
 import AssignLeads from './pages/AssignLeads'; // nova página
 import MyLeads from './pages/MyLeads';
-import ManageProperties from './pages/ManageProperties';
+import EditLead from './pages/EditLead';
 import Brokers from './pages/Brokers';
 import Me from './pages/Me';
 import PropertyDetails from './pages/PropertyDetails';
@@ -49,6 +50,7 @@ import ProposalEdit from './pages/ProposalEdit';
 import SalesAdmin from './pages/admin/SalesAdmin';
 import SaleDetailsAdmin from './pages/admin/SaleDetailsAdmin';
 import CommissionApproval from './pages/admin/CommissionApproval';
+import PropertyFavorites from './pages/PropertyFavorites';
 
 export function App() {
   return (
@@ -66,6 +68,7 @@ export function App() {
         />
 
         <Route path="/properties/:id" element={<PropertyDetails />} />
+        <Route path="/favorites" element={<PropertyFavorites />} />
         <Route path="/landing" element={<Landing />} />
         <Route path="/home" element={<Home />} />
         <Route path="/contact" element={<Contact />} />
@@ -80,12 +83,13 @@ export function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/dashboard-corretor" element={<DashboardCorretor />} />
           <Route path="/create-property" element={<PropertyCreate />} />
+          <Route path="/properties/edit/:id" element={<PropertyEdit />} />
           <Route path="/create-lead" element={<CreateLead />} />
           <Route path="/leads-list" element={<LeadsList />} />
+          <Route path="/leads/:id/edit" element={<EditLead />} />
           <Route path="/assign-leads" element={<AssignLeads />} />{' '}
           {/* nova rota */}
           <Route path="/my-leads" element={<MyLeads />} />
-          <Route path="/manage-properties" element={<ManageProperties />} />
           <Route path="/brokers" element={<Brokers />} />
           <Route path="/broker-dashboard" element={<BrokerDashboard />} />
           <Route path="/me" element={<Me />} />

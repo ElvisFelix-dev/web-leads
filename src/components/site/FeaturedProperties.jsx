@@ -1,3 +1,4 @@
+// src/components/site/FeaturedProperties.jsx
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Building2, CheckCircle2, Sparkles } from 'lucide-react';
 
@@ -10,7 +11,16 @@ export default function FeaturedProperties({
   onViewAll,
 }) {
   const navigate = useNavigate();
-  const visibleProperties = properties.slice(0, 6);
+  const visibleProperties = Array.isArray(properties)
+    ? properties.slice(0, 6)
+    : [];
+
+  // 🔥 FILTRAR IMÓVEIS VENDIDOS
+  const availableProperties = visibleProperties.filter((property) => {
+    if (!property) return false;
+    const status = property?.status?.toLowerCase() || '';
+    return status !== 'vendido' && status !== 'sold';
+  });
 
   return (
     <section className="relative overflow-hidden bg-gray-950 pb-8 pt-4 sm:pb-10 sm:pt-5 lg:pb-12 lg:pt-6">
@@ -19,8 +29,6 @@ export default function FeaturedProperties({
       ====================================================== */}
 
       <div className="pointer-events-none absolute inset-0">
-        {/* Grid */}
-
         <div
           className="
             absolute
@@ -30,8 +38,6 @@ export default function FeaturedProperties({
             [background-size:64px_64px]
           "
         />
-
-        {/* Glow */}
 
         <div
           className="
@@ -76,11 +82,7 @@ export default function FeaturedProperties({
             lg:justify-between
           "
         >
-          {/* LEFT */}
-
           <div className="max-w-2xl">
-            {/* Badge */}
-
             <div
               className="
                 mb-5
@@ -104,8 +106,6 @@ export default function FeaturedProperties({
               Seleção especial
             </div>
 
-            {/* Title */}
-
             <h2
               className="
                 text-3xl
@@ -120,8 +120,6 @@ export default function FeaturedProperties({
               Imóveis escolhidos
               <span className="block text-blue-400">para você.</span>
             </h2>
-
-            {/* Description */}
 
             <p
               className="
@@ -138,12 +136,8 @@ export default function FeaturedProperties({
             </p>
           </div>
 
-          {/* RIGHT */}
-
           <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center lg:flex-col lg:items-end">
-            {/* Counter */}
-
-            {!loading && properties.length > 0 && (
+            {!loading && availableProperties.length > 0 && (
               <div
                 className="
                   flex
@@ -155,17 +149,14 @@ export default function FeaturedProperties({
                 "
               >
                 <Building2 size={15} className="text-blue-400" />
-
                 <span>
-                  {properties.length}
-                  {properties.length === 1
+                  {availableProperties.length}
+                  {availableProperties.length === 1
                     ? ' imóvel disponível'
                     : ' imóveis disponíveis'}
                 </span>
               </div>
             )}
-
-            {/* View all */}
 
             <button
               type="button"
@@ -208,10 +199,6 @@ export default function FeaturedProperties({
             </button>
           </div>
         </div>
-
-        {/* =====================================================
-            TOP DIVIDER
-        ====================================================== */}
 
         <div
           className="
@@ -259,13 +246,9 @@ export default function FeaturedProperties({
 
                 <div className="space-y-4 p-5">
                   <div className="h-4 w-24 animate-pulse rounded bg-gray-800" />
-
                   <div className="h-6 w-3/4 animate-pulse rounded bg-gray-800" />
-
                   <div className="h-4 w-full animate-pulse rounded bg-gray-800" />
-
                   <div className="h-4 w-2/3 animate-pulse rounded bg-gray-800" />
-
                   <div className="pt-2">
                     <div className="h-10 w-full animate-pulse rounded-xl bg-gray-800" />
                   </div>
@@ -279,7 +262,7 @@ export default function FeaturedProperties({
             EMPTY STATE
         ====================================================== */}
 
-        {!loading && properties.length === 0 && (
+        {!loading && availableProperties.length === 0 && (
           <div
             className="
               relative
@@ -382,7 +365,7 @@ export default function FeaturedProperties({
             PROPERTY GRID
         ====================================================== */}
 
-        {!loading && visibleProperties.length > 0 && (
+        {!loading && availableProperties.length > 0 && (
           <>
             <div
               className="
@@ -392,22 +375,29 @@ export default function FeaturedProperties({
                 lg:grid-cols-3
               "
             >
-              {visibleProperties.map((property, index) => (
-                <div
-                  key={property._id}
-                  className="
-                    group
-                    relative
-                    transition-all
-                    duration-500
-                  "
-                  style={{
-                    animationDelay: `${index * 70}ms`,
-                  }}
-                >
-                  <PropertyCard property={property} onFavorite={onFavorite} />
-                </div>
-              ))}
+              {availableProperties.map((property, index) => {
+                // 🔥 VERIFICAÇÃO DE SEGURANÇA
+                if (!property || !property._id) {
+                  return null;
+                }
+
+                return (
+                  <div
+                    key={property._id}
+                    className="
+                      group
+                      relative
+                      transition-all
+                      duration-500
+                    "
+                    style={{
+                      animationDelay: `${index * 70}ms`,
+                    }}
+                  >
+                    <PropertyCard property={property} onFavorite={onFavorite} />
+                  </div>
+                );
+              })}
             </div>
 
             {/* =================================================

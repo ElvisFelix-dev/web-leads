@@ -1,3 +1,4 @@
+// src/components/admin/CommissionApproveModal.jsx
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -16,6 +17,8 @@ import {
   FaReceipt,
   FaPercentage,
   FaExclamationTriangle,
+  FaLightbulb,
+  FaUndo,
 } from 'react-icons/fa';
 
 import { toast } from 'react-toastify';
@@ -28,6 +31,7 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [editMode, setEditMode] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const navigate = useNavigate();
 
@@ -117,19 +121,14 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
     if (!property) return null;
 
     const candidates = [
-      // Prioridade máxima
       property.mainImage,
       property.coverImage,
       property.thumbnail,
       property.image,
       property.photo,
-
-      // Arrays
       property.images?.[0],
       property.photos?.[0],
       property.gallery?.[0],
-
-      // Possíveis estruturas alternativas
       property.media?.[0],
       property.photos?.[0]?.url,
       property.images?.[0]?.url,
@@ -200,11 +199,6 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
 
   // =========================================================
   // NORMALIZA IMÓVEL
-  //
-  // A API da comissão pode trazer property resumido.
-  // A venda traz property completo.
-  //
-  // Aqui mesclamos os dois.
   // =========================================================
 
   const normalizedProperty = useMemo(() => {
@@ -215,8 +209,6 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
       ...commissionProperty,
       ...saleProperty,
 
-      // Garante que campos importantes da venda
-      // tenham prioridade quando existirem.
       _id:
         saleProperty?._id ||
         saleProperty?.id ||
@@ -282,28 +274,6 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
   }, [normalizedProperty]);
 
   // =========================================================
-  // DEBUG
-  // =========================================================
-
-  useEffect(() => {
-    if (!sale && !commission) return;
-
-    console.log('==============================');
-    console.log('🏠 PROPERTY NORMALIZADO');
-    console.log(normalizedProperty);
-
-    console.log('🏠 PROPERTY IMAGE');
-    console.log(propertyImage);
-
-    console.log('🏠 PROPERTY NAME');
-    console.log(
-      normalizedProperty?.name || normalizedProperty?.title || 'SEM NOME',
-    );
-
-    console.log('==============================');
-  }, [sale, commission, normalizedProperty, propertyImage]);
-
-  // =========================================================
   // NORMALIZA DADOS DA COMISSÃO
   // =========================================================
 
@@ -319,6 +289,70 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
 
       companyPercentage: Number(distribution?.company?.percentage) || 0,
     };
+  };
+
+  // =========================================================
+  // SUGESTÃO DE DISTRIBUIÇÃO
+  // =========================================================
+
+  const suggestDistribution = () => {
+    const hasCapturer = Boolean(
+      commission?.capturerBroker || sale?.acquisitionBroker,
+    );
+
+    let suggestion;
+
+    if (hasCapturer) {
+      suggestion = {
+        totalPercentage: 5,
+        sellerPercentage: 60,
+        capturerPercentage: 30,
+        companyPercentage: 10,
+      };
+    } else {
+      suggestion = {
+        totalPercentage: 5,
+        sellerPercentage: 100,
+        capturerPercentage: 0,
+        companyPercentage: 0,
+      };
+    }
+
+    setEditData(suggestion);
+    setShowSuggestions(false);
+    toast.info('Distribuição sugerida aplicada!');
+  };
+
+  // =========================================================
+  // PRESETS DE DISTRIBUIÇÃO
+  // =========================================================
+
+  const presets = useMemo(() => {
+    const hasCapturer = Boolean(
+      commission?.capturerBroker || sale?.acquisitionBroker,
+    );
+
+    if (!hasCapturer) {
+      return [{ label: '100% Vendedor', seller: 100, capturer: 0, company: 0 }];
+    }
+
+    return [
+      { label: '60/30/10', seller: 60, capturer: 30, company: 10 },
+      { label: '70/20/10', seller: 70, capturer: 20, company: 10 },
+      { label: '50/30/20', seller: 50, capturer: 30, company: 20 },
+      { label: '80/10/10', seller: 80, capturer: 10, company: 10 },
+    ];
+  }, [commission, sale]);
+
+  const applyPreset = (preset) => {
+    setEditData({
+      totalPercentage: editData.totalPercentage || 5,
+      sellerPercentage: preset.seller,
+      capturerPercentage: preset.capturer,
+      companyPercentage: preset.company,
+    });
+    setShowSuggestions(false);
+    toast.info(`Preset "${preset.label}" aplicado!`);
   };
 
   // =========================================================
@@ -419,8 +453,6 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
 
           lead: sale.lead,
 
-          // IMPORTANTE:
-          // usamos o imóvel completo da venda
           property: sale.property || null,
 
           sellerBroker: sale.sellerBroker || null,
@@ -634,9 +666,6 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
 
   const leadName = lead?.name || 'Cliente não informado';
 
-  // IMPORTANTE:
-  // Agora usamos normalizedProperty
-  // em vez de commission?.property diretamente.
   const property = normalizedProperty;
 
   const propertyTitle =
@@ -933,21 +962,71 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
                   </p>
                 </div>
 
-                {isEditable && (
-                  <button
-                    onClick={() => {
-                      setEditMode((previous) => !previous);
+                <div className="flex items-center gap-2">
+                  {isEditable && (
+                    <>
+                      <button
+                        onClick={() => setShowSuggestions(!showSuggestions)}
+                        className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 text-xs font-semibold transition-all"
+                      >
+                        <FaLightbulb size={12} />
+                        Sugerir
+                      </button>
 
-                      setError(null);
-                    }}
-                    className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-gray-300 hover:text-white transition-all"
-                  >
-                    {editMode ? <FaSave size={12} /> : <FaEdit size={12} />}
+                      <button
+                        onClick={() => {
+                          setEditMode((previous) => !previous);
+                          setError(null);
+                          setShowSuggestions(false);
+                        }}
+                        className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-semibold text-gray-300 hover:text-white transition-all"
+                      >
+                        {editMode ? <FaSave size={12} /> : <FaEdit size={12} />}
 
-                    {editMode ? 'Visualizar' : 'Editar distribuição'}
-                  </button>
-                )}
+                        {editMode ? 'Visualizar' : 'Editar distribuição'}
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
+
+              {/* SUGGESTIONS PANEL */}
+
+              {showSuggestions && isEditable && (
+                <div className="px-5 py-4 border-b border-gray-800 bg-amber-500/5">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold text-amber-400">
+                        💡 Sugestões de distribuição
+                      </p>
+
+                      <p className="text-[11px] text-gray-600 mt-0.5">
+                        Selecione um preset ou aplique uma sugestão automática
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={suggestDistribution}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 text-xs font-medium transition-all"
+                      >
+                        <FaUndo size={10} />
+                        Sugestão automática
+                      </button>
+
+                      {presets.map((preset) => (
+                        <button
+                          key={preset.label}
+                          onClick={() => applyPreset(preset)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 hover:text-white text-xs font-medium transition-all"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="p-5">
                 {editMode && isEditable ? (
@@ -1100,6 +1179,44 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
                         </p>
                       </div>
                     </div>
+
+                    {/* RESUMO DA DISTRIBUIÇÃO */}
+
+                    <div className="grid grid-cols-3 gap-3 pt-2">
+                      <div className="text-center p-2 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                        <p className="text-[10px] text-gray-600">Vendedor</p>
+                        <p className="text-sm font-bold text-blue-400">
+                          {formatPercentage(editData.sellerPercentage)}
+                        </p>
+                        <p className="text-[10px] text-gray-500">
+                          {formatCurrency(calculated.sellerAmount)}
+                        </p>
+                      </div>
+
+                      <div className="text-center p-2 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                        <p className="text-[10px] text-gray-600">Captador</p>
+                        <p className="text-sm font-bold text-purple-400">
+                          {hasCapturer
+                            ? formatPercentage(editData.capturerPercentage)
+                            : '—'}
+                        </p>
+                        <p className="text-[10px] text-gray-500">
+                          {hasCapturer
+                            ? formatCurrency(calculated.capturerAmount)
+                            : '—'}
+                        </p>
+                      </div>
+
+                      <div className="text-center p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
+                        <p className="text-[10px] text-gray-600">Imobiliária</p>
+                        <p className="text-sm font-bold text-emerald-400">
+                          {formatPercentage(editData.companyPercentage)}
+                        </p>
+                        <p className="text-[10px] text-gray-500">
+                          {formatCurrency(calculated.companyAmount)}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1195,11 +1312,11 @@ function BrokerCard({
 }) {
   const name = broker?.name || fallbackName;
 
-  const position = getPosition(broker, fallbackPosition);
+  const position = getBrokerPosition(broker, fallbackPosition);
 
-  const avatar = getAvatar(broker);
+  const avatar = getBrokerAvatar(broker);
 
-  const phone = broker?.phone || broker?.mobile || broker?.whatsapp;
+  const phone = getBrokerPhone(broker);
 
   const email = broker?.email;
 
@@ -1340,7 +1457,7 @@ function DistributionCard({
         </div>
 
         <span className={`text-xs font-bold ${theme.text}`}>
-          {formatPercentageValue(percentage)}
+          {formatPercentage(percentage)}
         </span>
       </div>
 
@@ -1354,7 +1471,7 @@ function DistributionCard({
         )}
 
         <p className="text-lg sm:text-xl font-bold text-white mt-2 truncate">
-          {formatCurrencyValue(amount)}
+          {formatCurrency(amount)}
         </p>
       </div>
     </div>
@@ -1407,6 +1524,12 @@ function PercentageInput({
 
         <FaPercentage className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600 text-xs" />
       </div>
+
+      {disabled && (
+        <p className="text-[10px] text-gray-600 mt-2">
+          Nenhum captador vinculado a esta venda
+        </p>
+      )}
     </div>
   );
 }
@@ -1618,7 +1741,7 @@ function getInitials(name) {
 // AVATAR
 // =============================================================
 
-function getAvatar(broker) {
+function getBrokerAvatar(broker) {
   if (!broker) return null;
 
   const image =
@@ -1652,7 +1775,7 @@ function getAvatar(broker) {
 // POSITION
 // =============================================================
 
-function getPosition(broker, fallback) {
+function getBrokerPosition(broker, fallback) {
   if (!broker) return fallback;
 
   return (
@@ -1666,20 +1789,11 @@ function getPosition(broker, fallback) {
 }
 
 // =============================================================
-// CURRENCY
+// PHONE
 // =============================================================
 
-function formatCurrencyValue(value) {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(Number(value) || 0);
-}
+function getBrokerPhone(broker) {
+  if (!broker) return null;
 
-// =============================================================
-// PERCENTAGE
-// =============================================================
-
-function formatPercentageValue(value) {
-  return `${Number(value) || 0}%`;
+  return broker.phone || broker.mobile || broker.whatsapp || null;
 }

@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useState } from 'react';
+
 import {
   Clock,
   Phone,
@@ -30,7 +32,10 @@ import {
   Bath,
   Car,
   Ruler,
+  CheckCircle2,
 } from 'lucide-react';
+
+import api from '../../service/api';
 
 /* ============================================================
    HELPERS
@@ -114,7 +119,9 @@ function getTimeAgo(date) {
 
   const minutes = Math.floor(diff / 60000);
 
-  if (minutes < 1) return 'agora';
+  if (minutes < 1) {
+    return 'agora';
+  }
 
   if (minutes < 60) {
     return `há ${minutes} min`;
@@ -146,7 +153,7 @@ function getTimeAgo(date) {
 function getInitials(name) {
   if (!name) return '?';
 
-  return name
+  return String(name)
     .split(' ')
     .filter(Boolean)
     .slice(0, 2)
@@ -155,24 +162,179 @@ function getInitials(name) {
     .toUpperCase();
 }
 
+function getObjectId(value) {
+  if (!value) return null;
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'object') {
+    return value._id || value.id || value.$oid || null;
+  }
+
+  return null;
+}
+
+function getDateValue(date) {
+  if (!date) return 0;
+
+  const parsed = new Date(date).getTime();
+
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+/* ============================================================
+   VISIT HELPERS
+============================================================ */
+
+function isCompletedVisit(visit) {
+  const status = String(
+    visit?.status || visit?.visitStatus || visit?.state || '',
+  )
+    .trim()
+    .toLowerCase();
+
+  return [
+    'concluida',
+    'concluído',
+    'concluida',
+    'completed',
+    'realizada',
+    'realizado',
+    'finished',
+  ].includes(status);
+}
+
+function getVisitDate(visit) {
+  if (!visit) return null;
+
+  return (
+    visit.finishedAt ||
+    visit.completedAt ||
+    visit.realizedAt ||
+    visit.realizedDate ||
+    visit.date ||
+    visit.startAt ||
+    visit.startDate ||
+    visit.createdAt ||
+    null
+  );
+}
+
+function getVisitDateValue(visit) {
+  return getDateValue(getVisitDate(visit));
+}
+
+function extractVisitProperty(visit) {
+  if (!visit) return null;
+
+  const property =
+    visit.propertyInfo ||
+    visit.property ||
+    visit.visitedProperty ||
+    visit.propertyData ||
+    null;
+
+  if (!property) {
+    return null;
+  }
+
+  const propertyId = getObjectId(
+    property?._id || property?.id || visit?.propertyId || visit?.property,
+  );
+
+  if (!propertyId && !property?.name && !property?.title) {
+    return null;
+  }
+
+  return {
+    ...property,
+
+    _id: property?._id || property?.id || propertyId || null,
+
+    id: property?.id || property?._id || propertyId || null,
+
+    name:
+      property?.name ||
+      property?.title ||
+      property?.description ||
+      'Imóvel visitado',
+
+    title: property?.title || property?.name || 'Imóvel visitado',
+
+    code: property?.code || property?.formattedCode || '',
+
+    type: property?.type || property?.propertyType || null,
+
+    purpose: property?.purpose || property?.transactionType || null,
+
+    price:
+      property?.price ??
+      property?.prices?.salePrice ??
+      property?.prices?.rentPrice ??
+      null,
+
+    image:
+      property?.image ||
+      property?.mainImage ||
+      property?.coverImage ||
+      property?.images?.find((image) => image?.isCover)?.url ||
+      property?.images?.[0]?.url ||
+      '',
+
+    bedrooms: property?.bedrooms ?? property?.details?.bedrooms ?? null,
+
+    bathrooms: property?.bathrooms ?? property?.details?.bathrooms ?? null,
+
+    suites: property?.suites ?? property?.details?.suites ?? null,
+
+    parkingSpaces:
+      property?.parkingSpaces ??
+      property?.garage ??
+      property?.details?.parkingSpaces ??
+      null,
+
+    area:
+      property?.area ??
+      property?.builtArea ??
+      property?.privateArea ??
+      property?.details?.area ??
+      null,
+
+    address:
+      property?.address || property?.fullAddress || property?.location || null,
+  };
+}
+
+function getVisitLeadId(visit) {
+  return getObjectId(
+    visit?.leadInfo || visit?.lead || visit?.leadId || visit?.customer || null,
+  );
+}
+
+function normalizeVisitsResponse(response) {
+  const payload = response?.data;
+
+  const candidates = [
+    payload?.data?.visits,
+    payload?.data?.items,
+    payload?.visits,
+    payload?.items,
+    payload?.results,
+    Array.isArray(payload?.data) ? payload.data : null,
+    Array.isArray(payload) ? payload : null,
+  ];
+
+  const result = candidates.find(Array.isArray);
+
+  return Array.isArray(result) ? result : [];
+}
+
 /* ============================================================
    RESPONSÁVEL DO EVENTO / LEAD
 ============================================================ */
 
-/*
- * Procura o responsável mais específico disponível.
-
- * Ordem:
- *
- * 1. item.createdBy
- * 2. item.broker
- * 3. item.assignedTo
- * 4. lead.assignedTo
- * 5. lead.broker
- *
- * Isso permite que eventos antigos continuem funcionando,
- * mesmo que diferentes endpoints retornem estruturas diferentes.
- */
 function getEventResponsible(item, leadResponsible, lead) {
   return (
     item?.broker ||
@@ -184,19 +346,10 @@ function getEventResponsible(item, leadResponsible, lead) {
   );
 }
 
-/*
- * Quem executou a ação.
- *
- * Exemplo:
- *
- * Proposta aprovada pelo administrador
- *
- * Executado por:
- * Elvis Felix
- *
- * Responsável:
- * João da Silva
- */
+/* ============================================================
+   ATOR DO EVENTO
+============================================================ */
+
 function getEventActor(item) {
   return (
     item?.createdBy ||
@@ -212,39 +365,65 @@ function getEventActor(item) {
 ============================================================ */
 
 function getStageLabel(stage) {
+  const normalized = String(stage || '')
+    .trim()
+    .toLowerCase();
+
   const labels = {
+    novo: 'Novo',
     novo_lead: 'Novo Lead',
+
+    em_contato: 'Em contato',
     primeiro_contato: 'Primeiro Contato',
+
     qualificado: 'Qualificado',
+
     visita_agendada: 'Visita Agendada',
+
+    proposta: 'Proposta',
     proposta_enviada: 'Proposta Enviada',
+
     negociacao: 'Negociação',
+
+    convertido: 'Convertido',
     fechado: 'Fechado',
+
     perdido: 'Perdido',
   };
 
-  return labels[stage] || stage || 'Etapa';
+  return labels[normalized] || stage || 'Etapa';
 }
 
 function getStatusLabel(status) {
+  const normalized = String(status || '')
+    .trim()
+    .toLowerCase();
+
   const labels = {
     novo: 'Novo',
     em_andamento: 'Em andamento',
-    convertido: 'Convertido',
-    perdido: 'Perdido',
+    'em andamento': 'Em andamento',
+    in_progress: 'Em andamento',
     active: 'Ativo',
     inactive: 'Inativo',
+    convertido: 'Convertido',
+    perdido: 'Perdido',
   };
 
-  return labels[status] || status || 'Não informado';
+  return labels[normalized] || status || 'Não informado';
 }
 
 function getPriorityLabel(priority) {
+  const normalized = String(priority || '')
+    .trim()
+    .toLowerCase();
+
   const labels = {
     low: 'Baixa',
     medium: 'Média',
     high: 'Alta',
     urgent: 'Urgente',
+
     baixa: 'Baixa',
     media: 'Média',
     média: 'Média',
@@ -252,10 +431,14 @@ function getPriorityLabel(priority) {
     urgente: 'Urgente',
   };
 
-  return labels[priority] || priority || 'Não definida';
+  return labels[normalized] || priority || 'Não definida';
 }
 
 function getPropertyTypeLabel(type) {
+  const normalized = String(type || '')
+    .trim()
+    .toLowerCase();
+
   const labels = {
     apartamento: 'Apartamento',
     casa: 'Casa',
@@ -263,52 +446,84 @@ function getPropertyTypeLabel(type) {
     terreno: 'Terreno',
     comercial: 'Comercial',
     sala_comercial: 'Sala Comercial',
+    sala: 'Sala Comercial',
     galpao: 'Galpão',
+    galpão: 'Galpão',
     cobertura: 'Cobertura',
     chacara: 'Chácara',
+    chácara: 'Chácara',
     sitio: 'Sítio',
+    sítio: 'Sítio',
     fazenda: 'Fazenda',
   };
 
-  return labels[type] || type || 'Imóvel';
+  return labels[normalized] || type || 'Imóvel';
 }
 
 function getPurposeLabel(purpose) {
+  const normalized = String(purpose || '')
+    .trim()
+    .toLowerCase();
+
   const labels = {
     venda: 'Venda',
     aluguel: 'Aluguel',
+    locacao: 'Aluguel',
+    locação: 'Aluguel',
     temporada: 'Temporada',
   };
 
-  return labels[purpose] || purpose || '';
+  return labels[normalized] || purpose || '';
 }
 
 function getContactLabel(type) {
+  const normalized = String(type || '')
+    .trim()
+    .toLowerCase();
+
   const labels = {
     phone: 'Ligação telefônica',
+    telefone: 'Ligação telefônica',
+
     email: 'E-mail',
+    e_mail: 'E-mail',
+
     whatsapp: 'WhatsApp',
+
     message: 'Mensagem',
+    mensagem: 'Mensagem',
+
     meeting: 'Reunião',
+    reuniao: 'Reunião',
+    reunião: 'Reunião',
+
     visit: 'Visita',
+    visita: 'Visita',
   };
 
-  return labels[type] || type || 'Contato';
+  return labels[normalized] || type || 'Contato';
 }
 
 function getProposalStatusLabel(status) {
+  const normalized = String(status || '')
+    .trim()
+    .toLowerCase();
+
   const labels = {
     draft: 'Rascunho',
     pending: 'Pendente',
     submitted: 'Enviada',
+    enviada: 'Enviada',
     aceita: 'Aceita',
     accepted: 'Aceita',
     rejected: 'Recusada',
+    rejeitada: 'Recusada',
     cancelled: 'Cancelada',
     canceled: 'Cancelada',
+    cancelada: 'Cancelada',
   };
 
-  return labels[status] || status || 'Não informado';
+  return labels[normalized] || status || 'Não informado';
 }
 
 /* ============================================================
@@ -448,36 +663,183 @@ const sourceColorClasses = {
 };
 
 /* ============================================================
+   PROPERTY ADDRESS
+============================================================ */
+
+function formatPropertyAddress(address = {}) {
+  if (!address) {
+    return null;
+  }
+
+  if (typeof address === 'string') {
+    return address;
+  }
+
+  if (Array.isArray(address)) {
+    return address.filter(Boolean).join(', ') || null;
+  }
+
+  const parts = [
+    address.street || address.logradouro,
+    address.number || address.numero,
+    address.complement || address.complemento,
+    address.district || address.neighborhood || address.bairro,
+    address.city || address.cidade,
+    address.state || address.uf,
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(', ') : null;
+}
+
+/* ============================================================
    MAIN COMPONENT
 ============================================================ */
 
 export default function LeadHistory({ lead }) {
-  const stageHistory = lead?.stageHistory || [];
-  const contactHistory = lead?.contactHistory || [];
+  const stageHistory = Array.isArray(lead?.stageHistory)
+    ? lead.stageHistory
+    : [];
 
-  const property = lead?.property || null;
+  const contactHistory = Array.isArray(lead?.contactHistory)
+    ? lead.contactHistory
+    : [];
+
+  /*
+   * IMPORTANTE:
+   *
+   * Não utilizamos lead.property para definir
+   * o imóvel visitado.
+   *
+   * lead.property pode representar o imóvel
+   * de interesse do lead.
+   *
+   * O imóvel visitado precisa vir da visita
+   * efetivamente concluída.
+   */
+  const [visits, setVisits] = useState([]);
+  const [loadingVisits, setLoadingVisits] = useState(false);
+
+  /* ============================================================
+     LOAD VISITS
+  ============================================================ */
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadVisits() {
+      if (!lead?._id && !lead?.id) {
+        setVisits([]);
+        return;
+      }
+
+      try {
+        setLoadingVisits(true);
+
+        const response = await api.get('/api/visits', {
+          params: {
+            page: 1,
+            limit: 100,
+          },
+        });
+
+        const loadedVisits = normalizeVisitsResponse(response);
+
+        if (!mounted) return;
+
+        setVisits(loadedVisits);
+      } catch (error) {
+        console.error('Erro ao carregar visitas do lead:', error);
+
+        if (mounted) {
+          setVisits([]);
+        }
+      } finally {
+        if (mounted) {
+          setLoadingVisits(false);
+        }
+      }
+    }
+
+    loadVisits();
+
+    return () => {
+      mounted = false;
+    };
+  }, [lead?._id, lead?.id]);
+
+  /* ============================================================
+     VISITAS DO LEAD
+  ============================================================ */
+
+  const leadId = getObjectId(lead?._id || lead?.id);
+
+  const leadVisits = useMemo(() => {
+    if (!leadId || !Array.isArray(visits)) {
+      return [];
+    }
+
+    return visits.filter((visit) => {
+      const visitLeadId = getVisitLeadId(visit);
+
+      return visitLeadId && String(visitLeadId) === String(leadId);
+    });
+  }, [visits, leadId]);
+
+  /* ============================================================
+     VISITAS CONCLUÍDAS
+  ============================================================ */
+
+  const completedVisits = useMemo(() => {
+    return leadVisits
+      .filter((visit) => {
+        if (!isCompletedVisit(visit)) {
+          return false;
+        }
+
+        /*
+         * A visita só interessa para o card do imóvel
+         * se realmente possuir um imóvel associado.
+         */
+        return Boolean(extractVisitProperty(visit));
+      })
+      .sort((a, b) => getVisitDateValue(b) - getVisitDateValue(a));
+  }, [leadVisits]);
+
+  /*
+   * Visita concluída mais recente que possui imóvel.
+   */
+  const latestCompletedVisit = useMemo(() => {
+    return completedVisits[0] || null;
+  }, [completedVisits]);
+
+  /*
+   * ESTE é o imóvel que deve aparecer no histórico.
+   */
+  const visitedProperty = useMemo(() => {
+    return extractVisitProperty(latestCompletedVisit);
+  }, [latestCompletedVisit]);
+
+  const visitedPropertyDate = useMemo(() => {
+    return latestCompletedVisit ? getVisitDate(latestCompletedVisit) : null;
+  }, [latestCompletedVisit]);
+
+  /* ============================================================
+     SOURCE
+  ============================================================ */
 
   const sourceInfo = getLeadSourceInfo(lead);
 
   const sourceColors =
     sourceColorClasses[sourceInfo.color] || sourceColorClasses.slate;
 
-  const hasHistory = stageHistory.length > 0 || contactHistory.length > 0;
-
-  /* ----------------------------------------------------------
+  /* ============================================================
      LEAD
-  ---------------------------------------------------------- */
+  ============================================================ */
 
   const leadName = lead?.name || 'Lead sem nome';
 
   const leadCreatedAt =
     lead?.createdAt || lead?.created_at || lead?.dateCreated;
-
-  const lastActivity =
-    lead?.lastActivityAt ||
-    lead?.updatedAt ||
-    contactHistory?.[contactHistory.length - 1]?.createdAt ||
-    stageHistory?.[stageHistory.length - 1]?.changedAt;
 
   const currentStage =
     lead?.stage || stageHistory?.[stageHistory.length - 1]?.stage;
@@ -495,72 +857,51 @@ export default function LeadHistory({ lead }) {
 
   const email = lead?.email;
 
-  /* ----------------------------------------------------------
-     PROPERTY
-  ---------------------------------------------------------- */
+  /* ============================================================
+     LAST ACTIVITY
+  ============================================================ */
 
-  const propertyName =
-    property?.name || property?.title || 'Imóvel de interesse';
+  const lastActivity = useMemo(() => {
+    const dates = [
+      lead?.lastActivityAt,
+      lead?.updatedAt,
 
-  const propertyCode = property?.code || property?.formattedCode || '';
+      ...contactHistory.map(
+        (item) => item?.createdAt || item?.date || item?.occurredAt,
+      ),
 
-  const propertyType = getPropertyTypeLabel(property?.type);
+      ...stageHistory.map((item) => item?.changedAt || item?.createdAt),
 
-  const propertyPurpose = getPurposeLabel(property?.purpose);
+      ...completedVisits.map((visit) => getVisitDate(visit)),
+    ].filter(Boolean);
 
-  const propertyPrice = formatCurrency(
-    property?.prices?.salePrice ||
-      property?.prices?.rentPrice ||
-      property?.price,
-  );
+    if (!dates.length) {
+      return null;
+    }
 
-  const propertyImage =
-    property?.mainImage ||
-    property?.coverImage ||
-    property?.images?.find((image) => image?.isCover)?.url ||
-    property?.images?.[0]?.url ||
-    '';
+    return dates.sort((a, b) => getDateValue(b) - getDateValue(a))[0];
+  }, [
+    lead?.lastActivityAt,
+    lead?.updatedAt,
+    contactHistory,
+    stageHistory,
+    completedVisits,
+  ]);
 
-  const propertyAddress =
-    property?.fullAddress ||
-    [
-      property?.location?.street,
-      property?.location?.number,
-      property?.location?.district,
-      property?.location?.city,
-      property?.location?.state,
-    ]
-      .filter(Boolean)
-      .join(', ');
-
-  const propertyBedrooms = property?.bedrooms ?? property?.details?.bedrooms;
-
-  const propertyBathrooms = property?.bathrooms ?? property?.details?.bathrooms;
-
-  const propertyParking =
-    property?.parkingSpaces ??
-    property?.garage ??
-    property?.details?.parkingSpaces;
-
-  const propertyArea =
-    property?.area ||
-    property?.builtArea ||
-    property?.privateArea ||
-    property?.details?.area;
-
-  /* ----------------------------------------------------------
+  /* ============================================================
      SOURCE
-  ---------------------------------------------------------- */
+  ============================================================ */
 
   const landingPage = lead?.landingPage || '';
 
   const referrer = lead?.referrer || '';
 
-  /* ----------------------------------------------------------
+  /* ============================================================
      METRICS
-  ---------------------------------------------------------- */
+  ============================================================ */
 
-  const totalActivities = stageHistory.length + contactHistory.length;
+  const totalActivities =
+    stageHistory.length + contactHistory.length + completedVisits.length;
 
   const daysInRelationship = leadCreatedAt
     ? Math.max(
@@ -862,6 +1203,8 @@ export default function LeadHistory({ lead }) {
           />
 
           <div className="grid gap-4 lg:grid-cols-3">
+            {/* CONTATO */}
+
             <div
               className="
                 rounded-2xl
@@ -902,6 +1245,8 @@ export default function LeadHistory({ lead }) {
               </div>
             </div>
 
+            {/* RESPONSÁVEL */}
+
             <div
               className="
                 rounded-2xl
@@ -920,7 +1265,7 @@ export default function LeadHistory({ lead }) {
                   {broker.avatar ? (
                     <img
                       src={broker.avatar}
-                      alt={broker.name}
+                      alt={broker.name || 'Corretor'}
                       className="h-11 w-11 rounded-xl object-cover"
                     />
                   ) : (
@@ -958,6 +1303,8 @@ export default function LeadHistory({ lead }) {
                 <EmptyInline text="Nenhum responsável atribuído." />
               )}
             </div>
+
+            {/* OBSERVAÇÕES */}
 
             <div
               className="
@@ -1113,55 +1460,57 @@ export default function LeadHistory({ lead }) {
       </section>
 
       {/* ======================================================
-          PROPERTY
+          PROPERTY ACTUALLY VISITED
       ====================================================== */}
 
-      {property && (
+      {!loadingVisits && visitedProperty && (
         <section>
           <SectionHeader
             icon={<Heart size={18} />}
-            title="Imóvel de interesse"
-            description="Imóvel relacionado à conversão deste lead"
+            title="Imóvel visitado"
+            description="Imóvel efetivamente visitado pelo lead"
             color="emerald"
           />
 
           <div
             className="
-              overflow-hidden
-              rounded-3xl
-              border
-              border-slate-800
-              bg-slate-900/60
-              shadow-xl
-              shadow-black/10
-            "
+                overflow-hidden
+                rounded-3xl
+                border
+                border-emerald-500/10
+                bg-slate-900/60
+                shadow-xl
+                shadow-black/10
+              "
           >
             <div className="flex flex-col lg:flex-row">
+              {/* IMAGEM */}
+
               <div
                 className="
-                  relative
-                  h-64
-                  w-full
-                  shrink-0
-                  overflow-hidden
-                  bg-slate-950
-                  lg:h-auto
-                  lg:min-h-[300px]
-                  lg:w-80
-                "
+                    relative
+                    h-64
+                    w-full
+                    shrink-0
+                    overflow-hidden
+                    bg-slate-950
+                    lg:h-auto
+                    lg:min-h-[300px]
+                    lg:w-80
+                  "
               >
-                {propertyImage ? (
+                {visitedProperty.image ? (
                   <img
-                    src={propertyImage}
-                    alt={propertyName}
+                    src={visitedProperty.image}
+                    alt={visitedProperty.name}
                     className="
-                      h-full
-                      w-full
-                      object-cover
-                      transition
-                      duration-700
-                      hover:scale-105
-                    "
+                        h-full
+                        w-full
+                        object-cover
+                        transition
+                        duration-700
+                        hover:scale-105
+                      "
                   />
                 ) : (
                   <div className="flex h-full min-h-64 items-center justify-center text-slate-700">
@@ -1172,128 +1521,164 @@ export default function LeadHistory({ lead }) {
                 <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-slate-950/90 to-transparent" />
 
                 <div className="absolute left-4 top-4 flex flex-wrap gap-2">
-                  {propertyPurpose && (
-                    <span className="rounded-lg bg-slate-950/85 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
-                      {propertyPurpose}
-                    </span>
-                  )}
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/90 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
+                    <CheckCircle2 size={13} />
+                    Visita realizada
+                  </span>
 
-                  {propertyCode && (
+                  {visitedProperty.code && (
                     <span className="rounded-lg bg-slate-950/70 px-3 py-1.5 text-xs font-medium text-slate-300 backdrop-blur">
-                      #{propertyCode}
+                      #{visitedProperty.code}
                     </span>
                   )}
                 </div>
               </div>
 
+              {/* CONTEÚDO */}
+
               <div className="flex min-w-0 flex-1 flex-col p-6">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <p className="mb-1 text-xs font-medium uppercase tracking-wider text-slate-500">
-                      Imóvel relacionado
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wider text-emerald-500/70">
+                      Imóvel efetivamente visitado
                     </p>
 
                     <h4 className="text-xl font-bold text-white">
-                      {propertyName}
+                      {visitedProperty.name ||
+                        visitedProperty.title ||
+                        'Imóvel visitado'}
                     </h4>
                   </div>
 
-                  {propertyPrice && (
+                  {formatCurrency(visitedProperty.price) && (
                     <div className="shrink-0">
                       <p className="text-xs text-slate-500">Valor</p>
 
                       <p className="text-xl font-bold text-emerald-400">
-                        {propertyPrice}
+                        {formatCurrency(visitedProperty.price)}
                       </p>
                     </div>
                   )}
                 </div>
 
-                {propertyAddress && (
+                {/* DATA DA VISITA */}
+
+                {visitedPropertyDate && (
+                  <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-500/10 bg-emerald-500/[0.04] px-3 py-2.5">
+                    <CalendarDays size={15} className="text-emerald-400" />
+
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                        Visita realizada em
+                      </p>
+
+                      <p className="mt-0.5 text-sm font-medium text-slate-300">
+                        {formatDate(visitedPropertyDate)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* ENDEREÇO */}
+
+                {formatPropertyAddress(visitedProperty.address) && (
                   <div className="mt-4 flex items-start gap-2 text-sm text-slate-400">
                     <MapPin
                       size={16}
                       className="mt-0.5 shrink-0 text-slate-500"
                     />
 
-                    <span>{propertyAddress}</span>
+                    <span>
+                      {formatPropertyAddress(visitedProperty.address)}
+                    </span>
                   </div>
                 )}
 
+                {/* STATS */}
+
                 <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {propertyType && (
+                  {visitedProperty.type && (
                     <PropertyStat
                       icon={<Home size={15} />}
                       label="Tipo"
-                      value={propertyType}
+                      value={getPropertyTypeLabel(visitedProperty.type)}
                     />
                   )}
 
-                  {propertyBedrooms > 0 && (
+                  {Number(visitedProperty.bedrooms) > 0 && (
                     <PropertyStat
                       icon={<BedDouble size={15} />}
                       label="Quartos"
-                      value={propertyBedrooms}
+                      value={visitedProperty.bedrooms}
                     />
                   )}
 
-                  {propertyBathrooms > 0 && (
+                  {Number(visitedProperty.bathrooms) > 0 && (
                     <PropertyStat
                       icon={<Bath size={15} />}
                       label="Banheiros"
-                      value={propertyBathrooms}
+                      value={visitedProperty.bathrooms}
                     />
                   )}
 
-                  {propertyParking > 0 && (
+                  {Number(visitedProperty.parkingSpaces) > 0 && (
                     <PropertyStat
                       icon={<Car size={15} />}
                       label="Vagas"
-                      value={propertyParking}
+                      value={visitedProperty.parkingSpaces}
                     />
                   )}
 
-                  {propertyArea && (
+                  {visitedProperty.area && (
                     <PropertyStat
                       icon={<Ruler size={15} />}
                       label="Área"
-                      value={formatArea(propertyArea)}
+                      value={formatArea(visitedProperty.area)}
+                    />
+                  )}
+
+                  {Number(visitedProperty.suites) > 0 && (
+                    <PropertyStat
+                      icon={<BedDouble size={15} />}
+                      label="Suítes"
+                      value={visitedProperty.suites}
                     />
                   )}
                 </div>
 
                 <div className="mt-auto pt-6">
-                  {landingPage ? (
-                    <a
-                      href={landingPage}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="
-                        inline-flex
-                        items-center
-                        gap-2
-                        rounded-xl
-                        border
-                        border-slate-700
-                        bg-slate-800/70
-                        px-4
-                        py-2.5
-                        text-sm
-                        font-medium
-                        text-slate-200
-                        transition
-                        hover:border-slate-600
-                        hover:bg-slate-800
-                      "
-                    >
-                      Ver página do imóvel
-                      <ExternalLink size={15} />
-                    </a>
-                  ) : (
-                    <span className="text-xs text-slate-600">
-                      Página pública não disponível.
+                  <div className="flex flex-wrap items-center gap-3">
+                    {visitedProperty._id && (
+                      <a
+                        href={`/properties/${visitedProperty._id}`}
+                        className="
+                            inline-flex
+                            items-center
+                            gap-2
+                            rounded-xl
+                            border
+                            border-slate-700
+                            bg-slate-800/70
+                            px-4
+                            py-2.5
+                            text-sm
+                            font-medium
+                            text-slate-200
+                            transition
+                            hover:border-slate-600
+                            hover:bg-slate-800
+                          "
+                      >
+                        Ver imóvel
+                        <ExternalLink size={15} />
+                      </a>
+                    )}
+
+                    <span className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                      <CheckCircle2 size={13} className="text-emerald-500" />
+                      Registro confirmado
                     </span>
-                  )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1368,36 +1753,38 @@ export default function LeadHistory({ lead }) {
           EMPTY HISTORY
       ====================================================== */}
 
-      {!hasHistory && (
-        <div
-          className="
-            flex
-            flex-col
-            items-center
-            justify-center
-            rounded-2xl
-            border
-            border-dashed
-            border-slate-800
-            bg-slate-900/30
-            py-14
-            text-center
-          "
-        >
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800 text-slate-500">
-            <Clock size={22} />
+      {stageHistory.length === 0 &&
+        contactHistory.length === 0 &&
+        completedVisits.length === 0 && (
+          <div
+            className="
+              flex
+              flex-col
+              items-center
+              justify-center
+              rounded-2xl
+              border
+              border-dashed
+              border-slate-800
+              bg-slate-900/30
+              py-14
+              text-center
+            "
+          >
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800 text-slate-500">
+              <Clock size={22} />
+            </div>
+
+            <p className="font-medium text-slate-300">
+              Nenhuma atividade registrada
+            </p>
+
+            <p className="mt-1 max-w-sm text-sm text-slate-600">
+              As próximas movimentações, contatos, visitas e alterações de etapa
+              aparecerão aqui.
+            </p>
           </div>
-
-          <p className="font-medium text-slate-300">
-            Nenhuma atividade registrada
-          </p>
-
-          <p className="mt-1 max-w-sm text-sm text-slate-600">
-            As próximas movimentações, contatos e alterações de etapa aparecerão
-            aqui.
-          </p>
-        </div>
-      )}
+        )}
 
       {/* ======================================================
           STAGE HISTORY
@@ -1415,78 +1802,84 @@ export default function LeadHistory({ lead }) {
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900/30 p-5">
             <div className="space-y-0">
-              {[...stageHistory].reverse().map((item, index, items) => {
-                const previousItem = items[index + 1];
+              {[...stageHistory]
+                .sort(
+                  (a, b) =>
+                    getDateValue(b?.changedAt || b?.createdAt) -
+                    getDateValue(a?.changedAt || a?.createdAt),
+                )
+                .map((item, index, items) => {
+                  const previousItem = items[index + 1];
 
-                return (
-                  <TimelineItem
-                    key={`${item.changedAt || index}-${index}`}
-                    icon={<GitBranch size={16} />}
-                    color="blue"
-                    isLast={index === items.length - 1}
-                  >
-                    <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <p className="text-xs text-slate-600">
-                            Etapa alterada
-                          </p>
+                  return (
+                    <TimelineItem
+                      key={`${item.changedAt || item.createdAt || index}-${index}`}
+                      icon={<GitBranch size={16} />}
+                      color="blue"
+                      isLast={index === items.length - 1}
+                    >
+                      <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-xs text-slate-600">
+                              Etapa alterada
+                            </p>
 
-                          <div className="mt-1 flex flex-wrap items-center gap-2">
-                            {previousItem?.stage && (
-                              <>
-                                <span className="text-sm text-slate-500">
-                                  {getStageLabel(previousItem.stage)}
-                                </span>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              {previousItem?.stage && (
+                                <>
+                                  <span className="text-sm text-slate-500">
+                                    {getStageLabel(previousItem.stage)}
+                                  </span>
 
-                                <ArrowRight
-                                  size={14}
-                                  className="text-slate-600"
-                                />
-                              </>
-                            )}
+                                  <ArrowRight
+                                    size={14}
+                                    className="text-slate-600"
+                                  />
+                                </>
+                              )}
 
-                            <span className="rounded-lg bg-blue-500/10 px-2.5 py-1 text-sm font-semibold text-blue-400">
-                              {getStageLabel(item.stage)}
-                            </span>
-                          </div>
-                        </div>
-
-                        <span className="shrink-0 text-xs text-slate-600">
-                          {getTimeAgo(item.changedAt)}
-                        </span>
-                      </div>
-
-                      {item.changedBy && (
-                        <div className="mt-4 flex items-center gap-2 border-t border-slate-800/80 pt-3">
-                          {item.changedBy.avatar ? (
-                            <img
-                              src={item.changedBy.avatar}
-                              alt={item.changedBy.name}
-                              className="h-7 w-7 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-800 text-[10px] font-semibold text-slate-400">
-                              {getInitials(item.changedBy.name)}
+                              <span className="rounded-lg bg-blue-500/10 px-2.5 py-1 text-sm font-semibold text-blue-400">
+                                {getStageLabel(item.stage)}
+                              </span>
                             </div>
-                          )}
+                          </div>
 
-                          <p className="text-xs text-slate-500">
-                            Alterado por{' '}
-                            <span className="font-medium text-slate-300">
-                              {item.changedBy.name}
-                            </span>
-                          </p>
-
-                          <span className="ml-auto text-xs text-slate-600">
-                            {formatDate(item.changedAt)}
+                          <span className="shrink-0 text-xs text-slate-600">
+                            {getTimeAgo(item.changedAt || item.createdAt)}
                           </span>
                         </div>
-                      )}
-                    </div>
-                  </TimelineItem>
-                );
-              })}
+
+                        {item.changedBy && (
+                          <div className="mt-4 flex items-center gap-2 border-t border-slate-800/80 pt-3">
+                            {item.changedBy?.avatar ? (
+                              <img
+                                src={item.changedBy.avatar}
+                                alt={item.changedBy.name || 'Usuário'}
+                                className="h-7 w-7 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-800 text-[10px] font-semibold text-slate-400">
+                                {getInitials(item.changedBy?.name)}
+                              </div>
+                            )}
+
+                            <p className="text-xs text-slate-500">
+                              Alterado por{' '}
+                              <span className="font-medium text-slate-300">
+                                {item.changedBy?.name || 'Usuário'}
+                              </span>
+                            </p>
+
+                            <span className="ml-auto text-xs text-slate-600">
+                              {formatDate(item.changedAt || item.createdAt)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </TimelineItem>
+                  );
+                })}
             </div>
           </div>
         </section>
@@ -1508,69 +1901,64 @@ export default function LeadHistory({ lead }) {
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900/30 p-5">
             <div className="space-y-0">
-              {[...contactHistory].reverse().map((item, index, items) => {
-                /*
-                 * Responsável pelo lead/proposta.
-                 *
-                 * Aqui está a melhoria principal.
-                 */
-                const responsible = getEventResponsible(item, broker, lead);
+              {[...contactHistory]
+                .sort(
+                  (a, b) =>
+                    getDateValue(b?.createdAt || b?.date || b?.occurredAt) -
+                    getDateValue(a?.createdAt || a?.date || a?.occurredAt),
+                )
+                .map((item, index, items) => {
+                  const responsible = getEventResponsible(item, broker, lead);
 
-                /*
-                 * Usuário que executou
-                 * a ação.
-                 */
-                const actor = getEventActor(item);
+                  const actor = getEventActor(item);
 
-                /*
-                 * Só mostramos "Executado por"
-                 * quando existe um ator diferente
-                 * do responsável.
-                 */
-                const hasDifferentActor =
-                  actor?.name &&
-                  responsible?.name &&
-                  actor.name !== responsible.name;
+                  const hasDifferentActor =
+                    actor?.name &&
+                    responsible?.name &&
+                    actor.name !== responsible.name;
 
-                return (
-                  <TimelineItem
-                    key={`${item.createdAt || index}-${index}`}
-                    icon={<ContactIcon type={item.type} />}
-                    color="green"
-                    isLast={index === items.length - 1}
-                  >
-                    <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-200">
-                            {getContactLabel(item.type)}
-                          </span>
+                  const itemDate =
+                    item?.createdAt || item?.date || item?.occurredAt;
 
-                          {item.result && (
-                            <span className="rounded-full bg-slate-800 px-2 py-1 text-[10px] font-medium text-slate-400">
-                              {item.result}
+                  return (
+                    <TimelineItem
+                      key={`${itemDate || index}-${index}`}
+                      icon={<ContactIcon type={item.type} />}
+                      color="green"
+                      isLast={index === items.length - 1}
+                    >
+                      <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-200">
+                              {getContactLabel(item.type)}
                             </span>
-                          )}
+
+                            {item.result && (
+                              <span className="rounded-full bg-slate-800 px-2 py-1 text-[10px] font-medium text-slate-400">
+                                {item.result}
+                              </span>
+                            )}
+                          </div>
+
+                          <span className="text-xs text-slate-600">
+                            {getTimeAgo(itemDate)}
+                          </span>
                         </div>
 
-                        <span className="text-xs text-slate-600">
-                          {getTimeAgo(item.createdAt)}
-                        </span>
-                      </div>
+                        <p className="mt-3 text-sm leading-relaxed text-slate-400">
+                          {item.description || 'Sem descrição registrada.'}
+                        </p>
 
-                      <p className="mt-3 text-sm leading-relaxed text-slate-400">
-                        {item.description || 'Sem descrição registrada.'}
-                      </p>
+                        {/* RESPONSÁVEL */}
 
-                      {/* RESPONSÁVEL */}
-
-                      {responsible && (
-                        <div className="mt-4 flex items-center gap-3 border-t border-slate-800/80 pt-3">
-                          {responsible.avatar ? (
-                            <img
-                              src={responsible.avatar}
-                              alt={responsible.name || 'Corretor'}
-                              className="
+                        {responsible && (
+                          <div className="mt-4 flex items-center gap-3 border-t border-slate-800/80 pt-3">
+                            {responsible.avatar ? (
+                              <img
+                                src={responsible.avatar}
+                                alt={responsible.name || 'Corretor'}
+                                className="
                                     h-8
                                     w-8
                                     shrink-0
@@ -1579,10 +1967,10 @@ export default function LeadHistory({ lead }) {
                                     ring-2
                                     ring-slate-900
                                   "
-                            />
-                          ) : (
-                            <div
-                              className="
+                              />
+                            ) : (
+                              <div
+                                className="
                                     flex
                                     h-8
                                     w-8
@@ -1597,50 +1985,50 @@ export default function LeadHistory({ lead }) {
                                     ring-2
                                     ring-slate-900
                                   "
-                            >
-                              {getInitials(responsible.name)}
-                            </div>
-                          )}
-
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">
-                              Responsável
-                            </p>
-
-                            <p className="truncate text-xs font-semibold text-slate-300">
-                              {responsible.name || 'Não identificado'}
-                            </p>
-
-                            {responsible.position && (
-                              <p className="truncate text-[10px] text-slate-600">
-                                {responsible.position}
-                              </p>
+                              >
+                                {getInitials(responsible.name)}
+                              </div>
                             )}
+
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                                Responsável
+                              </p>
+
+                              <p className="truncate text-xs font-semibold text-slate-300">
+                                {responsible.name || 'Não identificado'}
+                              </p>
+
+                              {responsible.position && (
+                                <p className="truncate text-[10px] text-slate-600">
+                                  {responsible.position}
+                                </p>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {/* QUEM EXECUTOU */}
+                        {/* QUEM EXECUTOU */}
 
-                      {hasDifferentActor && (
-                        <div className="mt-3 flex items-center gap-2">
-                          <UserRound size={13} className="text-slate-600" />
+                        {hasDifferentActor && (
+                          <div className="mt-3 flex items-center gap-2">
+                            <UserRound size={13} className="text-slate-600" />
 
-                          <span className="text-[10px] uppercase tracking-wider text-slate-600">
-                            Executado por
-                          </span>
+                            <span className="text-[10px] uppercase tracking-wider text-slate-600">
+                              Executado por
+                            </span>
 
-                          <span className="text-xs font-medium text-slate-400">
-                            {actor.name}
-                          </span>
-                        </div>
-                      )}
+                            <span className="text-xs font-medium text-slate-400">
+                              {actor.name}
+                            </span>
+                          </div>
+                        )}
 
-                      <DateText>{formatDate(item.createdAt)}</DateText>
-                    </div>
-                  </TimelineItem>
-                );
-              })}
+                        <DateText>{formatDate(itemDate)}</DateText>
+                      </div>
+                    </TimelineItem>
+                  );
+                })}
             </div>
           </div>
         </section>
@@ -1672,8 +2060,8 @@ export default function LeadHistory({ lead }) {
           </p>
 
           <p className="mt-1 text-xs leading-relaxed text-slate-600">
-            Este painel consolida origem, relacionamento, movimentações,
-            interesse imobiliário e evolução comercial do lead.
+            Este painel consolida origem, relacionamento, movimentações, visitas
+            realizadas, interesse imobiliário e evolução comercial do lead.
           </p>
         </div>
       </section>
@@ -1916,7 +2304,9 @@ function PropertyStat({ icon, label, value }) {
 ============================================================ */
 
 function StatusBadge({ status }) {
-  const normalized = String(status || '').toLowerCase();
+  const normalized = String(status || '')
+    .toLowerCase()
+    .trim();
 
   const config = {
     novo: {
@@ -1925,6 +2315,16 @@ function StatusBadge({ status }) {
     },
 
     em_andamento: {
+      label: 'Em andamento',
+      className: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    },
+
+    'em andamento': {
+      label: 'Em andamento',
+      className: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    },
+
+    in_progress: {
       label: 'Em andamento',
       className: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
     },
@@ -1969,7 +2369,7 @@ function StatusBadge({ status }) {
 function PriorityBadge({ priority }) {
   if (!priority) return null;
 
-  const normalized = String(priority).toLowerCase();
+  const normalized = String(priority).toLowerCase().trim();
 
   const config = {
     low: 'bg-slate-800 text-slate-400',
@@ -2112,19 +2512,34 @@ function DateText({ children }) {
 ============================================================ */
 
 function ContactIcon({ type }) {
-  if (type === 'phone') {
+  const normalized = String(type || '')
+    .toLowerCase()
+    .trim();
+
+  if (normalized === 'phone' || normalized === 'telefone') {
     return <Phone size={16} />;
   }
 
-  if (type === 'email') {
+  if (
+    normalized === 'email' ||
+    normalized === 'e-mail' ||
+    normalized === 'e_mail'
+  ) {
     return <Mail size={16} />;
   }
 
-  if (type === 'whatsapp') {
+  if (normalized === 'whatsapp') {
     return <MessageCircle size={16} />;
   }
 
-  if (type === 'meeting' || type === 'visit') {
+  if (
+    normalized === 'meeting' ||
+    normalized === 'meeting' ||
+    normalized === 'reuniao' ||
+    normalized === 'reunião' ||
+    normalized === 'visit' ||
+    normalized === 'visita'
+  ) {
     return <CalendarDays size={16} />;
   }
 
@@ -2136,16 +2551,31 @@ function ContactIcon({ type }) {
 ============================================================ */
 
 function getStageProgress(stage) {
+  const normalized = String(stage || '')
+    .trim()
+    .toLowerCase();
+
   const progress = {
+    novo: 10,
     novo_lead: 10,
+
+    em_contato: 22,
     primeiro_contato: 22,
+
     qualificado: 35,
+
     visita_agendada: 50,
+
+    proposta: 65,
     proposta_enviada: 65,
+
     negociacao: 80,
+
+    convertido: 100,
     fechado: 100,
+
     perdido: 100,
   };
 
-  return progress[stage] || 10;
+  return progress[normalized] || 10;
 }

@@ -1,3 +1,4 @@
+// src/pages/site/Properties.jsx
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownUp,
@@ -78,7 +79,14 @@ export default function Properties() {
         list = response.data;
       }
 
-      setProperties(list);
+      // 🔥 FILTRAR IMÓVEIS VENDIDOS
+      const availableList = list.filter((property) => {
+        if (!property) return false;
+        const status = property?.status?.toLowerCase() || '';
+        return status !== 'vendido' && status !== 'sold';
+      });
+
+      setProperties(availableList);
     } catch (error) {
       console.error('Erro ao carregar imóveis:', error);
       setProperties([]);
@@ -98,6 +106,7 @@ export default function Properties() {
   const cities = useMemo(() => {
     const values = properties
       .map((property) => {
+        if (!property) return '';
         return (
           property?.city ||
           property?.address?.city ||
@@ -116,6 +125,14 @@ export default function Properties() {
 
   const filteredProperties = useMemo(() => {
     return properties.filter((property) => {
+      if (!property) return false;
+
+      // 🔥 SE ESTIVER VENDIDO, NÃO EXIBIR
+      const status = property?.status?.toLowerCase() || '';
+      if (status === 'vendido' || status === 'sold') {
+        return false;
+      }
+
       // --------------------------------------------------------
       // PURPOSE
       // --------------------------------------------------------
@@ -753,14 +770,21 @@ export default function Properties() {
 
             {!loading && filteredProperties.length > 0 && (
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredProperties.map((property) => (
-                  <div
-                    key={property._id}
-                    className="transition duration-300 hover:-translate-y-1"
-                  >
-                    <PropertyCard property={property} />
-                  </div>
-                ))}
+                {filteredProperties.map((property) => {
+                  // 🔥 VERIFICAÇÃO DE SEGURANÇA
+                  if (!property || !property._id) {
+                    return null;
+                  }
+
+                  return (
+                    <div
+                      key={property._id}
+                      className="transition duration-300 hover:-translate-y-1"
+                    >
+                      <PropertyCard property={property} />
+                    </div>
+                  );
+                })}
               </div>
             )}
 

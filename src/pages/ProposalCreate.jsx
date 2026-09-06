@@ -1,3 +1,4 @@
+// src/pages/ProposalCreate.jsx
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -14,15 +15,364 @@ import {
   AlertCircle,
   CheckCircle2,
   Calculator,
+  MapPin,
+  BedDouble,
+  Bath,
+  Car,
+  Ruler,
+  Check,
+  Eye,
+  Percent,
+  ChevronDown,
+  Target,
 } from 'lucide-react';
 
+import { NumericFormat } from 'react-number-format';
+
 import api from '../service/api';
+
+/*
+|--------------------------------------------------------------------------
+| HELPERS
+|--------------------------------------------------------------------------
+*/
+
+const normalizeText = (value) => {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+};
+
+const getId = (item) => {
+  if (!item) return '';
+
+  if (typeof item === 'string') {
+    return item;
+  }
+
+  return String(item._id || item.id || '');
+};
+
+const toNumber = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return 0;
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  let normalized = String(value)
+    .trim()
+    .replace(/\s/g, '')
+    .replace(/[R$]/gi, '');
+
+  if (!normalized) {
+    return 0;
+  }
+
+  if (normalized.includes(',')) {
+    normalized = normalized.replace(/\./g, '').replace(',', '.');
+  }
+
+  const number = Number(normalized);
+
+  return Number.isFinite(number) ? number : 0;
+};
+
+const formatCurrency = (value) => {
+  const number = toNumber(value);
+
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(number);
+};
+
+const formatInteger = (value) => {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return '0';
+  }
+
+  return new Intl.NumberFormat('pt-BR', {
+    maximumFractionDigits: 0,
+  }).format(number);
+};
+
+/*
+|--------------------------------------------------------------------------
+| VISIT HELPERS
+|--------------------------------------------------------------------------
+*/
+
+const getVisitDate = (visit) => {
+  if (!visit) return null;
+
+  return (
+    visit.finishedAt ||
+    visit.completedAt ||
+    visit.realizedAt ||
+    visit.realizedDate ||
+    visit.date ||
+    visit.scheduledDate ||
+    visit.visitDate ||
+    visit.createdAt ||
+    null
+  );
+};
+
+const getDateValue = (date) => {
+  if (!date) return 0;
+
+  const timestamp = new Date(date).getTime();
+
+  return Number.isFinite(timestamp) ? timestamp : 0;
+};
+
+const isCompletedVisit = (visit) => {
+  const status = normalizeText(
+    visit?.status || visit?.visitStatus || visit?.state,
+  );
+
+  return [
+    'concluida',
+    'completed',
+    'realizada',
+    'realizado',
+    'done',
+    'finalizada',
+    'finalizado',
+  ].includes(status);
+};
+
+const extractVisitProperty = (visit) => {
+  if (!visit) return null;
+
+  const property =
+    visit?.propertyInfo ||
+    visit?.property ||
+    visit?.propertyData ||
+    visit?.propertyDetails ||
+    null;
+
+  if (!property || typeof property !== 'object') {
+    return null;
+  }
+
+  const id = property._id || property.id || null;
+
+  if (!id) {
+    return null;
+  }
+
+  const images = Array.isArray(property.images) ? property.images : [];
+
+  const image =
+    property.image ||
+    property.mainImage ||
+    property.coverImage ||
+    images.find((item) => item?.isMain)?.url ||
+    images.find((item) => item?.url)?.url ||
+    images[0]?.url ||
+    '';
+
+  const price =
+    property.price ??
+    property.prices?.salePrice ??
+    property.prices?.rentPrice ??
+    property.salePrice ??
+    property.value ??
+    0;
+
+  return {
+    ...property,
+
+    _id: id,
+    id,
+
+    name: property.name || property.title || property.propertyName || 'Imóvel',
+
+    title: property.title || property.name || property.propertyName || 'Imóvel',
+
+    code: property.code || property.reference || property.codigo || '',
+
+    type: property.type || property.propertyType || '',
+
+    purpose:
+      property.purpose ||
+      property.businessType ||
+      property.transactionType ||
+      '',
+
+    price,
+
+    image,
+    mainImage: property.mainImage || image,
+    coverImage: property.coverImage || image,
+
+    images,
+
+    address: property.address || null,
+
+    fullAddress: property.fullAddress || property.formattedAddress || '',
+
+    location: property.location || null,
+
+    bedrooms: property.bedrooms ?? property.rooms ?? property.dormitories ?? 0,
+
+    bathrooms: property.bathrooms ?? property.bathroomCount ?? 0,
+
+    suites: property.suites ?? property.suiteCount ?? 0,
+
+    parkingSpaces:
+      property.parkingSpaces ?? property.parking ?? property.garages ?? 0,
+
+    area:
+      property.area ??
+      property.totalArea ??
+      property.privateArea ??
+      property.builtArea ??
+      0,
+
+    builtArea: property.builtArea ?? property.area?.built ?? 0,
+
+    privateArea: property.privateArea ?? property.area?.private ?? 0,
+  };
+};
+
+/*
+|--------------------------------------------------------------------------
+| PROPERTY HELPERS
+|--------------------------------------------------------------------------
+*/
+
+const getPropertyArea = (property) => {
+  if (!property) return 0;
+
+  const area =
+    property.area ??
+    property.privateArea ??
+    property.builtArea ??
+    property.totalArea ??
+    0;
+
+  if (typeof area === 'object') {
+    return area.total ?? area.private ?? area.useful ?? area.built ?? 0;
+  }
+
+  return area;
+};
+
+const formatArea = (value) => {
+  const number = toNumber(value);
+
+  if (!number) return '-';
+
+  return `${new Intl.NumberFormat('pt-BR', {
+    maximumFractionDigits: 2,
+  }).format(number)} m²`;
+};
+
+const formatPropertyAddress = (property) => {
+  if (!property) return '';
+
+  if (typeof property.fullAddress === 'string' && property.fullAddress) {
+    return property.fullAddress;
+  }
+
+  const address = property.address;
+
+  if (typeof address === 'string') {
+    return address;
+  }
+
+  if (address && typeof address === 'object') {
+    const parts = [
+      address.street || address.logradouro,
+      address.number || address.numero,
+      address.complement,
+      address.neighborhood || address.bairro,
+      address.city || address.cidade,
+      address.state || address.uf,
+    ].filter(Boolean);
+
+    if (parts.length) {
+      return parts.join(', ');
+    }
+  }
+
+  if (property.location && typeof property.location === 'object') {
+    const parts = [
+      property.location.street,
+      property.location.number,
+      property.location.neighborhood,
+      property.location.city,
+      property.location.state,
+    ].filter(Boolean);
+
+    if (parts.length) {
+      return parts.join(', ');
+    }
+  }
+
+  return '';
+};
+
+const formatVisitDate = (date) => {
+  if (!date) return '';
+
+  const timestamp = new Date(date).getTime();
+
+  if (!Number.isFinite(timestamp)) {
+    return '';
+  }
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(new Date(date));
+};
+
+/*
+|--------------------------------------------------------------------------
+| STAGE HELPERS
+|--------------------------------------------------------------------------
+*/
+
+const formatStage = (stage) => {
+  const stages = {
+    nova: 'Nova',
+    qualificacao: 'Qualificação',
+    imovel_definido: 'Imóvel definido',
+    visita_realizada: 'Visita realizada',
+    interesse_confirmado: 'Interesse confirmado',
+    proposta_solicitada: 'Proposta solicitada',
+    proposta_enviada: 'Proposta enviada',
+    negociacao: 'Negociação',
+    ganha: 'Ganha',
+    perdida: 'Perdida',
+  };
+
+  return stages[stage] || stage || '—';
+};
+
+/*
+|--------------------------------------------------------------------------
+| COMPONENT
+|--------------------------------------------------------------------------
+*/
 
 export default function ProposalCreate() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const leadId = searchParams.get('lead');
+  const opportunityId = searchParams.get('opportunity');
+  const propertyId = searchParams.get('property');
 
   /*
   |--------------------------------------------------------------------------
@@ -31,26 +381,50 @@ export default function ProposalCreate() {
   */
 
   const [lead, setLead] = useState(null);
+  const [opportunity, setOpportunity] = useState(null);
+
   const [properties, setProperties] = useState([]);
+  const [visits, setVisits] = useState([]);
 
   const [loadingLead, setLoadingLead] = useState(true);
+  const [loadingOpportunity, setLoadingOpportunity] = useState(false);
   const [loadingProperties, setLoadingProperties] = useState(false);
+  const [loadingVisits, setLoadingVisits] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  /*
+   * IMPORTANTE:
+   *
+   * Valores monetários agora são NUMBER.
+   *
+   * Exemplo:
+   *
+   * propertyPrice: 650000
+   * proposalPrice: 620000
+   * downPayment: 100000
+   *
+   * A formatação R$ 650.000,00 fica somente
+   * no componente NumericFormat.
+   */
+
   const [form, setForm] = useState({
     property: '',
-    propertyPrice: '',
-    proposalPrice: '',
-    downPayment: '',
-    financing: '',
-    fgts: '',
+    propertyPrice: 0,
+    proposalPrice: 0,
+    downPayment: 0,
+    financing: 0,
+    fgts: 0,
+
     paymentMethod: 'financing',
-    installments: '',
-    installmentValue: '',
+
+    installments: 0,
+    installmentValue: 0,
+
     validityDays: 7,
+
     clientMessage: '',
   });
 
@@ -76,38 +450,42 @@ export default function ProposalCreate() {
 
         const response = await api.get(`/api/leads/${leadId}`);
 
-        const data = response?.data;
+        const data =
+          response?.data?.lead ||
+          response?.data?.data?.lead ||
+          response?.data?.data ||
+          response?.data;
 
         if (!mounted) return;
 
         if (!data) {
           setError('Lead não encontrado.');
+          setLead(null);
           return;
         }
 
         setLead(data);
 
         /*
-         * Se o lead já possui imóvel,
-         * preenche automaticamente.
+         * O imóvel do lead é apenas FALLBACK.
          */
 
-        const propertyId =
+        const propertyIdFromLead =
           data.property?._id ||
           data.property?.id ||
           (typeof data.property === 'string' ? data.property : '');
 
         const propertyPrice =
-          data.property?.price ||
-          data.propertySnapshot?.price ||
-          data.propertyPrice ||
-          '';
+          data.property?.price ??
+          data.propertySnapshot?.price ??
+          data.propertyPrice ??
+          0;
 
-        if (propertyId) {
+        if (propertyIdFromLead) {
           setForm((current) => ({
             ...current,
-            property: propertyId,
-            propertyPrice,
+            property: propertyIdFromLead,
+            propertyPrice: toNumber(propertyPrice),
           }));
         }
       } catch (err) {
@@ -136,22 +514,292 @@ export default function ProposalCreate() {
 
   /*
   |--------------------------------------------------------------------------
+  | LOAD OPPORTUNITY
+  |--------------------------------------------------------------------------
+  */
+
+  useEffect(() => {
+    if (!opportunityId) return;
+
+    let mounted = true;
+
+    const loadOpportunity = async () => {
+      try {
+        setLoadingOpportunity(true);
+
+        const response = await api.get(`/api/opportunities/${opportunityId}`);
+
+        const data = response?.data?.data || response?.data || response;
+
+        if (!mounted) return;
+
+        if (data) {
+          setOpportunity(data);
+
+          // Se não tiver property selecionada e a oportunidade tem property
+          if (!form.property && data.property?._id) {
+            setForm((current) => ({
+              ...current,
+              property: data.property._id,
+              propertyPrice: toNumber(
+                data.expectedClosingValue || data.estimatedValue || 0,
+              ),
+              proposalPrice: toNumber(
+                data.expectedClosingValue || data.estimatedValue || 0,
+              ),
+            }));
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao carregar oportunidade:', err);
+      } finally {
+        if (mounted) {
+          setLoadingOpportunity(false);
+        }
+      }
+    };
+
+    loadOpportunity();
+
+    return () => {
+      mounted = false;
+    };
+  }, [opportunityId]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | LOAD VISITS
+  |--------------------------------------------------------------------------
+  */
+
+  useEffect(() => {
+    if (!leadId) return;
+
+    let mounted = true;
+
+    const loadVisits = async () => {
+      try {
+        setLoadingVisits(true);
+
+        const response = await api.get('/api/visits', {
+          params: {
+            page: 1,
+            limit: 100,
+          },
+        });
+
+        if (!mounted) return;
+
+        const payload = response?.data;
+
+        const list =
+          payload?.data?.visits ||
+          payload?.data?.items ||
+          payload?.visits ||
+          payload?.items ||
+          payload?.data ||
+          (Array.isArray(payload) ? payload : []);
+
+        const normalizedList = Array.isArray(list) ? list : [];
+
+        const currentLeadId = String(leadId);
+
+        const leadVisits = normalizedList.filter((visit) => {
+          const visitLeadId =
+            visit?.leadInfo?.id ||
+            visit?.leadInfo?._id ||
+            visit?.lead?._id ||
+            visit?.lead?.id ||
+            visit?.leadId;
+
+          return visitLeadId && String(visitLeadId) === currentLeadId;
+        });
+
+        setVisits(leadVisits);
+      } catch (err) {
+        console.error('Erro ao carregar visitas:', err);
+
+        if (mounted) {
+          setVisits([]);
+        }
+      } finally {
+        if (mounted) {
+          setLoadingVisits(false);
+        }
+      }
+    };
+
+    loadVisits();
+
+    return () => {
+      mounted = false;
+    };
+  }, [leadId]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | COMPLETED VISITS
+  |--------------------------------------------------------------------------
+  */
+
+  const completedVisits = useMemo(() => {
+    return visits
+      .filter((visit) => {
+        return isCompletedVisit(visit) && extractVisitProperty(visit);
+      })
+      .sort(
+        (a, b) => getDateValue(getVisitDate(b)) - getDateValue(getVisitDate(a)),
+      );
+  }, [visits]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | VISITED PROPERTIES
+  |--------------------------------------------------------------------------
+  */
+
+  const visitedProperties = useMemo(() => {
+    const map = new Map();
+
+    completedVisits.forEach((visit) => {
+      const property = extractVisitProperty(visit);
+
+      if (!property) return;
+
+      const propertyId = getId(property);
+
+      if (!propertyId) return;
+
+      const visitDate = getVisitDate(visit);
+
+      if (!map.has(propertyId)) {
+        map.set(propertyId, {
+          ...property,
+          visitDate,
+          visitCount: 1,
+        });
+      } else {
+        const current = map.get(propertyId);
+
+        map.set(propertyId, {
+          ...current,
+          visitCount: current.visitCount + 1,
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [completedVisits]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | LATEST COMPLETED VISIT
+  |--------------------------------------------------------------------------
+  */
+
+  const latestCompletedVisit = useMemo(() => {
+    return completedVisits[0] || null;
+  }, [completedVisits]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | VISITED PROPERTY IDS
+  |--------------------------------------------------------------------------
+  */
+
+  const visitedPropertyIds = useMemo(() => {
+    return new Set(
+      visitedProperties.map((property) => String(getId(property))),
+    );
+  }, [visitedProperties]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | AUTO SELECTION
+  |--------------------------------------------------------------------------
+  */
+
+  useEffect(() => {
+    if (loadingVisits) return;
+
+    /*
+     * VÁRIOS IMÓVEIS VISITADOS
+     */
+
+    if (visitedProperties.length > 1) {
+      setForm((current) => {
+        const currentProperty = String(current.property || '');
+
+        if (visitedPropertyIds.has(currentProperty)) {
+          return current;
+        }
+
+        return {
+          ...current,
+          property: '',
+          propertyPrice: 0,
+          proposalPrice: 0,
+        };
+      });
+
+      return;
+    }
+
+    /*
+     * UM ÚNICO IMÓVEL VISITADO
+     */
+
+    if (visitedProperties.length === 1) {
+      const property = visitedProperties[0];
+      const propertyId = getId(property);
+
+      if (!propertyId) return;
+
+      setForm((current) => {
+        const sameProperty =
+          String(current.property || '') === String(propertyId);
+
+        return {
+          ...current,
+
+          property: propertyId,
+
+          propertyPrice: toNumber(property.price),
+
+          ...(sameProperty ? {} : { proposalPrice: 0 }),
+        };
+      });
+
+      return;
+    }
+
+    /*
+     * NENHUMA VISITA:
+     *
+     * Mantém o imóvel do lead como fallback.
+     */
+  }, [loadingVisits, visitedProperties, visitedPropertyIds]);
+
+  /*
+  |--------------------------------------------------------------------------
   | LOAD PROPERTIES
   |--------------------------------------------------------------------------
   */
 
   useEffect(() => {
-    if (!lead) return;
+    if (loadingVisits) return;
 
     /*
-     * Se o lead já possui imóvel,
-     * não precisamos carregar a lista.
+     * Se já existem imóveis visitados,
+     * não precisamos carregar a lista geral.
      */
 
-    if (lead.property) {
+    if (visitedProperties.length > 0) {
       setLoadingProperties(false);
       return;
     }
+
+    if (!lead) return;
 
     let mounted = true;
 
@@ -172,6 +820,7 @@ export default function ProposalCreate() {
 
         const list =
           data?.properties ||
+          data?.data?.properties ||
           data?.data ||
           data?.results ||
           (Array.isArray(data) ? data : []);
@@ -195,7 +844,76 @@ export default function ProposalCreate() {
     return () => {
       mounted = false;
     };
-  }, [lead]);
+  }, [lead, loadingVisits, visitedProperties.length]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | PROPERTY FROM LEAD
+  |--------------------------------------------------------------------------
+  */
+
+  const leadProperty = useMemo(() => {
+    if (!lead?.property) {
+      return null;
+    }
+
+    if (typeof lead.property === 'object') {
+      return lead.property;
+    }
+
+    return (
+      properties.find(
+        (property) =>
+          String(property._id || property.id) === String(lead.property),
+      ) || null
+    );
+  }, [lead, properties]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | SELECTABLE PROPERTIES
+  |--------------------------------------------------------------------------
+  */
+
+  const selectableProperties = useMemo(() => {
+    if (visitedProperties.length > 0) {
+      return visitedProperties;
+    }
+
+    const map = new Map();
+
+    if (leadProperty) {
+      const id = getId(leadProperty);
+
+      if (id) {
+        map.set(id, {
+          ...leadProperty,
+          _id: id,
+          id,
+          visitDate: null,
+          visitCount: 0,
+        });
+      }
+    }
+
+    properties.forEach((property) => {
+      const id = getId(property);
+
+      if (!id) return;
+
+      if (!map.has(id)) {
+        map.set(id, {
+          ...property,
+          _id: id,
+          id,
+          visitDate: null,
+          visitCount: 0,
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [visitedProperties, leadProperty, properties]);
 
   /*
   |--------------------------------------------------------------------------
@@ -208,27 +926,34 @@ export default function ProposalCreate() {
       return null;
     }
 
-    /*
-     * Imóvel vindo populado no Lead.
-     */
+    return (
+      selectableProperties.find(
+        (property) => String(getId(property)) === String(form.property),
+      ) || null
+    );
+  }, [selectableProperties, form.property]);
 
-    if (
-      lead?.property &&
-      typeof lead.property === 'object' &&
-      String(lead.property._id || lead.property.id) === String(form.property)
-    ) {
-      return lead.property;
+  /*
+  |--------------------------------------------------------------------------
+  | SELECTED VISIT INFO
+  |--------------------------------------------------------------------------
+  */
+
+  const selectedVisitDate = useMemo(() => {
+    if (!selectedProperty) {
+      return null;
     }
 
-    /*
-     * Imóvel selecionado na lista.
-     */
+    const propertyId = String(getId(selectedProperty));
 
-    return properties.find(
-      (property) =>
-        String(property._id || property.id) === String(form.property),
-    );
-  }, [form.property, lead, properties]);
+    const matchingVisit = completedVisits.find((visit) => {
+      const property = extractVisitProperty(visit);
+
+      return property && String(getId(property)) === propertyId;
+    });
+
+    return matchingVisit ? getVisitDate(matchingVisit) : null;
+  }, [selectedProperty, completedVisits]);
 
   /*
   |--------------------------------------------------------------------------
@@ -248,74 +973,69 @@ export default function ProposalCreate() {
 
   /*
   |--------------------------------------------------------------------------
+  | MONEY CHANGE
+  |--------------------------------------------------------------------------
+  |
+  | NumericFormat já retorna floatValue.
+  |
+  | Exemplo:
+  *
+  * R$ 650.000,00
+  *
+  * retorna:
+  *
+  * 650000
+  *
+  */
+
+  const handleMoneyChange = (field, value) => {
+    handleChange(field, value ?? 0);
+  };
+
+  /*
+  |--------------------------------------------------------------------------
+  | INTEGER CHANGE
+  |--------------------------------------------------------------------------
+  */
+
+  const handleIntegerChange = (field, value) => {
+    handleChange(field, value ?? 0);
+  };
+
+  /*
+  |--------------------------------------------------------------------------
   | PROPERTY CHANGE
   |--------------------------------------------------------------------------
   */
 
   const handlePropertyChange = (value) => {
-    const property = properties.find(
-      (item) => String(item._id || item.id) === String(value),
+    const property = selectableProperties.find(
+      (item) => String(getId(item)) === String(value),
     );
+
+    if (!property) {
+      setForm((current) => ({
+        ...current,
+        property: '',
+        propertyPrice: 0,
+        proposalPrice: 0,
+      }));
+
+      return;
+    }
 
     setForm((current) => ({
       ...current,
-      property: value,
-      propertyPrice: property?.price || '',
-      proposalPrice: '',
+
+      property: getId(property),
+
+      propertyPrice: toNumber(property.price),
+
+      proposalPrice: 0,
     }));
 
     setError('');
     setSuccess('');
-  };
-
-  /*
-  |--------------------------------------------------------------------------
-  | NUMBER
-  |--------------------------------------------------------------------------
-  */
-
-  const toNumber = (value) => {
-    if (value === null || value === undefined || value === '') {
-      return 0;
-    }
-
-    if (typeof value === 'number') {
-      return Number.isFinite(value) ? value : 0;
-    }
-
-    let normalized = String(value).replace(/\s/g, '').replace(/[R$]/gi, '');
-
-    /*
-     * Brasil:
-     *
-     * 500.000,00
-     * 500000,00
-     *
-     * Internacional:
-     *
-     * 500000.00
-     */
-
-    if (normalized.includes(',')) {
-      normalized = normalized.replace(/\./g, '').replace(',', '.');
-    }
-
-    const number = Number(normalized);
-
-    return Number.isFinite(number) ? number : 0;
-  };
-
-  /*
-  |--------------------------------------------------------------------------
-  | CURRENCY
-  |--------------------------------------------------------------------------
-  */
-
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(toNumber(value));
   };
 
   /*
@@ -325,11 +1045,15 @@ export default function ProposalCreate() {
   */
 
   const calculations = useMemo(() => {
-    const propertyPrice = toNumber(form.propertyPrice);
-    const proposalPrice = toNumber(form.proposalPrice);
-    const downPayment = toNumber(form.downPayment);
-    const financing = toNumber(form.financing);
-    const fgts = toNumber(form.fgts);
+    const propertyPrice = Number(form.propertyPrice) || 0;
+
+    const proposalPrice = Number(form.proposalPrice) || 0;
+
+    const downPayment = Number(form.downPayment) || 0;
+
+    const financing = Number(form.financing) || 0;
+
+    const fgts = Number(form.fgts) || 0;
 
     const totalPayment = downPayment + financing + fgts;
 
@@ -343,16 +1067,27 @@ export default function ProposalCreate() {
     const discountPercentage =
       propertyPrice > 0 && discount > 0 ? (discount / propertyPrice) * 100 : 0;
 
+    const paymentPercentage =
+      proposalPrice > 0
+        ? Math.min((totalPayment / proposalPrice) * 100, 100)
+        : 0;
+
     return {
       propertyPrice,
       proposalPrice,
       downPayment,
       financing,
       fgts,
+
       totalPayment,
+
       balance,
+
       discount,
+
       discountPercentage,
+
+      paymentPercentage,
     };
   }, [
     form.propertyPrice,
@@ -369,11 +1104,15 @@ export default function ProposalCreate() {
   */
 
   const validateForm = () => {
-    if (!lead?._id) {
+    if (!lead?._id && !lead?.id) {
       return 'Lead não encontrado.';
     }
 
     if (!form.property) {
+      if (visitedProperties.length > 1) {
+        return 'Selecione qual imóvel visitado será utilizado para esta proposta.';
+      }
+
       return 'Selecione o imóvel da proposta.';
     }
 
@@ -404,15 +1143,19 @@ export default function ProposalCreate() {
       );
     }
 
-    if (!form.validityDays || Number(form.validityDays) < 1) {
+    const validityDays = Number(form.validityDays) || 0;
+
+    if (!validityDays || validityDays < 1) {
       return 'Informe a validade da proposta.';
     }
 
-    if (form.installments && Number(form.installments) < 0) {
+    const installments = Number(form.installments) || 0;
+
+    if (installments < 0) {
       return 'O número de parcelas não pode ser negativo.';
     }
 
-    if (form.installmentValue && toNumber(form.installmentValue) < 0) {
+    if (Number(form.installmentValue) < 0) {
       return 'O valor da parcela não pode ser negativo.';
     }
 
@@ -427,25 +1170,34 @@ export default function ProposalCreate() {
 
   const buildPayload = () => {
     return {
-      lead: lead._id,
+      lead: lead._id || lead.id,
 
+      opportunity: opportunity?._id || null,
+
+      /*
+       * ESTE É O IMÓVEL ESCOLHIDO PELO CORRETOR.
+       */
       property: form.property,
 
       values: {
         propertyPrice: calculations.propertyPrice,
+
         proposalPrice: calculations.proposalPrice,
+
         downPayment: calculations.downPayment,
+
         financing: calculations.financing,
+
         fgts: calculations.fgts,
       },
 
       paymentMethod: form.paymentMethod,
 
-      installments: toNumber(form.installments),
+      installments: Number(form.installments) || 0,
 
-      installmentValue: toNumber(form.installmentValue),
+      installmentValue: Number(form.installmentValue) || 0,
 
-      validityDays: Number(form.validityDays),
+      validityDays: Number(form.validityDays) || 7,
 
       clientMessage: form.clientMessage?.trim() || '',
     };
@@ -479,11 +1231,6 @@ export default function ProposalCreate() {
       const data = response?.data;
 
       console.log('✅ Proposta criada:', data);
-
-      /*
-       * Compatibilidade com diferentes
-       * formatos de resposta.
-       */
 
       const proposal =
         data?.proposal || data?.data?.proposal || data?.data || data;
@@ -533,18 +1280,6 @@ export default function ProposalCreate() {
     if (!proposal) {
       return;
     }
-
-    /*
-     * Depois de criar:
-     *
-     * CREATE
-     *   ↓
-     * DETAILS
-     *
-     * A partir da página de detalhes,
-     * o usuário poderá editar, enviar,
-     * excluir etc.
-     */
 
     setTimeout(() => {
       navigate(`/proposals/${proposal._id}`);
@@ -791,110 +1526,306 @@ export default function ProposalCreate() {
 
             <Info
               label="Responsável"
-              value={lead.assignedTo?.name || 'Não atribuído'}
+              value={
+                lead.assignedTo?.name || lead.broker?.name || 'Não atribuído'
+              }
             />
           </div>
         </Card>
 
+        {/* OPPORTUNITY - NOVO */}
+
+        {opportunity && (
+          <Card title="Oportunidade vinculada" icon={<Target size={18} />}>
+            <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-indigo-500/10 flex items-center justify-center shrink-0">
+                  <Target size={18} className="text-indigo-400" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-white">
+                    {opportunity.title || 'Oportunidade'}
+                  </p>
+
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-slate-400">
+                    <span>
+                      Estágio:{' '}
+                      <span className="text-slate-300">
+                        {formatStage(opportunity.stage)}
+                      </span>
+                    </span>
+
+                    <span>
+                      Valor:{' '}
+                      <span className="text-emerald-400">
+                        {formatCurrency(
+                          opportunity.expectedClosingValue ||
+                            opportunity.estimatedValue,
+                        )}
+                      </span>
+                    </span>
+
+                    {opportunity.probability !== undefined && (
+                      <span>
+                        Probabilidade:{' '}
+                        <span className="text-blue-400">
+                          {opportunity.probability}%
+                        </span>
+                      </span>
+                    )}
+                  </div>
+
+                  {opportunity.description && (
+                    <p className="mt-2 text-xs text-slate-500 line-clamp-2">
+                      {opportunity.description}
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => navigate(`/opportunities/${opportunity._id}`)}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 transition shrink-0"
+                >
+                  Ver oportunidade
+                </button>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* PROPERTY */}
 
-        <Card title="Imóvel" icon={<Building2 size={18} />}>
-          {lead.property ? (
+        <Card title="Imóvel da proposta" icon={<Building2 size={18} />}>
+          {/* LOADING VISITS */}
+
+          {loadingVisits && (
             <div
               className="
+                flex
+                items-center
+                gap-3
                 rounded-xl
                 border
                 border-slate-800
                 bg-slate-950
                 p-5
+                text-slate-400
               "
             >
+              <Loader2 size={18} className="animate-spin text-blue-400" />
+
+              <span className="text-sm">Verificando imóveis visitados...</span>
+            </div>
+          )}
+
+          {/* MULTIPLE VISITED PROPERTIES */}
+
+          {!loadingVisits && visitedProperties.length > 1 && (
+            <div className="space-y-5">
               <div
                 className="
-                  flex
-                  flex-col
-                  md:flex-row
-                  md:items-center
-                  md:justify-between
-                  gap-4
+                  rounded-xl
+                  border
+                  border-blue-500/20
+                  bg-blue-500/5
+                  p-4
                 "
               >
-                <div>
-                  <p className="text-xs text-slate-500 uppercase tracking-wide">
-                    Imóvel relacionado ao lead
-                  </p>
+                <div className="flex items-start gap-3">
+                  <div
+                    className="
+                      w-9
+                      h-9
+                      rounded-lg
+                      bg-blue-500/10
+                      flex
+                      items-center
+                      justify-center
+                      shrink-0
+                    "
+                  >
+                    <Building2 size={18} className="text-blue-400" />
+                  </div>
 
-                  <h3 className="text-lg font-semibold text-white mt-1">
-                    {lead.property.title || lead.property.name || 'Imóvel'}
-                  </h3>
-
-                  {lead.property.code && (
-                    <p className="text-sm text-slate-400 mt-1">
-                      Código: {lead.property.code}
+                  <div>
+                    <p className="text-sm font-medium text-blue-300">
+                      O lead visitou {visitedProperties.length} imóveis
                     </p>
-                  )}
-                </div>
 
-                <div className="text-left md:text-right">
-                  <p className="text-xs text-slate-500">Valor atual</p>
-
-                  <p className="text-xl font-bold text-emerald-400">
-                    {formatCurrency(
-                      lead.property.price ||
-                        lead.propertyPrice ||
-                        form.propertyPrice,
-                    )}
-                  </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Selecione o imóvel para o qual deseja registrar esta
+                      proposta.
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <label className="text-sm text-slate-300">
-                Selecione o imóvel
-              </label>
 
-              <select
-                value={form.property}
-                onChange={(event) => handlePropertyChange(event.target.value)}
-                disabled={loadingProperties}
-                className="
-                  w-full
-                  bg-slate-950
-                  border
-                  border-slate-700
-                  rounded-xl
-                  px-4
-                  py-3
-                  text-white
-                  outline-none
-                  focus:border-blue-500
-                "
-              >
-                <option value="">
-                  {loadingProperties
-                    ? 'Carregando imóveis...'
-                    : 'Selecione um imóvel'}
-                </option>
+              <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {visitedProperties.map((property) => {
+                  const propertyId = getId(property);
 
-                {properties.map((property) => (
-                  <option
-                    key={property._id || property.id}
-                    value={property._id || property.id}
-                  >
-                    {property.code ? `${property.code} - ` : ''}
-                    {property.title || property.name || 'Imóvel'}
-                  </option>
-                ))}
-              </select>
+                  const isSelected =
+                    String(form.property) === String(propertyId);
 
-              {!loadingProperties && properties.length === 0 && (
-                <p className="text-sm text-slate-500">
-                  Nenhum imóvel disponível para seleção.
-                </p>
+                  return (
+                    <VisitedPropertyCard
+                      key={propertyId}
+                      property={property}
+                      selected={isSelected}
+                      onSelect={() => handlePropertyChange(propertyId)}
+                    />
+                  );
+                })}
+              </div>
+
+              {!selectedProperty && (
+                <div
+                  className="
+                    flex
+                    items-center
+                    gap-3
+                    rounded-xl
+                    border
+                    border-amber-500/20
+                    bg-amber-500/5
+                    p-4
+                    text-amber-300
+                  "
+                >
+                  <AlertCircle size={18} />
+
+                  <p className="text-sm">
+                    Selecione um imóvel acima para continuar com a proposta.
+                  </p>
+                </div>
+              )}
+
+              {selectedProperty && (
+                <div
+                  className="
+                    rounded-xl
+                    border
+                    border-emerald-500/20
+                    bg-emerald-500/5
+                    p-4
+                  "
+                >
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={17} className="text-emerald-400" />
+
+                    <p className="text-sm text-emerald-300">
+                      Imóvel selecionado para a proposta
+                    </p>
+                  </div>
+
+                  <p className="text-sm font-semibold text-white mt-1">
+                    {selectedProperty.title ||
+                      selectedProperty.name ||
+                      'Imóvel'}
+                  </p>
+                </div>
               )}
             </div>
           )}
+
+          {/* ONE VISITED PROPERTY */}
+
+          {!loadingVisits && visitedProperties.length === 1 && (
+            <PropertyPreview
+              property={selectedProperty || visitedProperties[0]}
+              visited
+              visitDate={selectedVisitDate}
+              visitCount={visitedProperties[0]?.visitCount || 1}
+            />
+          )}
+
+          {/* NO COMPLETED VISITS */}
+
+          {!loadingVisits && visitedProperties.length === 0 && (
+            <div className="space-y-5">
+              <div
+                className="
+                  rounded-xl
+                  border
+                  border-slate-800
+                  bg-slate-950
+                  p-4
+                "
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className="
+                      w-9
+                      h-9
+                      rounded-lg
+                      bg-slate-800
+                      flex
+                      items-center
+                      justify-center
+                      shrink-0
+                    "
+                  >
+                    <Building2 size={18} className="text-slate-400" />
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-medium text-slate-300">
+                      Nenhuma visita concluída
+                    </p>
+
+                    <p className="text-xs text-slate-500 mt-1">
+                      O imóvel abaixo é baseado no interesse registrado no lead.
+                      Você também pode selecionar outro imóvel.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {selectedProperty ? (
+                <PropertyPreview property={selectedProperty} visited={false} />
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm text-slate-300">Selecione o imóvel</p>
+
+                    <p className="text-xs text-slate-500 mt-1">
+                      Escolha o imóvel que será utilizado na proposta.
+                    </p>
+                  </div>
+
+                  <PropertySelector
+                    value={form.property}
+                    properties={selectableProperties}
+                    loading={loadingProperties}
+                    onChange={handlePropertyChange}
+                  />
+
+                  {!loadingProperties && selectableProperties.length === 0 && (
+                    <p className="text-sm text-slate-500">
+                      Nenhum imóvel disponível para seleção.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SELECTOR WHEN THERE ARE NO VISITS BUT PROPERTY EXISTS */}
+
+          {!loadingVisits &&
+            visitedProperties.length === 0 &&
+            selectedProperty && (
+              <div className="mt-5">
+                <PropertySelector
+                  value={form.property}
+                  properties={selectableProperties}
+                  loading={loadingProperties}
+                  onChange={handlePropertyChange}
+                />
+              </div>
+            )}
         </Card>
 
         {/* VALUES */}
@@ -906,35 +1837,69 @@ export default function ProposalCreate() {
                 <MoneyInput
                   label="Valor do imóvel"
                   value={form.propertyPrice}
-                  onChange={(value) => handleChange('propertyPrice', value)}
-                  disabled={!!lead.property}
+                  onChange={(value) =>
+                    handleMoneyChange('propertyPrice', value)
+                  }
+                  disabled={!!selectedProperty}
                 />
 
                 <MoneyInput
                   label="Valor da proposta"
                   value={form.proposalPrice}
-                  onChange={(value) => handleChange('proposalPrice', value)}
+                  onChange={(value) =>
+                    handleMoneyChange('proposalPrice', value)
+                  }
                   required
                 />
 
                 <MoneyInput
                   label="Entrada"
                   value={form.downPayment}
-                  onChange={(value) => handleChange('downPayment', value)}
+                  onChange={(value) => handleMoneyChange('downPayment', value)}
                 />
 
                 <MoneyInput
                   label="Financiamento"
                   value={form.financing}
-                  onChange={(value) => handleChange('financing', value)}
+                  onChange={(value) => handleMoneyChange('financing', value)}
                 />
 
                 <MoneyInput
                   label="FGTS"
                   value={form.fgts}
-                  onChange={(value) => handleChange('fgts', value)}
+                  onChange={(value) => handleMoneyChange('fgts', value)}
                 />
               </div>
+
+              {/* PAYMENT PROGRESS */}
+
+              {calculations.proposalPrice > 0 && (
+                <div className="mt-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-slate-500">
+                      Composição do pagamento
+                    </span>
+
+                    <span className="text-xs font-medium text-slate-300">
+                      {calculations.paymentPercentage.toFixed(0)}%
+                    </span>
+                  </div>
+
+                  <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="
+                        h-full
+                        bg-blue-500
+                        rounded-full
+                        transition-all
+                      "
+                      style={{
+                        width: `${calculations.paymentPercentage}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </Card>
           </div>
 
@@ -968,6 +1933,11 @@ export default function ProposalCreate() {
                 value={formatCurrency(calculations.fgts)}
               />
 
+              <SummaryRow
+                label="Total composto"
+                value={formatCurrency(calculations.totalPayment)}
+              />
+
               <div className="border-t border-slate-800 pt-4">
                 <SummaryRow
                   label="Saldo restante"
@@ -986,7 +1956,13 @@ export default function ProposalCreate() {
                     p-3
                   "
                 >
-                  <p className="text-xs text-amber-400">Desconto solicitado</p>
+                  <div className="flex items-center gap-2">
+                    <Percent size={14} className="text-amber-400" />
+
+                    <p className="text-xs text-amber-400">
+                      Desconto solicitado
+                    </p>
+                  </div>
 
                   <p className="text-sm text-amber-300 font-medium mt-1">
                     {formatCurrency(calculations.discount)} (
@@ -1027,31 +2003,24 @@ export default function ProposalCreate() {
               ]}
             />
 
-            <Input
+            <IntegerInput
               label="Parcelas"
-              type="number"
-              min="0"
               value={form.installments}
-              onChange={(event) =>
-                handleChange('installments', event.target.value)
-              }
+              onChange={(value) => handleIntegerChange('installments', value)}
               placeholder="Ex: 360"
             />
 
             <MoneyInput
               label="Valor da parcela"
               value={form.installmentValue}
-              onChange={(value) => handleChange('installmentValue', value)}
+              onChange={(value) => handleMoneyChange('installmentValue', value)}
             />
 
-            <Input
+            <IntegerInput
               label="Validade (dias)"
-              type="number"
-              min="1"
               value={form.validityDays}
-              onChange={(event) =>
-                handleChange('validityDays', event.target.value)
-              }
+              onChange={(value) => handleIntegerChange('validityDays', value)}
+              placeholder="Ex: 7"
             />
           </div>
         </Card>
@@ -1078,7 +2047,10 @@ export default function ProposalCreate() {
               placeholder:text-slate-600
               outline-none
               focus:border-blue-500
+              focus:ring-1
+              focus:ring-blue-500/30
               resize-none
+              transition
             "
           />
 
@@ -1086,7 +2058,7 @@ export default function ProposalCreate() {
             <CalendarDays size={14} />
             Esta proposta terá validade de{' '}
             <strong className="text-slate-300">
-              {form.validityDays || 0} dias
+              {Number(form.validityDays) || 0} dias
             </strong>
             .
           </div>
@@ -1211,14 +2183,14 @@ function Info({ label, value }) {
 |--------------------------------------------------------------------------
 */
 
-function Input({ label, type = 'text', value, onChange, placeholder, min }) {
+function Input({ label, value, onChange, placeholder, inputMode = 'text' }) {
   return (
     <div>
       <label className="block text-sm text-slate-300 mb-2">{label}</label>
 
       <input
-        type={type}
-        min={min}
+        type="text"
+        inputMode={inputMode}
         value={value}
         onChange={onChange}
         placeholder={placeholder}
@@ -1234,6 +2206,71 @@ function Input({ label, type = 'text', value, onChange, placeholder, min }) {
           placeholder:text-slate-600
           outline-none
           focus:border-blue-500
+          focus:ring-1
+          focus:ring-blue-500/30
+          transition
+        "
+      />
+    </div>
+  );
+}
+
+/*
+|--------------------------------------------------------------------------
+| INTEGER INPUT
+|--------------------------------------------------------------------------
+|
+| Também usamos NumericFormat aqui para:
+|
+| 360
+| 1.000
+| 7
+|
+| O estado continua sendo NUMBER.
+|
+*/
+
+function IntegerInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  disabled = false,
+}) {
+  return (
+    <div>
+      <label className="block text-sm text-slate-300 mb-2">{label}</label>
+
+      <NumericFormat
+        value={value ?? 0}
+        thousandSeparator="."
+        decimalSeparator=","
+        decimalScale={0}
+        allowNegative={false}
+        allowLeadingZeros={false}
+        inputMode="numeric"
+        disabled={disabled}
+        placeholder={placeholder}
+        onValueChange={(values) => {
+          onChange(values.floatValue ?? 0);
+        }}
+        className="
+          w-full
+          bg-slate-950
+          border
+          border-slate-700
+          rounded-xl
+          px-4
+          py-3
+          text-white
+          placeholder:text-slate-600
+          outline-none
+          focus:border-blue-500
+          focus:ring-1
+          focus:ring-blue-500/30
+          disabled:opacity-50
+          disabled:cursor-not-allowed
+          transition
         "
       />
     </div>
@@ -1270,17 +2307,27 @@ function MoneyInput({
             -translate-y-1/2
             text-slate-500
             text-sm
+            pointer-events-none
+            z-10
           "
         >
           R$
         </span>
 
-        <input
-          type="text"
+        <NumericFormat
+          value={value ?? 0}
+          thousandSeparator="."
+          decimalSeparator=","
+          decimalScale={2}
+          fixedDecimalScale
+          allowNegative={false}
+          allowLeadingZeros={false}
           inputMode="decimal"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
           disabled={disabled}
+          placeholder="0,00"
+          onValueChange={(values) => {
+            onChange(values.floatValue ?? 0);
+          }}
           className="
             w-full
             bg-slate-950
@@ -1291,12 +2338,15 @@ function MoneyInput({
             pr-4
             py-3
             text-white
+            placeholder:text-slate-600
             outline-none
             focus:border-blue-500
+            focus:ring-1
+            focus:ring-blue-500/30
             disabled:opacity-50
             disabled:cursor-not-allowed
+            transition
           "
-          placeholder="0,00"
         />
       </div>
     </div>
@@ -1328,6 +2378,9 @@ function SelectField({ label, value, onChange, options = [] }) {
           text-white
           outline-none
           focus:border-blue-500
+          focus:ring-1
+          focus:ring-blue-500/30
+          transition
         "
       >
         {options.map((option) => (
@@ -1336,6 +2389,571 @@ function SelectField({ label, value, onChange, options = [] }) {
           </option>
         ))}
       </select>
+    </div>
+  );
+}
+
+/*
+|--------------------------------------------------------------------------
+| PROPERTY SELECTOR
+|--------------------------------------------------------------------------
+*/
+
+function PropertySelector({
+  value,
+  properties = [],
+  loading = false,
+  onChange,
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={loading}
+        className="
+          appearance-none
+          w-full
+          bg-slate-950
+          border
+          border-slate-700
+          rounded-xl
+          px-4
+          py-3
+          pr-11
+          text-white
+          outline-none
+          focus:border-blue-500
+          focus:ring-1
+          focus:ring-blue-500/30
+          transition
+          disabled:opacity-50
+        "
+      >
+        <option value="">
+          {loading ? 'Carregando imóveis...' : 'Selecione um imóvel'}
+        </option>
+
+        {properties.map((property) => (
+          <option key={getId(property)} value={getId(property)}>
+            {property.code ? `${property.code} - ` : ''}
+            {property.title || property.name || 'Imóvel'}
+          </option>
+        ))}
+      </select>
+
+      <ChevronDown
+        size={17}
+        className="
+          absolute
+          right-4
+          top-1/2
+          -translate-y-1/2
+          text-slate-500
+          pointer-events-none
+        "
+      />
+    </div>
+  );
+}
+
+/*
+|--------------------------------------------------------------------------
+| VISITED PROPERTY CARD
+|--------------------------------------------------------------------------
+*/
+
+function VisitedPropertyCard({ property, selected = false, onSelect }) {
+  const image =
+    property?.image || property?.mainImage || property?.coverImage || '';
+
+  const address = formatPropertyAddress(property);
+
+  const area = getPropertyArea(property);
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`
+        group
+        text-left
+        w-full
+        rounded-2xl
+        border
+        overflow-hidden
+        transition
+        ${
+          selected
+            ? 'border-blue-500 bg-blue-500/10 ring-1 ring-blue-500/30'
+            : 'border-slate-800 bg-slate-950 hover:border-slate-600'
+        }
+      `}
+    >
+      <div className="relative h-44 bg-slate-900">
+        {image ? (
+          <img
+            src={image}
+            alt={property.title || property.name || 'Imóvel'}
+            className="
+              absolute
+              inset-0
+              w-full
+              h-full
+              object-cover
+              transition
+              group-hover:scale-[1.02]
+            "
+          />
+        ) : (
+          <div
+            className="
+              absolute
+              inset-0
+              flex
+              items-center
+              justify-center
+              text-slate-700
+            "
+          >
+            <Building2 size={48} />
+          </div>
+        )}
+
+        <div
+          className="
+            absolute
+            top-3
+            left-3
+            flex
+            items-center
+            gap-1.5
+            px-2.5
+            py-1.5
+            rounded-lg
+            bg-emerald-500/90
+            text-white
+            text-xs
+            font-semibold
+            shadow-lg
+          "
+        >
+          <Check size={13} />
+          Visitado
+        </div>
+
+        {selected && (
+          <div
+            className="
+              absolute
+              top-3
+              right-3
+              w-8
+              h-8
+              rounded-full
+              bg-blue-600
+              flex
+              items-center
+              justify-center
+              shadow-lg
+            "
+          >
+            <Check size={17} />
+          </div>
+        )}
+      </div>
+
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            {property.code && (
+              <span
+                className="
+                  inline-flex
+                  text-[11px]
+                  font-medium
+                  text-blue-400
+                  bg-blue-500/10
+                  border
+                  border-blue-500/20
+                  px-2
+                  py-1
+                  rounded-md
+                  mb-2
+                "
+              >
+                {property.code}
+              </span>
+            )}
+
+            <h3 className="text-base font-semibold text-white truncate">
+              {property.title || property.name || 'Imóvel'}
+            </h3>
+          </div>
+
+          <div className="text-right shrink-0">
+            <p className="text-[10px] text-slate-500">Valor</p>
+
+            <p className="text-sm font-bold text-emerald-400">
+              {formatCurrency(property.price)}
+            </p>
+          </div>
+        </div>
+
+        {address && (
+          <div className="flex items-start gap-2 mt-3 text-xs text-slate-400">
+            <MapPin size={14} className="mt-0.5 shrink-0" />
+
+            <span className="line-clamp-2">{address}</span>
+          </div>
+        )}
+
+        <div
+          className="
+            flex
+            flex-wrap
+            items-center
+            gap-x-4
+            gap-y-2
+            mt-4
+            pt-4
+            border-t
+            border-slate-800
+          "
+        >
+          {property.bedrooms > 0 && (
+            <PropertyStat
+              icon={<BedDouble size={14} />}
+              value={property.bedrooms}
+              label="quartos"
+            />
+          )}
+
+          {property.suites > 0 && (
+            <PropertyStat
+              icon={<Building2 size={14} />}
+              value={property.suites}
+              label="suítes"
+            />
+          )}
+
+          {property.parkingSpaces > 0 && (
+            <PropertyStat
+              icon={<Car size={14} />}
+              value={property.parkingSpaces}
+              label="vagas"
+            />
+          )}
+
+          {area > 0 && (
+            <PropertyStat
+              icon={<Ruler size={14} />}
+              value={formatArea(area)}
+              label=""
+            />
+          )}
+        </div>
+
+        {property.visitDate && (
+          <div className="flex items-center gap-2 mt-4 text-xs text-emerald-400">
+            <Eye size={13} />
+
+            <span>
+              Última visita:{' '}
+              <strong>{formatVisitDate(property.visitDate)}</strong>
+            </span>
+          </div>
+        )}
+
+        {property.visitCount > 1 && (
+          <div className="mt-2 text-[11px] text-slate-500">
+            Visitado {property.visitCount} vezes
+          </div>
+        )}
+
+        <div
+          className={`
+            mt-4
+            text-center
+            text-xs
+            font-semibold
+            rounded-lg
+            py-2
+            transition
+            ${
+              selected
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-800 text-slate-300 group-hover:bg-slate-700'
+            }
+          `}
+        >
+          {selected ? '✓ Imóvel selecionado' : 'Selecionar imóvel'}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+/*
+|--------------------------------------------------------------------------
+| PROPERTY PREVIEW
+|--------------------------------------------------------------------------
+*/
+
+function PropertyPreview({
+  property,
+  visited = false,
+  visitDate = null,
+  visitCount = 1,
+}) {
+  const image =
+    property?.image || property?.mainImage || property?.coverImage || '';
+
+  const address = formatPropertyAddress(property);
+
+  const area = getPropertyArea(property);
+
+  return (
+    <div
+      className="
+        rounded-2xl
+        border
+        border-slate-800
+        bg-slate-950
+        overflow-hidden
+      "
+    >
+      <div className="grid lg:grid-cols-[220px_1fr]">
+        {/* IMAGE */}
+
+        <div className="relative bg-slate-900 min-h-[180px]">
+          {image ? (
+            <img
+              src={image}
+              alt={property.title || property.name || 'Imóvel'}
+              className="
+                absolute
+                inset-0
+                w-full
+                h-full
+                object-cover
+              "
+            />
+          ) : (
+            <div
+              className="
+                absolute
+                inset-0
+                flex
+                items-center
+                justify-center
+                text-slate-700
+              "
+            >
+              <Building2 size={48} />
+            </div>
+          )}
+
+          {visited && (
+            <div
+              className="
+                absolute
+                top-3
+                left-3
+                flex
+                items-center
+                gap-1.5
+                px-2.5
+                py-1.5
+                rounded-lg
+                bg-emerald-500/90
+                text-white
+                text-xs
+                font-semibold
+                shadow-lg
+              "
+            >
+              <Check size={13} />
+              Visita realizada
+            </div>
+          )}
+        </div>
+
+        {/* CONTENT */}
+
+        <div className="p-5 md:p-6">
+          <div
+            className="
+              flex
+              flex-col
+              md:flex-row
+              md:items-start
+              md:justify-between
+              gap-4
+            "
+          >
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                {property.code && (
+                  <span
+                    className="
+                      text-xs
+                      font-medium
+                      text-blue-400
+                      bg-blue-500/10
+                      border
+                      border-blue-500/20
+                      px-2
+                      py-1
+                      rounded-md
+                    "
+                  >
+                    {property.code}
+                  </span>
+                )}
+
+                {visited && (
+                  <span
+                    className="
+                      text-xs
+                      text-emerald-400
+                      bg-emerald-500/10
+                      border
+                      border-emerald-500/20
+                      px-2
+                      py-1
+                      rounded-md
+                    "
+                  >
+                    Imóvel visitado
+                  </span>
+                )}
+              </div>
+
+              <h3 className="text-xl font-semibold text-white">
+                {property.title || property.name || 'Imóvel'}
+              </h3>
+
+              {address && (
+                <div className="flex items-start gap-2 mt-2 text-sm text-slate-400">
+                  <MapPin size={15} className="mt-0.5 shrink-0" />
+
+                  <span>{address}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="md:text-right">
+              <p className="text-xs text-slate-500">Valor atual</p>
+
+              <p className="text-2xl font-bold text-emerald-400 mt-1">
+                {formatCurrency(property.price)}
+              </p>
+            </div>
+          </div>
+
+          {/* STATS */}
+
+          <div
+            className="
+              flex
+              flex-wrap
+              items-center
+              gap-x-6
+              gap-y-3
+              mt-5
+              pt-5
+              border-t
+              border-slate-800
+            "
+          >
+            {property.bedrooms > 0 && (
+              <PropertyStat
+                icon={<BedDouble size={15} />}
+                value={property.bedrooms}
+                label="quartos"
+              />
+            )}
+
+            {property.bathrooms > 0 && (
+              <PropertyStat
+                icon={<Bath size={15} />}
+                value={property.bathrooms}
+                label="banheiros"
+              />
+            )}
+
+            {property.suites > 0 && (
+              <PropertyStat
+                icon={<Building2 size={15} />}
+                value={property.suites}
+                label="suítes"
+              />
+            )}
+
+            {property.parkingSpaces > 0 && (
+              <PropertyStat
+                icon={<Car size={15} />}
+                value={property.parkingSpaces}
+                label="vagas"
+              />
+            )}
+
+            {area > 0 && (
+              <PropertyStat
+                icon={<Ruler size={15} />}
+                value={formatArea(area)}
+                label=""
+              />
+            )}
+          </div>
+
+          {/* VISIT INFO */}
+
+          {visited && visitDate && (
+            <div
+              className="
+                flex
+                flex-wrap
+                items-center
+                gap-2
+                mt-4
+                text-xs
+                text-emerald-400
+              "
+            >
+              <Eye size={14} />
+
+              <span>
+                Visita realizada em{' '}
+                <strong>{formatVisitDate(visitDate)}</strong>
+              </span>
+
+              {visitCount > 1 && (
+                <span className="text-slate-500">• {visitCount} visitas</span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/*
+|--------------------------------------------------------------------------
+| PROPERTY STAT
+|--------------------------------------------------------------------------
+*/
+
+function PropertyStat({ icon, value, label }) {
+  return (
+    <div className="flex items-center gap-2 text-sm text-slate-400">
+      <span className="text-slate-500">{icon}</span>
+
+      <span className="text-slate-200 font-medium">{value}</span>
+
+      {label && <span>{label}</span>}
     </div>
   );
 }

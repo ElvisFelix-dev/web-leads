@@ -1,4 +1,6 @@
+// src/components/Header.jsx
 import { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 
 import {
   Menu,
@@ -10,15 +12,42 @@ import {
   Users,
   Sparkles,
   ArrowUpRight,
+  Home,
+  Phone,
+  Info,
 } from 'lucide-react';
 
 export default function Header() {
+  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
 
   const closeMobile = () => {
     setMobileOpen(false);
     setPropertiesOpen(false);
+  };
+
+  const isActive = (path) => {
+    return location.pathname === path;
+  };
+
+  const navLinkClasses = (path) => `
+    rounded-xl
+    px-4
+    py-2.5
+    text-sm
+    font-medium
+    transition
+    hover:bg-white/[0.05]
+    ${isActive(path) ? 'text-white' : 'text-gray-300 hover:text-white'}
+    ${isActive(path) ? 'relative' : ''}
+  `;
+
+  const activeIndicator = (path) => {
+    if (!isActive(path)) return null;
+    return (
+      <span className="absolute bottom-1.5 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-blue-500" />
+    );
   };
 
   return (
@@ -45,8 +74,8 @@ export default function Header() {
               LOGO
           ============================================================ */}
 
-          <a
-            href="/home"
+          <Link
+            to="/home"
             className="group flex items-center gap-3"
             aria-label="Página inicial"
           >
@@ -98,7 +127,7 @@ export default function Header() {
                 Imóveis & Negócios
               </div>
             </div>
-          </a>
+          </Link>
 
           {/* ============================================================
               DESKTOP NAVIGATION
@@ -107,35 +136,10 @@ export default function Header() {
           <nav className="hidden items-center gap-1 lg:flex">
             {/* Início */}
 
-            <a
-              href="/home"
-              className="
-                group
-                relative
-                rounded-xl
-                px-4
-                py-2.5
-                text-sm
-                font-medium
-                text-white
-                transition
-                hover:bg-white/[0.05]
-              "
-            >
+            <Link to="/home" className={navLinkClasses('/')}>
               Início
-              <span
-                className="
-                  absolute
-                  bottom-1.5
-                  left-1/2
-                  h-0.5
-                  w-5
-                  -translate-x-1/2
-                  rounded-full
-                  bg-blue-500
-                "
-              />
-            </a>
+              {activeIndicator('/')}
+            </Link>
 
             {/* ========================================================
                 IMÓVEIS
@@ -146,9 +150,9 @@ export default function Header() {
               onMouseEnter={() => setPropertiesOpen(true)}
               onMouseLeave={() => setPropertiesOpen(false)}
             >
-              <a
-                href="/imoveis"
-                className="
+              <Link
+                to="/imoveis"
+                className={`
                   flex
                   items-center
                   gap-1.5
@@ -157,11 +161,10 @@ export default function Header() {
                   py-2.5
                   text-sm
                   font-medium
-                  text-gray-300
                   transition
                   hover:bg-white/[0.05]
-                  hover:text-white
-                "
+                  ${isActive('/imoveis') ? 'text-white' : 'text-gray-300 hover:text-white'}
+                `}
               >
                 Imóveis
                 <ChevronDown
@@ -170,7 +173,7 @@ export default function Header() {
                     propertiesOpen ? 'rotate-180' : ''
                   }`}
                 />
-              </a>
+              </Link>
 
               {/* Dropdown */}
 
@@ -198,8 +201,9 @@ export default function Header() {
                       backdrop-blur-2xl
                     "
                   >
-                    <a
-                      href="/imoveis"
+                    <Link
+                      to="/imoveis"
+                      onClick={closeMobile}
                       className="
                         group
                         flex
@@ -240,10 +244,11 @@ export default function Header() {
                         size={15}
                         className="ml-auto text-gray-600 transition group-hover:text-blue-400"
                       />
-                    </a>
+                    </Link>
 
-                    <a
-                      href="/imoveis?purpose=venda"
+                    <Link
+                      to="/imoveis?purpose=venda"
+                      onClick={closeMobile}
                       className="
                         group
                         flex
@@ -279,10 +284,11 @@ export default function Header() {
                           Imóveis à venda
                         </div>
                       </div>
-                    </a>
+                    </Link>
 
-                    <a
-                      href="/imoveis?purpose=aluguel"
+                    <Link
+                      to="/imoveis?purpose=aluguel"
+                      onClick={closeMobile}
                       className="
                         group
                         flex
@@ -318,49 +324,23 @@ export default function Header() {
                           Imóveis para locação
                         </div>
                       </div>
-                    </a>
+                    </Link>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Sobre */}
+            {/* Sobre nós */}
 
-            <a
-              href="/about-us"
-              className="
-                rounded-xl
-                px-4
-                py-2.5
-                text-sm
-                font-medium
-                text-gray-300
-                transition
-                hover:bg-white/[0.05]
-                hover:text-white
-              "
-            >
+            <Link to="/about-us" className={navLinkClasses('/about-us')}>
               Sobre nós
-            </a>
+            </Link>
 
             {/* Contato */}
 
-            <a
-              href="/contact"
-              className="
-                rounded-xl
-                px-4
-                py-2.5
-                text-sm
-                font-medium
-                text-gray-300
-                transition
-                hover:bg-white/[0.05]
-                hover:text-white
-              "
-            >
+            <Link to="/contact" className={navLinkClasses('/contact')}>
               Contato
-            </a>
+            </Link>
           </nav>
 
           {/* ============================================================
@@ -370,8 +350,8 @@ export default function Header() {
           <div className="hidden items-center gap-3 lg:flex">
             {/* Favorites */}
 
-            <a
-              href="/favoritos"
+            <Link
+              to="/favorites"
               aria-label="Meus favoritos"
               className="
                 group
@@ -393,12 +373,12 @@ export default function Header() {
               "
             >
               <Heart size={18} className="transition group-hover:scale-110" />
-            </a>
+            </Link>
 
             {/* CTA */}
 
-            <a
-              href="/contact"
+            <Link
+              to="/contact"
               className="
                 group
                 relative
@@ -443,7 +423,7 @@ export default function Header() {
               <UserRound size={16} className="relative" />
 
               <span className="relative">Fale com um corretor</span>
-            </a>
+            </Link>
           </div>
 
           {/* ============================================================
@@ -485,28 +465,10 @@ export default function Header() {
               {/* Navigation */}
 
               <div className="space-y-1">
-                <a
-                  href="/"
+                <Link
+                  to="/"
                   onClick={closeMobile}
-                  className="
-                    flex
-                    items-center
-                    rounded-xl
-                    bg-white/[0.05]
-                    px-4
-                    py-3.5
-                    text-sm
-                    font-semibold
-                    text-white
-                  "
-                >
-                  Início
-                </a>
-
-                <a
-                  href="/imoveis"
-                  onClick={closeMobile}
-                  className="
+                  className={`
                     flex
                     items-center
                     gap-3
@@ -515,20 +477,48 @@ export default function Header() {
                     py-3.5
                     text-sm
                     font-medium
-                    text-gray-300
                     transition
                     hover:bg-white/[0.05]
-                    hover:text-white
-                  "
+                    ${
+                      isActive('/')
+                        ? 'bg-white/[0.05] text-white'
+                        : 'text-gray-300 hover:text-white'
+                    }
+                  `}
+                >
+                  <Home size={17} />
+                  Início
+                </Link>
+
+                <Link
+                  to="/imoveis"
+                  onClick={closeMobile}
+                  className={`
+                    flex
+                    items-center
+                    gap-3
+                    rounded-xl
+                    px-4
+                    py-3.5
+                    text-sm
+                    font-medium
+                    transition
+                    hover:bg-white/[0.05]
+                    ${
+                      isActive('/imoveis')
+                        ? 'bg-white/[0.05] text-white'
+                        : 'text-gray-300 hover:text-white'
+                    }
+                  `}
                 >
                   <Building2 size={17} />
                   Imóveis
-                </a>
+                </Link>
 
-                <a
-                  href="/corretores"
+                <Link
+                  to="/corretores"
                   onClick={closeMobile}
-                  className="
+                  className={`
                     flex
                     items-center
                     gap-3
@@ -537,20 +527,23 @@ export default function Header() {
                     py-3.5
                     text-sm
                     font-medium
-                    text-gray-300
                     transition
                     hover:bg-white/[0.05]
-                    hover:text-white
-                  "
+                    ${
+                      isActive('/corretores')
+                        ? 'bg-white/[0.05] text-white'
+                        : 'text-gray-300 hover:text-white'
+                    }
+                  `}
                 >
                   <Users size={17} />
                   Corretores
-                </a>
+                </Link>
 
-                <a
-                  href="/favoritos"
+                <Link
+                  to="/favorites"
                   onClick={closeMobile}
-                  className="
+                  className={`
                     flex
                     items-center
                     gap-3
@@ -559,55 +552,68 @@ export default function Header() {
                     py-3.5
                     text-sm
                     font-medium
-                    text-gray-300
                     transition
                     hover:bg-white/[0.05]
-                    hover:text-white
-                  "
+                    ${
+                      isActive('/favorites')
+                        ? 'bg-white/[0.05] text-white'
+                        : 'text-gray-300 hover:text-white'
+                    }
+                  `}
                 >
                   <Heart size={17} />
                   Meus favoritos
-                </a>
+                </Link>
 
-                <a
-                  href="/about-us"
+                <Link
+                  to="/about-us"
                   onClick={closeMobile}
-                  className="
+                  className={`
                     flex
                     items-center
+                    gap-3
                     rounded-xl
                     px-4
                     py-3.5
                     text-sm
                     font-medium
-                    text-gray-300
                     transition
                     hover:bg-white/[0.05]
-                    hover:text-white
-                  "
+                    ${
+                      isActive('/about-us')
+                        ? 'bg-white/[0.05] text-white'
+                        : 'text-gray-300 hover:text-white'
+                    }
+                  `}
                 >
+                  <Info size={17} />
                   Sobre nós
-                </a>
+                </Link>
 
-                <a
-                  href="/contact"
+                <Link
+                  to="/contact"
                   onClick={closeMobile}
-                  className="
+                  className={`
                     flex
                     items-center
+                    gap-3
                     rounded-xl
                     px-4
                     py-3.5
                     text-sm
                     font-medium
-                    text-gray-300
                     transition
                     hover:bg-white/[0.05]
-                    hover:text-white
-                  "
+                    ${
+                      isActive('/contact')
+                        ? 'bg-white/[0.05] text-white'
+                        : 'text-gray-300 hover:text-white'
+                    }
+                  `}
                 >
+                  <Phone size={17} />
                   Contato
-                </a>
+                </Link>
               </div>
 
               {/* ========================================================
@@ -615,8 +621,8 @@ export default function Header() {
               ======================================================== */}
 
               <div className="mt-5 border-t border-white/[0.08] pt-5">
-                <a
-                  href="/contact"
+                <Link
+                  to="/contact"
                   onClick={closeMobile}
                   className="
                     flex
@@ -634,12 +640,14 @@ export default function Header() {
                     text-white
                     shadow-lg
                     shadow-blue-600/20
+                    transition
+                    hover:shadow-blue-500/30
                   "
                 >
                   <UserRound size={17} />
                   Fale com um corretor
                   <ArrowUpRight size={15} />
-                </a>
+                </Link>
               </div>
 
               {/* ========================================================

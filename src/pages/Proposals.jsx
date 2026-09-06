@@ -1,3 +1,4 @@
+// src/pages/Proposals.jsx
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -27,9 +28,11 @@ import {
   User,
   X,
   XCircle,
+  Zap,
 } from 'lucide-react';
 
 import api from '../service/api';
+import { approveProposal } from '../service/orchestratorService';
 
 /*
 |--------------------------------------------------------------------------
@@ -197,18 +200,6 @@ function formatDateTime(value) {
 function normalizeListResponse(response) {
   const data = response?.data;
 
-  /*
-   * Backend atual:
-   *
-   * {
-   *   success: true,
-   *   data: {
-   *     proposals: [],
-   *     pagination: {}
-   *   }
-   * }
-   */
-
   const payload = data?.data || data?.result || data;
 
   const proposals =
@@ -221,18 +212,12 @@ function normalizeListResponse(response) {
 
   return {
     proposals: Array.isArray(proposals) ? proposals : [],
-
     pagination: {
       page: Number(pagination.page) || 1,
-
       limit: Number(pagination.limit) || 20,
-
       total: Number(pagination.total) || 0,
-
       pages: Number(pagination.pages) || 0,
-
       hasNextPage: Boolean(pagination.hasNextPage),
-
       hasPreviousPage: Boolean(pagination.hasPreviousPage),
     },
   };
@@ -253,27 +238,17 @@ function normalizeMetricsResponse(response) {
       cancelled: toNumber(metrics?.summary?.cancelled),
       expired: toNumber(metrics?.summary?.expired),
     },
-
     values: {
       totalProposalValue: toNumber(metrics?.values?.totalProposalValue),
-
       averageProposalValue: toNumber(metrics?.values?.averageProposalValue),
-
       totalPropertyValue: toNumber(metrics?.values?.totalPropertyValue),
-
       acceptedProposalValue: toNumber(metrics?.values?.acceptedProposalValue),
-
       approvalRate: toNumber(metrics?.values?.approvalRate),
-
       conversionRate: toNumber(metrics?.values?.conversionRate),
     },
-
     statusValues: metrics?.statusValues || {},
-
     byBroker: Array.isArray(metrics?.byBroker) ? metrics.byBroker : [],
-
     byProperty: Array.isArray(metrics?.byProperty) ? metrics.byProperty : [],
-
     daily: Array.isArray(metrics?.daily) ? metrics.daily : [],
   };
 }
@@ -287,58 +262,23 @@ function normalizeMetricsResponse(response) {
 export default function Proposals() {
   const navigate = useNavigate();
 
-  /*
-  |--------------------------------------------------------------------------
-  | LIST STATE
-  |--------------------------------------------------------------------------
-  */
-
   const [proposals, setProposals] = useState([]);
-
   const [loading, setLoading] = useState(true);
-
   const [refreshing, setRefreshing] = useState(false);
-
   const [error, setError] = useState('');
 
-  /*
-  |--------------------------------------------------------------------------
-  | METRICS
-  |--------------------------------------------------------------------------
-  */
-
   const [metrics, setMetrics] = useState(null);
-
   const [loadingMetrics, setLoadingMetrics] = useState(true);
 
-  /*
-  |--------------------------------------------------------------------------
-  | FILTERS
-  |--------------------------------------------------------------------------
-  */
-
   const [search, setSearch] = useState('');
-
   const [status, setStatus] = useState('');
-
   const [startDate, setStartDate] = useState('');
-
   const [endDate, setEndDate] = useState('');
-
   const [sort, setSort] = useState('-createdAt');
-
   const [showFilters, setShowFilters] = useState(false);
 
-  /*
-  |--------------------------------------------------------------------------
-  | PAGINATION
-  |--------------------------------------------------------------------------
-  */
-
   const [page, setPage] = useState(1);
-
   const [limit, setLimit] = useState(20);
-
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -348,14 +288,7 @@ export default function Proposals() {
     hasPreviousPage: false,
   });
 
-  /*
-  |--------------------------------------------------------------------------
-  | ACTION STATE
-  |--------------------------------------------------------------------------
-  */
-
   const [actionLoading, setActionLoading] = useState(null);
-
   const [actionError, setActionError] = useState('');
 
   /*
@@ -404,7 +337,6 @@ export default function Proposals() {
         const result = normalizeListResponse(response);
 
         setProposals(result.proposals);
-
         setPagination(result.pagination);
       } catch (err) {
         console.error('Erro ao carregar propostas:', err);
@@ -449,7 +381,6 @@ export default function Proposals() {
       setMetrics(normalizeMetricsResponse(response));
     } catch (err) {
       console.error('Erro ao carregar métricas:', err);
-
       setMetrics(null);
     } finally {
       setLoadingMetrics(false);
@@ -486,11 +417,16 @@ export default function Proposals() {
 
   /*
   |--------------------------------------------------------------------------
-  | ACTION HANDLER
+  | ACTION HANDLER - USANDO ORCHESTRATOR
   |--------------------------------------------------------------------------
   */
 
-  const executeAction = async (proposal, action, confirmMessage) => {
+  const executeAction = async (
+    proposal,
+    action,
+    confirmMessage,
+    customComment = '',
+  ) => {
     const proposalId = getId(proposal);
 
     if (!proposalId) {
@@ -503,19 +439,42 @@ export default function Proposals() {
 
     try {
       setActionLoading(`${action}-${proposalId}`);
-
       setActionError('');
 
-      await api.patch(`/api/proposals/${proposalId}/${action}`);
+      let response;
+
+      if (action === 'approve') {
+        // 🔥 USAR ORCHESTRATOR PARA APROVAÇÃO COMPLETA
+        response = await approveProposal(proposalId, customComment);
+        console.log('✅ Proposta aprovada com sucesso:', response);
+      } else {
+        // Outras ações (reject, cancel) usam a API normal
+        await api.patch(`/api/proposals/${proposalId}/${action}`);
+      }
 
       await Promise.all([
         loadProposals({
           silent: true,
           requestedPage: page,
         }),
-
         loadMetrics(),
       ]);
+
+      // Se for aprovação, mostrar mensagem de sucesso com detalhes
+      if (action === 'approve' && response?.data) {
+        const { sale, commission } = response.data;
+        let message = '✅ Proposta aprovada com sucesso!';
+
+        if (sale?.saleNumber) {
+          message += ` Venda ${sale.saleNumber} criada.`;
+        }
+
+        if (commission?.totalAmount) {
+          message += ` Comissão de ${formatCurrency(commission.totalAmount)} gerada.`;
+        }
+
+        alert(message);
+      }
     } catch (err) {
       console.error(`Erro ao executar ação ${action}:`, err);
 
@@ -539,7 +498,7 @@ export default function Proposals() {
     executeAction(
       proposal,
       'approve',
-      'Deseja realmente aprovar esta proposta?',
+      'Deseja realmente aprovar esta proposta?\n\nEsta ação irá:\n✅ Aprovar a proposta\n✅ Criar a venda automaticamente\n✅ Gerar a comissão\n✅ Atualizar a oportunidade para WON',
     );
   };
 
@@ -625,13 +584,9 @@ export default function Proposals() {
 
   const pageNumbers = useMemo(() => {
     const pages = pagination.pages || 1;
-
     const current = pagination.page || page;
-
     const result = [];
-
     const start = Math.max(1, current - 2);
-
     const end = Math.min(pages, current + 2);
 
     for (let index = start; index <= end; index += 1) {
@@ -650,47 +605,18 @@ export default function Proposals() {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-6">
       <div className="max-w-[1600px] mx-auto space-y-6">
-        {/* ==========================================================
-            HEADER
-        ========================================================== */}
+        {/* HEADER */}
 
         <header className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-5">
           <div>
             <div className="flex items-center gap-3">
-              <div
-                className="
-                w-12
-                h-12
-                rounded-xl
-                bg-blue-500/10
-                border
-                border-blue-500/20
-                flex
-                items-center
-                justify-center
-              "
-              >
+              <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
                 <FileText size={24} className="text-blue-400" />
               </div>
 
               <div>
-                <h1
-                  className="
-                  text-2xl
-                  md:text-3xl
-                  font-bold
-                "
-                >
-                  Propostas
-                </h1>
-
-                <p
-                  className="
-                  text-sm
-                  text-slate-400
-                  mt-1
-                "
-                >
+                <h1 className="text-2xl md:text-3xl font-bold">Propostas</h1>
+                <p className="text-sm text-slate-400 mt-1">
                   Gerencie todas as propostas comerciais.
                 </p>
               </div>
@@ -707,22 +633,7 @@ export default function Proposals() {
                 })
               }
               disabled={refreshing}
-              className="
-                inline-flex
-                items-center
-                justify-center
-                gap-2
-                px-4
-                py-2.5
-                rounded-xl
-                border
-                border-slate-700
-                bg-slate-900
-                text-slate-200
-                hover:bg-slate-800
-                transition
-                disabled:opacity-50
-              "
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 transition disabled:opacity-50"
             >
               <RefreshCw
                 size={17}
@@ -734,20 +645,7 @@ export default function Proposals() {
             <button
               type="button"
               onClick={() => navigate('/proposals/create')}
-              className="
-                inline-flex
-                items-center
-                justify-center
-                gap-2
-                px-5
-                py-2.5
-                rounded-xl
-                bg-blue-600
-                hover:bg-blue-500
-                text-white
-                font-semibold
-                transition
-              "
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold transition"
             >
               <Plus size={18} />
               Nova proposta
@@ -755,9 +653,7 @@ export default function Proposals() {
           </div>
         </header>
 
-        {/* ==========================================================
-            ERROR
-        ========================================================== */}
+        {/* ERRORS */}
 
         {error && (
           <AlertBox type="error" message={error} onClose={() => setError('')} />
@@ -771,88 +667,33 @@ export default function Proposals() {
           />
         )}
 
-        {/* ==========================================================
-            METRICS
-        ========================================================== */}
+        {/* METRICS */}
 
         <MetricsGrid metrics={metrics} loading={loadingMetrics} />
 
-        {/* ==========================================================
-            SEARCH + FILTERS
-        ========================================================== */}
+        {/* SEARCH + FILTERS */}
 
-        <section
-          className="
-          bg-slate-900
-          border
-          border-slate-800
-          rounded-2xl
-          p-4
-          md:p-5
-        "
-        >
-          <div
-            className="
-            flex
-            flex-col
-            lg:flex-row
-            gap-3
-          "
-          >
-            {/* SEARCH */}
-
+        <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-5">
+          <div className="flex flex-col lg:flex-row gap-3">
             <div className="relative flex-1">
               <Search
                 size={18}
-                className="
-                  absolute
-                  left-4
-                  top-1/2
-                  -translate-y-1/2
-                  text-slate-500
-                "
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
               />
 
               <input
                 type="text"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="
-                  Buscar por cliente, proposta ou imóvel...
-                "
-                className="
-                  w-full
-                  bg-slate-950
-                  border
-                  border-slate-700
-                  rounded-xl
-                  pl-11
-                  pr-4
-                  py-3
-                  text-white
-                  placeholder:text-slate-600
-                  outline-none
-                  focus:border-blue-500
-                "
+                placeholder="Buscar por cliente, proposta ou imóvel..."
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-11 pr-4 py-3 text-white placeholder:text-slate-600 outline-none focus:border-blue-500"
               />
             </div>
-
-            {/* STATUS */}
 
             <select
               value={status}
               onChange={(event) => handleStatusChange(event.target.value)}
-              className="
-                bg-slate-950
-                border
-                border-slate-700
-                rounded-xl
-                px-4
-                py-3
-                text-white
-                outline-none
-                focus:border-blue-500
-              "
+              className="bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500"
             >
               <option value="">Todos os status</option>
 
@@ -863,58 +704,25 @@ export default function Proposals() {
               ))}
             </select>
 
-            {/* FILTER BUTTON */}
-
             <button
               type="button"
               onClick={() => setShowFilters((current) => !current)}
-              className={`
-                inline-flex
-                items-center
-                justify-center
-                gap-2
-                px-4
-                py-3
-                rounded-xl
-                border
-                transition
-                ${
-                  showFilters
-                    ? 'bg-blue-500/10 border-blue-500/30 text-blue-300'
-                    : 'bg-slate-950 border-slate-700 text-slate-300 hover:bg-slate-800'
-                }
-              `}
+              className={`inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition ${
+                showFilters
+                  ? 'bg-blue-500/10 border-blue-500/30 text-blue-300'
+                  : 'bg-slate-950 border-slate-700 text-slate-300 hover:bg-slate-800'
+              }`}
             >
               <Filter size={17} />
               Filtros
               {hasFilters && (
-                <span
-                  className="
-                  w-2
-                  h-2
-                  rounded-full
-                  bg-blue-400
-                "
-                />
+                <span className="w-2 h-2 rounded-full bg-blue-400" />
               )}
             </button>
           </div>
 
-          {/* ADVANCED FILTERS */}
-
           {showFilters && (
-            <div
-              className="
-              grid
-              md:grid-cols-2
-              xl:grid-cols-4
-              gap-4
-              mt-4
-              pt-4
-              border-t
-              border-slate-800
-            "
-            >
+            <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-800">
               <FilterInput
                 label="Data inicial"
                 type="date"
@@ -937,26 +745,11 @@ export default function Proposals() {
                 options={SORT_OPTIONS}
               />
 
-              <div
-                className="
-                flex
-                items-end
-              "
-              >
+              <div className="flex items-end">
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="
-                    w-full
-                    px-4
-                    py-3
-                    rounded-xl
-                    border
-                    border-slate-700
-                    text-slate-300
-                    hover:bg-slate-800
-                    transition
-                  "
+                  className="w-full px-4 py-3 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 transition"
                 >
                   Limpar filtros
                 </button>
@@ -965,20 +758,9 @@ export default function Proposals() {
           )}
         </section>
 
-        {/* ==========================================================
-            RESULT SUMMARY
-        ========================================================== */}
+        {/* RESULT SUMMARY */}
 
-        <div
-          className="
-          flex
-          flex-col
-          sm:flex-row
-          sm:items-center
-          sm:justify-between
-          gap-3
-        "
-        >
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <p className="text-sm text-slate-400">
               {pagination.total
@@ -989,40 +771,20 @@ export default function Proposals() {
             </p>
           </div>
 
-          <div
-            className="
-            flex
-            items-center
-            gap-2
-          "
-          >
+          <div className="flex items-center gap-2">
             <span className="text-xs text-slate-500">Exibir</span>
 
             <select
               value={limit}
               onChange={(event) => {
                 setLimit(Number(event.target.value));
-
                 setPage(1);
               }}
-              className="
-                bg-slate-900
-                border
-                border-slate-700
-                rounded-lg
-                px-3
-                py-2
-                text-sm
-                text-slate-200
-                outline-none
-              "
+              className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none"
             >
               <option value={10}>10</option>
-
               <option value={20}>20</option>
-
               <option value={50}>50</option>
-
               <option value={100}>100</option>
             </select>
 
@@ -1030,9 +792,7 @@ export default function Proposals() {
           </div>
         </div>
 
-        {/* ==========================================================
-            CONTENT
-        ========================================================== */}
+        {/* CONTENT */}
 
         {loading ? (
           <LoadingState />
@@ -1044,19 +804,7 @@ export default function Proposals() {
           />
         ) : (
           <>
-            {/* DESKTOP */}
-
-            <div
-              className="
-              hidden
-              lg:block
-              bg-slate-900
-              border
-              border-slate-800
-              rounded-2xl
-              overflow-hidden
-            "
-            >
+            <div className="hidden lg:block bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
               <ProposalTable
                 proposals={proposals}
                 actionLoading={actionLoading}
@@ -1066,14 +814,7 @@ export default function Proposals() {
               />
             </div>
 
-            {/* MOBILE */}
-
-            <div
-              className="
-              lg:hidden
-              space-y-4
-            "
-            >
+            <div className="lg:hidden space-y-4">
               {proposals.map((proposal) => (
                 <ProposalCard
                   key={getId(proposal)}
@@ -1085,8 +826,6 @@ export default function Proposals() {
                 />
               ))}
             </div>
-
-            {/* PAGINATION */}
 
             <Pagination
               pagination={pagination}
@@ -1108,7 +847,6 @@ export default function Proposals() {
 
 function MetricsGrid({ metrics, loading }) {
   const summary = metrics?.summary || {};
-
   const values = metrics?.values || {};
 
   const cards = [
@@ -1118,49 +856,42 @@ function MetricsGrid({ metrics, loading }) {
       icon: FileText,
       description: 'Todas as propostas',
     },
-
     {
       label: 'Pendentes',
       value: formatNumber(summary.pending),
       icon: Clock3,
       description: 'Aguardando aprovação',
     },
-
     {
       label: 'Aceitas',
       value: formatNumber(summary.accepted),
       icon: CheckCircle2,
       description: 'Propostas aprovadas',
     },
-
     {
       label: 'Rascunhos',
       value: formatNumber(summary.draft),
       icon: Edit3,
       description: 'Ainda não enviadas',
     },
-
     {
       label: 'Valor total',
       value: formatCurrency(values.totalProposalValue),
       icon: DollarSign,
       description: 'Valor das propostas',
     },
-
     {
       label: 'Valor médio',
       value: formatCurrency(values.averageProposalValue),
       icon: BarChart3,
       description: 'Ticket médio',
     },
-
     {
       label: 'Taxa de aprovação',
       value: formatPercent(values.approvalRate),
       icon: TrendingUp,
       description: 'Aprovadas entre enviadas',
     },
-
     {
       label: 'Conversão',
       value: formatPercent(values.conversionRate),
@@ -1170,99 +901,35 @@ function MetricsGrid({ metrics, loading }) {
   ];
 
   return (
-    <div
-      className="
-      grid
-      grid-cols-2
-      lg:grid-cols-4
-      gap-4
-    "
-    >
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       {cards.map((card) => {
         const Icon = card.icon;
 
         return (
           <div
             key={card.label}
-            className="
-                bg-slate-900
-                border
-                border-slate-800
-                rounded-2xl
-                p-4
-                md:p-5
-              "
+            className="bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-5"
           >
-            <div
-              className="
-                flex
-                items-start
-                justify-between
-                gap-3
-              "
-            >
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <p
-                  className="
-                    text-xs
-                    text-slate-500
-                    uppercase
-                    tracking-wide
-                  "
-                >
+                <p className="text-xs text-slate-500 uppercase tracking-wide">
                   {card.label}
                 </p>
 
                 {loading ? (
-                  <div
-                    className="
-                      h-7
-                      w-24
-                      bg-slate-800
-                      rounded-lg
-                      animate-pulse
-                      mt-2
-                    "
-                  ></div>
+                  <div className="h-7 w-24 bg-slate-800 rounded-lg animate-pulse mt-2" />
                 ) : (
-                  <p
-                    className="
-                      text-lg
-                      md:text-xl
-                      font-bold
-                      text-white
-                      mt-1
-                    "
-                  >
+                  <p className="text-lg md:text-xl font-bold text-white mt-1">
                     {card.value}
                   </p>
                 )}
 
-                <p
-                  className="
-                    text-xs
-                    text-slate-500
-                    mt-1
-                  "
-                >
+                <p className="text-xs text-slate-500 mt-1">
                   {card.description}
                 </p>
               </div>
 
-              <div
-                className="
-                  w-10
-                  h-10
-                  rounded-xl
-                  bg-blue-500/10
-                  border
-                  border-blue-500/20
-                  flex
-                  items-center
-                  justify-center
-                  shrink-0
-                "
-              >
+              <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
                 <Icon size={18} className="text-blue-400" />
               </div>
             </div>
@@ -1288,122 +955,31 @@ function ProposalTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table
-        className="
-        w-full
-        min-w-[1100px]
-      "
-      >
+      <table className="w-full min-w-[1100px]">
         <thead>
-          <tr
-            className="
-            border-b
-            border-slate-800
-            text-left
-          "
-          >
-            <th
-              className="
-              px-5
-              py-4
-              text-xs
-              font-semibold
-              text-slate-500
-              uppercase
-            "
-            >
+          <tr className="border-b border-slate-800 text-left">
+            <th className="px-5 py-4 text-xs font-semibold text-slate-500 uppercase">
               Proposta
             </th>
-
-            <th
-              className="
-              px-5
-              py-4
-              text-xs
-              font-semibold
-              text-slate-500
-              uppercase
-            "
-            >
+            <th className="px-5 py-4 text-xs font-semibold text-slate-500 uppercase">
               Cliente
             </th>
-
-            <th
-              className="
-              px-5
-              py-4
-              text-xs
-              font-semibold
-              text-slate-500
-              uppercase
-            "
-            >
+            <th className="px-5 py-4 text-xs font-semibold text-slate-500 uppercase">
               Imóvel
             </th>
-
-            <th
-              className="
-              px-5
-              py-4
-              text-xs
-              font-semibold
-              text-slate-500
-              uppercase
-            "
-            >
+            <th className="px-5 py-4 text-xs font-semibold text-slate-500 uppercase">
               Corretor
             </th>
-
-            <th
-              className="
-              px-5
-              py-4
-              text-xs
-              font-semibold
-              text-slate-500
-              uppercase
-            "
-            >
+            <th className="px-5 py-4 text-xs font-semibold text-slate-500 uppercase">
               Valor
             </th>
-
-            <th
-              className="
-              px-5
-              py-4
-              text-xs
-              font-semibold
-              text-slate-500
-              uppercase
-            "
-            >
+            <th className="px-5 py-4 text-xs font-semibold text-slate-500 uppercase">
               Status
             </th>
-
-            <th
-              className="
-              px-5
-              py-4
-              text-xs
-              font-semibold
-              text-slate-500
-              uppercase
-            "
-            >
+            <th className="px-5 py-4 text-xs font-semibold text-slate-500 uppercase">
               Criada em
             </th>
-
-            <th
-              className="
-              px-5
-              py-4
-              text-xs
-              font-semibold
-              text-slate-500
-              uppercase
-              text-right
-            "
-            >
+            <th className="px-5 py-4 text-xs font-semibold text-slate-500 uppercase text-right">
               Ações
             </th>
           </tr>
@@ -1440,242 +1016,89 @@ function ProposalRow({
   onCancel,
 }) {
   const proposalId = getId(proposal);
-
   const lead = proposal.lead || proposal.leadSnapshot;
-
   const property = proposal.property || proposal.propertySnapshot;
-
   const broker = proposal.broker;
-
   const proposalPrice =
     proposal.values?.proposalPrice || proposal.proposalPrice || 0;
-
   const status = proposal.status || 'draft';
-
   const config = STATUS_CONFIG[status] || STATUS_CONFIG.draft;
 
   const canApprove = status === 'pending';
-
   const canReject = status === 'pending';
-
   const canCancel = ['draft', 'pending'].includes(status);
-
   const canEdit = status === 'draft';
 
   return (
-    <tr
-      className="
-      border-b
-      border-slate-800/80
-      hover:bg-slate-800/30
-      transition
-    "
-    >
-      {/* PROPOSAL */}
-
-      <td
-        className="
-        px-5
-        py-4
-      "
-      >
+    <tr className="border-b border-slate-800/80 hover:bg-slate-800/30 transition">
+      <td className="px-5 py-4">
         <div>
           <Link
             to={`/proposals/${proposalId}`}
-            className="
-              text-sm
-              font-semibold
-              text-white
-              hover:text-blue-400
-              transition
-            "
+            className="text-sm font-semibold text-white hover:text-blue-400 transition"
           >
             Proposta #{String(proposalId).slice(-6)}
           </Link>
-
-          <p
-            className="
-            text-xs
-            text-slate-500
-            mt-1
-          "
-          >
+          <p className="text-xs text-slate-500 mt-1">
             Atualizada {formatDateTime(proposal.updatedAt)}
           </p>
         </div>
       </td>
 
-      {/* CLIENT */}
-
-      <td
-        className="
-        px-5
-        py-4
-      "
-      >
-        <div
-          className="
-          flex
-          items-center
-          gap-3
-        "
-        >
+      <td className="px-5 py-4">
+        <div className="flex items-center gap-3">
           <Avatar name={getName(lead)} />
-
           <div className="min-w-0">
-            <p
-              className="
-              text-sm
-              text-slate-200
-              font-medium
-              truncate
-              max-w-[180px]
-            "
-            >
+            <p className="text-sm text-slate-200 font-medium truncate max-w-[180px]">
               {getName(lead)}
             </p>
-
             {lead?.phone && (
-              <p
-                className="
-                text-xs
-                text-slate-500
-                mt-1
-              "
-              >
-                {lead.phone}
-              </p>
+              <p className="text-xs text-slate-500 mt-1">{lead.phone}</p>
             )}
           </div>
         </div>
       </td>
 
-      {/* PROPERTY */}
-
-      <td
-        className="
-        px-5
-        py-4
-      "
-      >
+      <td className="px-5 py-4">
         <div className="max-w-[210px]">
-          <p
-            className="
-            text-sm
-            text-slate-200
-            font-medium
-            truncate
-          "
-          >
+          <p className="text-sm text-slate-200 font-medium truncate">
             {getName(property, 'Imóvel')}
           </p>
-
           {property?.code && (
-            <p
-              className="
-              text-xs
-              text-slate-500
-              mt-1
-            "
-            >
+            <p className="text-xs text-slate-500 mt-1">
               Código: {property.code}
             </p>
           )}
         </div>
       </td>
 
-      {/* BROKER */}
-
-      <td
-        className="
-        px-5
-        py-4
-      "
-      >
-        <div
-          className="
-          flex
-          items-center
-          gap-2
-        "
-        >
+      <td className="px-5 py-4">
+        <div className="flex items-center gap-2">
           <User size={15} className="text-slate-500" />
-
-          <span
-            className="
-            text-sm
-            text-slate-300
-          "
-          >
+          <span className="text-sm text-slate-300">
             {getName(broker, 'Não atribuído')}
           </span>
         </div>
       </td>
 
-      {/* VALUE */}
-
-      <td
-        className="
-        px-5
-        py-4
-      "
-      >
-        <p
-          className="
-          text-sm
-          font-semibold
-          text-emerald-400
-        "
-        >
+      <td className="px-5 py-4">
+        <p className="text-sm font-semibold text-emerald-400">
           {formatCurrency(proposalPrice)}
         </p>
       </td>
 
-      {/* STATUS */}
-
-      <td
-        className="
-        px-5
-        py-4
-      "
-      >
+      <td className="px-5 py-4">
         <StatusBadge status={status} />
       </td>
 
-      {/* DATE */}
-
-      <td
-        className="
-        px-5
-        py-4
-      "
-      >
-        <p
-          className="
-          text-sm
-          text-slate-300
-        "
-        >
+      <td className="px-5 py-4">
+        <p className="text-sm text-slate-300">
           {formatDate(proposal.createdAt)}
         </p>
       </td>
 
-      {/* ACTIONS */}
-
-      <td
-        className="
-        px-5
-        py-4
-      "
-      >
-        <div
-          className="
-          flex
-          items-center
-          justify-end
-          gap-1
-        "
-        >
+      <td className="px-5 py-4">
+        <div className="flex items-center justify-end gap-1">
           <IconButton
             title="Visualizar"
             to={`/proposals/${proposalId}`}
@@ -1692,14 +1115,11 @@ function ProposalRow({
 
           {canApprove && (
             <ActionButton
-              title="Aprovar"
+              title="Aprovar (gera venda e comissão automaticamente)"
               loading={actionLoading === `approve-${proposalId}`}
               onClick={() => onApprove(proposal)}
-              icon={<Check size={17} />}
-              className="
-                text-emerald-400
-                hover:bg-emerald-500/10
-              "
+              icon={<Zap size={17} />}
+              className="text-emerald-400 hover:bg-emerald-500/10"
             />
           )}
 
@@ -1709,10 +1129,7 @@ function ProposalRow({
               loading={actionLoading === `reject-${proposalId}`}
               onClick={() => onReject(proposal)}
               icon={<X size={17} />}
-              className="
-                text-red-400
-                hover:bg-red-500/10
-              "
+              className="text-red-400 hover:bg-red-500/10"
             />
           )}
 
@@ -1722,27 +1139,13 @@ function ProposalRow({
               loading={actionLoading === `cancel-${proposalId}`}
               onClick={() => onCancel(proposal)}
               icon={<XCircle size={17} />}
-              className="
-                text-orange-400
-                hover:bg-orange-500/10
-              "
+              className="text-orange-400 hover:bg-orange-500/10"
             />
           )}
 
           <Link
             to={`/proposals/${proposalId}`}
-            className="
-              w-9
-              h-9
-              rounded-lg
-              flex
-              items-center
-              justify-center
-              text-slate-500
-              hover:text-white
-              hover:bg-slate-800
-              transition
-            "
+            className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:text-white hover:bg-slate-800 transition"
             title="Detalhes"
           >
             <MoreHorizontal size={18} />
@@ -1767,205 +1170,66 @@ function ProposalCard({
   onCancel,
 }) {
   const proposalId = getId(proposal);
-
   const lead = proposal.lead || proposal.leadSnapshot;
-
   const property = proposal.property || proposal.propertySnapshot;
-
   const proposalPrice =
     proposal.values?.proposalPrice || proposal.proposalPrice || 0;
-
   const status = proposal.status || 'draft';
 
   const canApprove = status === 'pending';
-
   const canReject = status === 'pending';
-
   const canCancel = ['draft', 'pending'].includes(status);
-
   const canEdit = status === 'draft';
 
   return (
-    <div
-      className="
-      bg-slate-900
-      border
-      border-slate-800
-      rounded-2xl
-      p-4
-    "
-    >
-      <div
-        className="
-        flex
-        items-start
-        justify-between
-        gap-3
-      "
-      >
-        <div
-          className="
-          flex
-          items-center
-          gap-3
-          min-w-0
-        "
-        >
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <Avatar name={getName(lead)} />
-
           <div className="min-w-0">
             <Link
               to={`/proposals/${proposalId}`}
-              className="
-                text-sm
-                font-semibold
-                text-white
-                hover:text-blue-400
-              "
+              className="text-sm font-semibold text-white hover:text-blue-400"
             >
               {getName(lead, 'Cliente')}
             </Link>
-
-            <p
-              className="
-              text-xs
-              text-slate-500
-              mt-1
-            "
-            >
+            <p className="text-xs text-slate-500 mt-1">
               Proposta #{String(proposalId).slice(-6)}
             </p>
           </div>
         </div>
-
         <StatusBadge status={status} />
       </div>
 
-      <div
-        className="
-        mt-4
-        p-3
-        rounded-xl
-        bg-slate-950
-        border
-        border-slate-800
-      "
-      >
-        <p
-          className="
-          text-xs
-          text-slate-500
-          uppercase
-        "
-        >
-          Imóvel
-        </p>
-
-        <p
-          className="
-          text-sm
-          text-slate-200
-          font-medium
-          mt-1
-        "
-        >
+      <div className="mt-4 p-3 rounded-xl bg-slate-950 border border-slate-800">
+        <p className="text-xs text-slate-500 uppercase">Imóvel</p>
+        <p className="text-sm text-slate-200 font-medium mt-1">
           {getName(property, 'Imóvel')}
         </p>
-
         {property?.code && (
-          <p
-            className="
-            text-xs
-            text-slate-500
-            mt-1
-          "
-          >
-            Código: {property.code}
-          </p>
+          <p className="text-xs text-slate-500 mt-1">Código: {property.code}</p>
         )}
       </div>
 
-      <div
-        className="
-        grid
-        grid-cols-2
-        gap-4
-        mt-4
-      "
-      >
+      <div className="grid grid-cols-2 gap-4 mt-4">
         <div>
-          <p
-            className="
-            text-xs
-            text-slate-500
-          "
-          >
-            Valor
-          </p>
-
-          <p
-            className="
-            text-sm
-            font-bold
-            text-emerald-400
-            mt-1
-          "
-          >
+          <p className="text-xs text-slate-500">Valor</p>
+          <p className="text-sm font-bold text-emerald-400 mt-1">
             {formatCurrency(proposalPrice)}
           </p>
         </div>
-
         <div>
-          <p
-            className="
-            text-xs
-            text-slate-500
-          "
-          >
-            Criada em
-          </p>
-
-          <p
-            className="
-            text-sm
-            text-slate-300
-            mt-1
-          "
-          >
+          <p className="text-xs text-slate-500">Criada em</p>
+          <p className="text-sm text-slate-300 mt-1">
             {formatDate(proposal.createdAt)}
           </p>
         </div>
       </div>
 
-      <div
-        className="
-        flex
-        flex-wrap
-        gap-2
-        mt-4
-        pt-4
-        border-t
-        border-slate-800
-      "
-      >
+      <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-800">
         <Link
           to={`/proposals/${proposalId}`}
-          className="
-            flex-1
-            min-w-[100px]
-            inline-flex
-            items-center
-            justify-center
-            gap-2
-            px-3
-            py-2.5
-            rounded-xl
-            bg-slate-800
-            text-slate-200
-            text-sm
-            hover:bg-slate-700
-            transition
-          "
+          className="flex-1 min-w-[100px] inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-slate-800 text-slate-200 text-sm hover:bg-slate-700 transition"
         >
           <Eye size={16} />
           Ver
@@ -1974,23 +1238,7 @@ function ProposalCard({
         {canEdit && (
           <Link
             to={`/proposals/${proposalId}/edit`}
-            className="
-              flex-1
-              min-w-[100px]
-              inline-flex
-              items-center
-              justify-center
-              gap-2
-              px-3
-              py-2.5
-              rounded-xl
-              border
-              border-slate-700
-              text-slate-300
-              text-sm
-              hover:bg-slate-800
-              transition
-            "
+            className="flex-1 min-w-[100px] inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-slate-700 text-slate-300 text-sm hover:bg-slate-800 transition"
           >
             <Edit3 size={16} />
             Editar
@@ -1999,18 +1247,11 @@ function ProposalCard({
 
         {canApprove && (
           <ActionButton
-            title="Aprovar"
+            title="Aprovar (gera venda e comissão)"
             loading={actionLoading === `approve-${proposalId}`}
             onClick={() => onApprove(proposal)}
-            icon={<Check size={16} />}
-            className="
-              flex-1
-              min-w-[100px]
-              text-emerald-400
-              border
-              border-emerald-500/20
-              hover:bg-emerald-500/10
-            "
+            icon={<Zap size={16} />}
+            className="flex-1 min-w-[100px] text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/10"
           />
         )}
 
@@ -2020,14 +1261,7 @@ function ProposalCard({
             loading={actionLoading === `reject-${proposalId}`}
             onClick={() => onReject(proposal)}
             icon={<X size={16} />}
-            className="
-              flex-1
-              min-w-[100px]
-              text-red-400
-              border
-              border-red-500/20
-              hover:bg-red-500/10
-            "
+            className="flex-1 min-w-[100px] text-red-400 border border-red-500/20 hover:bg-red-500/10"
           />
         )}
 
@@ -2037,14 +1271,7 @@ function ProposalCard({
             loading={actionLoading === `cancel-${proposalId}`}
             onClick={() => onCancel(proposal)}
             icon={<XCircle size={16} />}
-            className="
-              flex-1
-              min-w-[100px]
-              text-orange-400
-              border
-              border-orange-500/20
-              hover:bg-orange-500/10
-            "
+            className="flex-1 min-w-[100px] text-orange-400 border border-orange-500/20 hover:bg-orange-500/10"
           />
         )}
       </div>
@@ -2063,29 +1290,9 @@ function StatusBadge({ status }) {
 
   return (
     <span
-      className={`
-      inline-flex
-      items-center
-      gap-1.5
-      px-2.5
-      py-1.5
-      rounded-lg
-      border
-      text-xs
-      font-medium
-      whitespace-nowrap
-      ${config.className}
-    `}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium whitespace-nowrap ${config.className}`}
     >
-      <span
-        className="
-        w-1.5
-        h-1.5
-        rounded-full
-        bg-current
-      "
-      />
-
+      <span className="w-1.5 h-1.5 rounded-full bg-current" />
       {config.label}
     </span>
   );
@@ -2107,29 +1314,8 @@ function Avatar({ name }) {
     .toUpperCase();
 
   return (
-    <div
-      className="
-      w-9
-      h-9
-      rounded-xl
-      bg-blue-500/10
-      border
-      border-blue-500/20
-      flex
-      items-center
-      justify-center
-      shrink-0
-    "
-    >
-      <span
-        className="
-        text-xs
-        font-bold
-        text-blue-300
-      "
-      >
-        {initials}
-      </span>
+    <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+      <span className="text-xs font-bold text-blue-300">{initials}</span>
     </div>
   );
 }
@@ -2147,18 +1333,7 @@ function ActionButton({ title, icon, loading, onClick, className = '' }) {
       title={title}
       onClick={onClick}
       disabled={loading}
-      className={`
-        w-9
-        h-9
-        rounded-lg
-        inline-flex
-        items-center
-        justify-center
-        transition
-        disabled:opacity-50
-        disabled:cursor-not-allowed
-        ${className}
-      `}
+      className={`w-9 h-9 rounded-lg inline-flex items-center justify-center transition disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
     >
       {loading ? <Loader2 size={16} className="animate-spin" /> : icon}
     </button>
@@ -2176,18 +1351,7 @@ function IconButton({ title, icon, to }) {
     <Link
       to={to}
       title={title}
-      className="
-        w-9
-        h-9
-        rounded-lg
-        inline-flex
-        items-center
-        justify-center
-        text-slate-400
-        hover:text-white
-        hover:bg-slate-800
-        transition
-      "
+      className="w-9 h-9 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition"
     >
       {icon}
     </Link>
@@ -2203,34 +1367,13 @@ function IconButton({ title, icon, to }) {
 function FilterInput({ label, type = 'text', value, onChange, options = [] }) {
   return (
     <div>
-      <label
-        className="
-        block
-        text-xs
-        text-slate-500
-        mb-2
-      "
-      >
-        {label}
-      </label>
+      <label className="block text-xs text-slate-500 mb-2">{label}</label>
 
       {type === 'select' ? (
         <select
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="
-            w-full
-            bg-slate-950
-            border
-            border-slate-700
-            rounded-xl
-            px-4
-            py-3
-            text-sm
-            text-white
-            outline-none
-            focus:border-blue-500
-          "
+          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
         >
           {options.map((option) => (
             <option key={option.value} value={option.value}>
@@ -2242,33 +1385,14 @@ function FilterInput({ label, type = 'text', value, onChange, options = [] }) {
         <div className="relative">
           <CalendarDays
             size={16}
-            className="
-              absolute
-              left-4
-              top-1/2
-              -translate-y-1/2
-              text-slate-500
-            "
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
           />
 
           <input
             type={type}
             value={value}
             onChange={(event) => onChange(event.target.value)}
-            className="
-              w-full
-              bg-slate-950
-              border
-              border-slate-700
-              rounded-xl
-              pl-11
-              pr-4
-              py-3
-              text-sm
-              text-white
-              outline-none
-              focus:border-blue-500
-            "
+            className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-11 pr-4 py-3 text-sm text-white outline-none focus:border-blue-500"
           />
         </div>
       )}
@@ -2288,54 +1412,18 @@ function Pagination({ pagination, pageNumbers, onPageChange }) {
   }
 
   return (
-    <div
-      className="
-      flex
-      flex-col
-      sm:flex-row
-      sm:items-center
-      sm:justify-between
-      gap-4
-      pt-2
-    "
-    >
-      <p
-        className="
-        text-sm
-        text-slate-500
-      "
-      >
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-2">
+      <p className="text-sm text-slate-500">
         Página <span className="text-slate-300">{pagination.page}</span> de{' '}
         <span className="text-slate-300">{pagination.pages}</span>
       </p>
 
-      <div
-        className="
-        flex
-        items-center
-        gap-1
-      "
-      >
+      <div className="flex items-center gap-1">
         <button
           type="button"
           disabled={!pagination.hasPreviousPage}
           onClick={() => onPageChange(pagination.page - 1)}
-          className="
-            w-9
-            h-9
-            rounded-lg
-            border
-            border-slate-700
-            flex
-            items-center
-            justify-center
-            text-slate-400
-            hover:bg-slate-800
-            hover:text-white
-            disabled:opacity-30
-            disabled:cursor-not-allowed
-            transition
-          "
+          className="w-9 h-9 rounded-lg border border-slate-700 flex items-center justify-center text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition"
         >
           <ChevronLeft size={17} />
         </button>
@@ -2345,19 +1433,11 @@ function Pagination({ pagination, pageNumbers, onPageChange }) {
             key={number}
             type="button"
             onClick={() => onPageChange(number)}
-            className={`
-                w-9
-                h-9
-                rounded-lg
-                text-sm
-                font-medium
-                transition
-                ${
-                  number === pagination.page
-                    ? 'bg-blue-600 text-white'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                }
-              `}
+            className={`w-9 h-9 rounded-lg text-sm font-medium transition ${
+              number === pagination.page
+                ? 'bg-blue-600 text-white'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+            }`}
           >
             {number}
           </button>
@@ -2367,22 +1447,7 @@ function Pagination({ pagination, pageNumbers, onPageChange }) {
           type="button"
           disabled={!pagination.hasNextPage}
           onClick={() => onPageChange(pagination.page + 1)}
-          className="
-            w-9
-            h-9
-            rounded-lg
-            border
-            border-slate-700
-            flex
-            items-center
-            justify-center
-            text-slate-400
-            hover:bg-slate-800
-            hover:text-white
-            disabled:opacity-30
-            disabled:cursor-not-allowed
-            transition
-          "
+          className="w-9 h-9 rounded-lg border border-slate-700 flex items-center justify-center text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition"
         >
           <ChevronRight size={17} />
         </button>
@@ -2399,36 +1464,9 @@ function Pagination({ pagination, pageNumbers, onPageChange }) {
 
 function LoadingState() {
   return (
-    <div
-      className="
-      bg-slate-900
-      border
-      border-slate-800
-      rounded-2xl
-      p-16
-      flex
-      flex-col
-      items-center
-      justify-center
-      gap-4
-    "
-    >
-      <Loader2
-        size={32}
-        className="
-          animate-spin
-          text-blue-500
-        "
-      />
-
-      <p
-        className="
-        text-sm
-        text-slate-500
-      "
-      >
-        Carregando propostas...
-      </p>
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-16 flex flex-col items-center justify-center gap-4">
+      <Loader2 size={32} className="animate-spin text-blue-500" />
+      <p className="text-sm text-slate-500">Carregando propostas...</p>
     </div>
   );
 }
@@ -2441,82 +1479,27 @@ function LoadingState() {
 
 function EmptyState({ hasFilters, onClear, onCreate }) {
   return (
-    <div
-      className="
-      bg-slate-900
-      border
-      border-slate-800
-      rounded-2xl
-      p-12
-      md:p-16
-      flex
-      flex-col
-      items-center
-      justify-center
-      text-center
-    "
-    >
-      <div
-        className="
-        w-16
-        h-16
-        rounded-2xl
-        bg-slate-800
-        flex
-        items-center
-        justify-center
-      "
-      >
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 md:p-16 flex flex-col items-center justify-center text-center">
+      <div className="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center">
         <FileText size={28} className="text-slate-500" />
       </div>
 
-      <h3
-        className="
-        text-lg
-        font-semibold
-        text-white
-        mt-5
-      "
-      >
+      <h3 className="text-lg font-semibold text-white mt-5">
         Nenhuma proposta encontrada
       </h3>
 
-      <p
-        className="
-        text-sm
-        text-slate-500
-        max-w-md
-        mt-2
-      "
-      >
+      <p className="text-sm text-slate-500 max-w-md mt-2">
         {hasFilters
           ? 'Tente ajustar ou limpar os filtros para encontrar outras propostas.'
           : 'Ainda não existem propostas cadastradas.'}
       </p>
 
-      <div
-        className="
-        flex
-        flex-wrap
-        justify-center
-        gap-3
-        mt-6
-      "
-      >
+      <div className="flex flex-wrap justify-center gap-3 mt-6">
         {hasFilters && (
           <button
             type="button"
             onClick={onClear}
-            className="
-              px-4
-              py-2.5
-              rounded-xl
-              border
-              border-slate-700
-              text-slate-300
-              hover:bg-slate-800
-              transition
-            "
+            className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 transition"
           >
             Limpar filtros
           </button>
@@ -2525,19 +1508,7 @@ function EmptyState({ hasFilters, onClear, onCreate }) {
         <button
           type="button"
           onClick={onCreate}
-          className="
-            inline-flex
-            items-center
-            gap-2
-            px-5
-            py-2.5
-            rounded-xl
-            bg-blue-600
-            hover:bg-blue-500
-            text-white
-            font-medium
-            transition
-          "
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium transition"
         >
           <Plus size={17} />
           Nova proposta
@@ -2558,19 +1529,11 @@ function AlertBox({ type = 'error', message, onClose }) {
 
   return (
     <div
-      className={`
-      flex
-      items-start
-      gap-3
-      rounded-xl
-      border
-      p-4
-      ${
+      className={`flex items-start gap-3 rounded-xl border p-4 ${
         isError
           ? 'bg-red-500/10 border-red-500/20 text-red-300'
           : 'bg-blue-500/10 border-blue-500/20 text-blue-300'
-      }
-    `}
+      }`}
     >
       {isError ? (
         <AlertCircle size={20} className="shrink-0 mt-0.5" />
@@ -2584,11 +1547,7 @@ function AlertBox({ type = 'error', message, onClose }) {
         <button
           type="button"
           onClick={onClose}
-          className="
-            text-current
-            opacity-60
-            hover:opacity-100
-          "
+          className="text-current opacity-60 hover:opacity-100"
         >
           <X size={17} />
         </button>

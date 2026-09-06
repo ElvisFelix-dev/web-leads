@@ -1,3 +1,4 @@
+// src/pages/OpportunityDetails.jsx
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
@@ -28,6 +29,7 @@ import {
   AlertCircle,
   Send,
   Plus,
+  FileText,
 } from 'lucide-react';
 
 import { useNavigate, useParams } from 'react-router-dom';
@@ -274,6 +276,30 @@ export default function OpportunityDetails() {
 
   const handleRefresh = () => {
     fetchOpportunity(true);
+  };
+
+  /**
+   * =======================================================
+   * 🔥 NOVO: CRIAR PROPOSTA
+   * =======================================================
+   */
+
+  const handleCreateProposal = () => {
+    const params = new URLSearchParams();
+
+    if (opportunity?.lead?._id) {
+      params.set('lead', opportunity.lead._id);
+    }
+
+    if (opportunity?._id) {
+      params.set('opportunity', opportunity._id);
+    }
+
+    if (opportunity?.property?._id) {
+      params.set('property', opportunity.property._id);
+    }
+
+    navigate(`/proposals/create?${params.toString()}`);
   };
 
   const handleOpenStageModal = () => {
@@ -536,7 +562,20 @@ export default function OpportunityDetails() {
                 </div>
               </div>
 
-              <div className="shrink-0">
+              {/* ================================================= */}
+              {/* 🔥 AÇÕES - COM BOTÃO CRIAR PROPOSTA */}
+              {/* ================================================= */}
+
+              <div className="shrink-0 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleCreateProposal}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
+                >
+                  <FileText className="h-4 w-4" />
+                  Criar Proposta
+                </button>
+
                 <button
                   type="button"
                   onClick={handleOpenStageModal}

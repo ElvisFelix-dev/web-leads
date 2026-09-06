@@ -6,7 +6,7 @@ import Footer from '../../components/site/Footer';
 import HeroSearch from '../../components/site/HeroSearch';
 import FeaturedProperties from '../../components/site/FeaturedProperties';
 import PersonalizedService from '../../components/site/PersonalizedService';
-import CitiesSection from '../../components/site/CitiesSection';
+
 import FinalCTA from '../../components/site/FinalCTA';
 
 import { getProperties } from '../../service/propertyApi';

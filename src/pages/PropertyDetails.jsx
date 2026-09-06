@@ -1,3 +1,4 @@
+// src/pages/PropertyDetails.jsx
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -19,9 +20,15 @@ import {
   Sparkles,
   Users,
   X,
+  Home,
+  Eye,
+  Phone,
+  FileText,
+  Clock,
 } from 'lucide-react';
 
 import api from '../service/api';
+import { toast } from 'react-toastify';
 
 /* ============================================================
    HELPERS
@@ -328,6 +335,8 @@ function formatStatus(status) {
     disponivel: 'Disponível',
     vendido: 'Vendido',
     sold: 'Vendido',
+    reserved: 'Reservado',
+    reservado: 'Reservado',
     rented: 'Alugado',
     alugado: 'Alugado',
     inactive: 'Inativo',
@@ -405,13 +414,33 @@ function getFeatures(property) {
 }
 
 /* ============================================================
+   VERIFICAR SE IMÓVEL ESTÁ VENDIDO
+============================================================ */
+
+function isPropertySold(property) {
+  const status = property?.status?.toLowerCase() || '';
+  return status === 'vendido' || status === 'sold';
+}
+
+function isPropertyReserved(property) {
+  const status = property?.status?.toLowerCase() || '';
+  return status === 'reservado' || status === 'reserved';
+}
+
+function isPropertyAvailable(property) {
+  const status = property?.status?.toLowerCase() || '';
+  return (
+    status === 'disponivel' || status === 'available' || status === 'active'
+  );
+}
+
+/* ============================================================
    COMPONENTE
 ============================================================ */
 
 export default function PropertyDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [visits, setVisits] = useState([]);
 
   const [property, setProperty] = useState(null);
 
@@ -438,10 +467,6 @@ export default function PropertyDetails() {
     phone: '',
     message: '',
   });
-
-  const visitsScheduled = visits.filter(
-    (visit) => visit.status === 'agendada' || visit.status === 'confirmada',
-  ).length;
 
   /* ==========================================================
      BUSCAR IMÓVEL
@@ -470,6 +495,11 @@ export default function PropertyDetails() {
 
         setProperty(data);
         setActiveImage(0);
+
+        // 🔥 VERIFICAR SE O IMÓVEL JÁ ESTÁ FAVORITADO
+        if (isPropertyAvailable(data) || isPropertyReserved(data)) {
+          await checkFavoriteStatus(data._id || id);
+        }
       } catch (err) {
         console.error('Erro ao buscar imóvel:', err);
 
@@ -494,6 +524,27 @@ export default function PropertyDetails() {
   }, [id]);
 
   /* ==========================================================
+     VERIFICAR FAVORITO
+  ========================================================== */
+
+  async function checkFavoriteStatus(propertyId) {
+    try {
+      const response = await api.get(
+        `/api/property-favorite/${propertyId}/check`,
+      );
+
+      const data = response.data?.data || response.data;
+
+      setFavorite(Boolean(data?.isFavorite ?? data?.favorite ?? false));
+    } catch (err) {
+      console.warn(
+        'Não foi possível verificar favorito:',
+        err.response?.data || err.message,
+      );
+    }
+  }
+
+  /* ==========================================================
      IMAGENS
   ========================================================== */
 
@@ -505,11 +556,21 @@ export default function PropertyDetails() {
   const currentImage = images[activeImage] || fallbackImage;
 
   /* ==========================================================
-     REGISTRAR VISUALIZAÇÃO
+     STATUS DO IMÓVEL
+  ========================================================== */
+
+  const isSold = useMemo(() => isPropertySold(property), [property]);
+  const isReserved = useMemo(() => isPropertyReserved(property), [property]);
+  const isAvailable = useMemo(() => isPropertyAvailable(property), [property]);
+
+  const canContact = isAvailable || isReserved;
+
+  /* ==========================================================
+     REGISTRAR VISUALIZAÇÃO 🔥 CORRIGIDO
   ========================================================== */
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !isAvailable) return;
 
     async function registerPropertyView() {
       try {
@@ -519,10 +580,26 @@ export default function PropertyDetails() {
 
         sessionStorage.setItem('propertySessionId', sessionId);
 
-        await api.post(`/api/property-views/${id}/register`, {
+        // 🔥 USAR A ROTA CORRETA
+        await api.post(`/api/properties/${id}/increment-view`, {
           source: 'crm',
           sessionId,
           referrer: document.referrer || '',
+        });
+
+        // 🔥 ATUALIZAR O ESTADO LOCAL
+        setProperty((current) => {
+          if (!current) return current;
+
+          const currentViews = Number(current.statistics?.views) || 0;
+
+          return {
+            ...current,
+            statistics: {
+              ...(current.statistics || {}),
+              views: currentViews + 1,
+            },
+          };
         });
       } catch (err) {
         console.warn(
@@ -533,72 +610,39 @@ export default function PropertyDetails() {
     }
 
     registerPropertyView();
-  }, [id]);
+  }, [id, isAvailable]);
 
   /* ==========================================================
-     FAVORITO
+     FAVORITO 🔥 CORRIGIDO
   ========================================================== */
 
-  useEffect(() => {
-    if (!id) return;
-
-    async function checkFavorite() {
-      try {
-        const response = await api.get(`/api/property-favorite/${id}/check`);
-
-        const data = response.data?.data || response.data;
-
-        setFavorite(Boolean(data?.isFavorite ?? data?.favorite ?? false));
-      } catch (err) {
-        console.warn(
-          'Não foi possível verificar favorito:',
-          err.response?.data || err.message,
-        );
-      }
-    }
-
-    checkFavorite();
-  }, [id]);
-
   async function handleFavorite() {
-    if (!id || favoriteLoading) return;
+    if (!id || favoriteLoading || isSold) return;
 
     try {
       setFavoriteLoading(true);
 
-      const response = await api.post(`/api/property-favorite/${id}/toggle`);
+      // 🔥 USAR A ROTA CORRETA
+      const response = await api.post(
+        `/api/properties/${id}/increment-favorite`,
+      );
 
       const data = response.data?.data || response.data;
 
-      let isNowFavorite;
+      // 🔥 ATUALIZAR O ESTADO LOCAL
+      setFavorite((prev) => !prev);
 
-      if (typeof data?.isFavorite === 'boolean') {
-        isNowFavorite = data.isFavorite;
-
-        setFavorite(data.isFavorite);
-      } else if (typeof data?.favorite === 'boolean') {
-        isNowFavorite = data.favorite;
-
-        setFavorite(data.favorite);
-      } else {
-        isNowFavorite = !favorite;
-        setFavorite((previous) => !previous);
-      }
-
+      // 🔥 ATUALIZAR AS ESTATÍSTICAS DO IMÓVEL
       setProperty((current) => {
         if (!current) return current;
 
         const currentFavorites = Number(current.statistics?.favorites) || 0;
 
-        const nextFavorites = isNowFavorite
-          ? currentFavorites + 1
-          : Math.max(0, currentFavorites - 1);
-
         return {
           ...current,
           statistics: {
             ...(current.statistics || {}),
-            favorites: nextFavorites,
+            favorites: currentFavorites + 1,
           },
         };
       });
@@ -607,6 +651,54 @@ export default function PropertyDetails() {
         'Erro ao alterar favorito:',
         err.response?.data || err.message,
       );
+
+      // 🔥 TENTAR USAR A ROTA ANTIGA SE A NOVA FALHAR
+      try {
+        const response = await api.post(`/api/property-favorite/${id}/toggle`);
+        const data = response.data?.data || response.data;
+
+        let isNowFavorite;
+
+        if (typeof data?.isFavorite === 'boolean') {
+          isNowFavorite = data.isFavorite;
+        } else if (typeof data?.favorite === 'boolean') {
+          isNowFavorite = data.favorite;
+        } else {
+          isNowFavorite = !favorite;
+        }
+
+        setFavorite(isNowFavorite);
+
+        setProperty((current) => {
+          if (!current) return current;
+
+          const currentFavorites = Number(current.statistics?.favorites) || 0;
+
+          const nextFavorites = isNowFavorite
+            ? currentFavorites + 1
+            : Math.max(0, currentFavorites - 1);
+
+          return {
+            ...current,
+            statistics: {
+              ...(current.statistics || {}),
+              favorites: nextFavorites,
+            },
+          };
+        });
+
+        toast.success(
+          isNowFavorite
+            ? 'Imóvel adicionado aos favoritos!'
+            : 'Imóvel removido dos favoritos!',
+        );
+      } catch (fallbackErr) {
+        console.error(
+          'Erro no fallback do favorito:',
+          fallbackErr.response?.data || fallbackErr.message,
+        );
+        toast.error('Erro ao alterar favorito. Tente novamente.');
+      }
     } finally {
       setFavoriteLoading(false);
     }
@@ -678,11 +770,12 @@ export default function PropertyDetails() {
   async function handleContactSubmit(event) {
     event.preventDefault();
 
-    if (!id) return;
+    if (!id || isSold) return;
 
     try {
       setContactLoading(true);
 
+      // 🔥 REGISTRAR O CONTATO
       const response = await api.post(`/api/lead-capture/property/${id}`, {
         name: form.name,
         email: form.email,
@@ -697,26 +790,38 @@ export default function PropertyDetails() {
 
       console.log('LEAD CAPTURADO:', response.data);
 
+      // 🔥 INCREMENTAR CONTATO NO IMÓVEL
+      try {
+        await api.post(`/api/properties/${id}/increment-contact`);
+      } catch (incErr) {
+        console.warn('Erro ao incrementar contato:', incErr);
+      }
+
       setContactSuccess(true);
 
+      // 🔥 ATUALIZAR ESTADO LOCAL
       setProperty((current) => {
         if (!current) return current;
+
+        const currentContacts = Number(current.statistics?.contacts) || 0;
 
         return {
           ...current,
           statistics: {
             ...(current.statistics || {}),
-            contacts: (Number(current.statistics?.contacts) || 0) + 1,
+            contacts: currentContacts + 1,
           },
         };
       });
+
+      toast.success('Solicitação enviada com sucesso!');
     } catch (err) {
       console.error(
         'Erro ao enviar contato:',
         err.response?.data || err.message,
       );
 
-      alert(
+      toast.error(
         err.response?.data?.message ||
           'Não foi possível enviar sua solicitação. Tente novamente.',
       );
@@ -942,26 +1047,64 @@ export default function PropertyDetails() {
               <Share2 className="h-4 w-4" />
             </button>
 
-            <button
-              type="button"
-              onClick={handleFavorite}
-              disabled={favoriteLoading}
-              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition ${
-                favorite
-                  ? 'border-red-500/30 bg-red-500/10 text-red-400'
-                  : 'border-white/10 bg-gray-900 text-gray-300 hover:border-white/20 hover:bg-gray-800 hover:text-white'
-              }`}
-              aria-label={
-                favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'
-              }
-            >
-              <Heart className={`h-5 w-5 ${favorite ? 'fill-current' : ''}`} />
-            </button>
+            {!isSold && (
+              <button
+                type="button"
+                onClick={handleFavorite}
+                disabled={favoriteLoading}
+                className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition ${
+                  favorite
+                    ? 'border-red-500/30 bg-red-500/10 text-red-400'
+                    : 'border-white/10 bg-gray-900 text-gray-300 hover:border-white/20 hover:bg-gray-800 hover:text-white'
+                }`}
+                aria-label={
+                  favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'
+                }
+              >
+                <Heart
+                  className={`h-5 w-5 ${favorite ? 'fill-current' : ''}`}
+                />
+              </button>
+            )}
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-4 pb-32 pt-6 md:px-6 md:pb-16 md:pt-8">
+        {/* ====================================================
+            BANNER DE IMÓVEL VENDIDO
+        ==================================================== */}
+
+        {isSold && (
+          <div className="mb-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 md:p-5">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20">
+                <Check className="h-5 w-5 text-emerald-400" />
+              </div>
+
+              <div>
+                <p className="text-sm font-bold text-emerald-400">
+                  Imóvel vendido
+                </p>
+
+                <p className="mt-1 text-sm text-gray-400">
+                  Este imóvel já foi comercializado e não está mais disponível.
+                  Conheça outros imóveis em nossa plataforma.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => navigate('/imoveis')}
+                  className="mt-3 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+                >
+                  <Home className="h-4 w-4" />
+                  Ver outros imóveis
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ====================================================
             GALERIA
         ==================================================== */}
@@ -992,7 +1135,13 @@ export default function PropertyDetails() {
                 )}
 
                 {status && (
-                  <span className="rounded-full border border-emerald-400/20 bg-emerald-500/90 px-3 py-1.5 text-xs font-semibold text-white">
+                  <span
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-md ${
+                      isSold
+                        ? 'border-emerald-400/20 bg-emerald-500/90'
+                        : 'border-emerald-400/20 bg-emerald-500/90'
+                    }`}
+                  >
                     {status}
                   </span>
                 )}
@@ -1128,7 +1277,13 @@ export default function PropertyDetails() {
                 )}
 
                 {status && (
-                  <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400">
+                  <span
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                      isSold
+                        ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-400'
+                        : 'border-emerald-400/20 bg-emerald-500/10 text-emerald-400'
+                    }`}
+                  >
                     {status}
                   </span>
                 )}
@@ -1188,7 +1343,7 @@ export default function PropertyDetails() {
                 <div className="mt-5 flex flex-wrap items-center gap-3">
                   <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-gray-900 px-3.5 py-2 text-xs font-medium text-gray-500">
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-800">
-                      <Users className="h-3.5 w-3.5 text-gray-400" />
+                      <Eye className="h-3.5 w-3.5 text-gray-400" />
                     </span>
 
                     <span>
@@ -1209,18 +1364,32 @@ export default function PropertyDetails() {
                 </div>
               )}
 
+              {/* ==================================================
+                  PREÇO
+              ================================================== */}
+
               <div className="mt-8">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-                  {isForRent ? 'Aluguel' : 'Venda'}
+                  {isSold ? 'Valor de venda' : isForRent ? 'Aluguel' : 'Venda'}
                 </p>
 
                 <div className="mt-1 flex flex-wrap items-end gap-3">
-                  <p className="text-3xl font-bold tracking-tight text-white md:text-4xl">
+                  <p
+                    className={`text-3xl font-bold tracking-tight md:text-4xl ${
+                      isSold ? 'text-gray-500' : 'text-white'
+                    }`}
+                  >
                     {formatCurrency(displayPrice)}
                   </p>
 
                   {isForRent && (
                     <span className="mb-1 text-sm text-gray-500">/ mês</span>
+                  )}
+
+                  {isSold && (
+                    <span className="mb-1 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
+                      Vendido
+                    </span>
                   )}
                 </div>
 
@@ -1275,7 +1444,7 @@ export default function PropertyDetails() {
               )}
 
               {/* ==================================================
-                  DESEMPENHO
+                  DESEMPENHO 🔥 ATUALIZADO
               ================================================== */}
 
               <section className="mt-8">
@@ -1299,7 +1468,7 @@ export default function PropertyDetails() {
                   <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <div className="rounded-2xl bg-gray-800 p-4">
                       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-900">
-                        <Users className="h-4 w-4 text-blue-400" />
+                        <Eye className="h-4 w-4 text-blue-400" />
                       </div>
 
                       <p className="mt-3 text-xl font-bold text-white">
@@ -1325,7 +1494,7 @@ export default function PropertyDetails() {
 
                     <div className="rounded-2xl bg-gray-800 p-4">
                       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-900">
-                        <MessageCircle className="h-4 w-4 text-blue-400" />
+                        <Phone className="h-4 w-4 text-blue-400" />
                       </div>
 
                       <p className="mt-3 text-xl font-bold text-white">
@@ -1337,11 +1506,11 @@ export default function PropertyDetails() {
 
                     <div className="rounded-2xl bg-gray-800 p-4">
                       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-900">
-                        <CalendarDays className="h-4 w-4 text-purple-400" />
+                        <Clock className="h-4 w-4 text-purple-400" />
                       </div>
 
                       <p className="mt-3 text-xl font-bold text-white">
-                        {visitsScheduled}
+                        {statistics.visitsScheduled || 0}
                       </p>
 
                       <p className="mt-1 text-xs text-gray-500">Visitas</p>
@@ -1368,21 +1537,36 @@ export default function PropertyDetails() {
             ================================================== */}
 
             <aside className="hidden lg:block">
-              <div className="sticky top-24 rounded-3xl border border-white/10 bg-gray-900 p-6 shadow-2xl">
+              <div
+                className={`sticky top-24 rounded-3xl border p-6 shadow-2xl ${
+                  isSold
+                    ? 'border-emerald-500/20 bg-gray-900/50'
+                    : 'border-white/10 bg-gray-900'
+                }`}
+              >
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-lg font-bold text-white">
-                      Gostou deste imóvel?
+                      {isSold ? 'Imóvel vendido' : 'Gostou deste imóvel?'}
                     </p>
 
                     <p className="mt-1 text-sm leading-6 text-gray-500">
-                      Fale com um especialista e receba mais informações sobre
-                      este imóvel.
+                      {isSold
+                        ? 'Este imóvel já foi comercializado. Conheça outros imóveis disponíveis.'
+                        : 'Fale com um especialista e receba mais informações sobre este imóvel.'}
                     </p>
                   </div>
 
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-500/10">
-                    <MessageCircle className="h-5 w-5 text-blue-400" />
+                  <div
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                      isSold ? 'bg-emerald-500/10' : 'bg-blue-500/10'
+                    }`}
+                  >
+                    {isSold ? (
+                      <Check className="h-5 w-5 text-emerald-400" />
+                    ) : (
+                      <MessageCircle className="h-5 w-5 text-blue-400" />
+                    )}
                   </div>
                 </div>
 
@@ -1391,23 +1575,42 @@ export default function PropertyDetails() {
                     {isForRent ? 'Aluguel' : 'Valor do imóvel'}
                   </p>
 
-                  <p className="mt-1 text-xl font-bold text-white">
+                  <p
+                    className={`mt-1 text-xl font-bold ${
+                      isSold ? 'text-gray-500' : 'text-white'
+                    }`}
+                  >
                     {formatCurrency(displayPrice)}
                   </p>
 
                   {isForRent && (
                     <p className="mt-0.5 text-xs text-gray-500">por mês</p>
                   )}
+
+                  {isSold && (
+                    <p className="mt-1 text-xs text-emerald-400">Vendido</p>
+                  )}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setShowContactModal(true)}
-                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-blue-500 active:scale-[0.99]"
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  Tenho interesse
-                </button>
+                {isSold ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/imoveis')}
+                    className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-emerald-500 active:scale-[0.99]"
+                  >
+                    <Home className="h-4 w-4" />
+                    Ver outros imóveis
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowContactModal(true)}
+                    className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-blue-500 active:scale-[0.99]"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    Tenho interesse
+                  </button>
+                )}
 
                 <div className="mt-6 space-y-3 border-t border-white/10 pt-5">
                   <div className="flex items-center gap-3 text-sm text-gray-400">
@@ -1664,31 +1867,55 @@ export default function PropertyDetails() {
             CTA FINAL
         ==================================================== */}
 
-        <section className="mt-12 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-blue-600/20 via-gray-900 to-gray-950 px-6 py-10 text-white md:px-10 md:py-12">
+        <section
+          className={`mt-12 overflow-hidden rounded-3xl border px-6 py-10 text-white md:px-10 md:py-12 ${
+            isSold
+              ? 'border-emerald-500/20 bg-gradient-to-br from-emerald-600/20 via-gray-900 to-gray-950'
+              : 'border-white/10 bg-gradient-to-br from-blue-600/20 via-gray-900 to-gray-950'
+          }`}
+        >
           <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
             <div className="max-w-2xl">
               <div className="flex items-center gap-2 text-sm font-medium text-blue-400">
                 <Sparkles className="h-4 w-4" />
-                Atendimento personalizado
+                {isSold ? 'Imóvel comercializado' : 'Atendimento personalizado'}
               </div>
 
               <h2 className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">
-                Quer saber mais sobre este imóvel?
+                {isSold
+                  ? 'Este imóvel já foi vendido'
+                  : 'Quer saber mais sobre este imóvel?'}
               </h2>
 
               <p className="mt-3 max-w-xl text-sm leading-6 text-gray-400">
-                Envie seus dados e nossa equipe entrará em contato para ajudar
-                você a conhecer melhor esta oportunidade.
+                {isSold
+                  ? 'Conheça outros imóveis disponíveis em nossa plataforma. Temos diversas opções para você.'
+                  : 'Envie seus dados e nossa equipe entrará em contato para ajudar você a conhecer melhor esta oportunidade.'}
               </p>
             </div>
 
             <button
               type="button"
-              onClick={() => setShowContactModal(true)}
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-bold text-white transition hover:bg-blue-500 active:scale-[0.99]"
+              onClick={() =>
+                isSold ? navigate('/properties') : setShowContactModal(true)
+              }
+              className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-bold text-white transition active:scale-[0.99] ${
+                isSold
+                  ? 'bg-emerald-600 hover:bg-emerald-500'
+                  : 'bg-blue-600 hover:bg-blue-500'
+              }`}
             >
-              Tenho interesse
-              <ArrowRight className="h-4 w-4" />
+              {isSold ? (
+                <>
+                  <Home className="h-4 w-4" />
+                  Ver outros imóveis
+                </>
+              ) : (
+                <>
+                  Tenho interesse
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
             </button>
           </div>
         </section>
@@ -1698,32 +1925,49 @@ export default function PropertyDetails() {
           MOBILE CTA
       ====================================================== */}
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-gray-950/95 p-3 shadow-[0_-8px_30px_rgba(0,0,0,0.4)] backdrop-blur-xl lg:hidden">
-        <div className="mx-auto flex max-w-7xl items-center gap-3">
-          <button
-            type="button"
-            onClick={handleFavorite}
-            disabled={favoriteLoading}
-            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border transition ${
-              favorite
-                ? 'border-red-500/30 bg-red-500/10 text-red-400'
-                : 'border-white/10 bg-gray-900 text-gray-300'
-            }`}
-            aria-label="Favoritar imóvel"
-          >
-            <Heart className={`h-5 w-5 ${favorite ? 'fill-current' : ''}`} />
-          </button>
+      {!isSold && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-gray-950/95 p-3 shadow-[0_-8px_30px_rgba(0,0,0,0.4)] backdrop-blur-xl lg:hidden">
+          <div className="mx-auto flex max-w-7xl items-center gap-3">
+            <button
+              type="button"
+              onClick={handleFavorite}
+              disabled={favoriteLoading}
+              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border transition ${
+                favorite
+                  ? 'border-red-500/30 bg-red-500/10 text-red-400'
+                  : 'border-white/10 bg-gray-900 text-gray-300'
+              }`}
+              aria-label="Favoritar imóvel"
+            >
+              <Heart className={`h-5 w-5 ${favorite ? 'fill-current' : ''}`} />
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setShowContactModal(true)}
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 text-sm font-semibold text-white transition hover:bg-blue-500"
-          >
-            <MessageCircle className="h-4 w-4" />
-            Tenho interesse
-          </button>
+            <button
+              type="button"
+              onClick={() => setShowContactModal(true)}
+              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 text-sm font-semibold text-white transition hover:bg-blue-500"
+            >
+              <MessageCircle className="h-4 w-4" />
+              Tenho interesse
+            </button>
+          </div>
         </div>
-      </div>
+      )}
+
+      {isSold && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-emerald-500/20 bg-gray-950/95 p-3 shadow-[0_-8px_30px_rgba(0,0,0,0.4)] backdrop-blur-xl lg:hidden">
+          <div className="mx-auto flex max-w-7xl items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/properties')}
+              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-semibold text-white transition hover:bg-emerald-500"
+            >
+              <Home className="h-4 w-4" />
+              Ver outros imóveis
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ======================================================
           GALERIA COMPLETA
@@ -1807,7 +2051,7 @@ export default function PropertyDetails() {
           MODAL DE CONTATO
       ====================================================== */}
 
-      {showContactModal && (
+      {showContactModal && !isSold && (
         <div
           className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-sm"
           onMouseDown={(event) => {

@@ -33,9 +33,11 @@ export default function LeadDetails() {
 
   const [lead, setLead] = useState(null);
   const [proposals, setProposals] = useState([]);
+  const [visits, setVisits] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [loadingProposals, setLoadingProposals] = useState(false);
+  const [loadingVisits, setLoadingVisits] = useState(false);
 
   const [error, setError] = useState(null);
 
@@ -54,16 +56,6 @@ export default function LeadDetails() {
         const response = await api.get(`/api/leads/${id}`);
 
         const payload = response?.data;
-
-        /*
-         * Compatível com:
-         *
-         * { success: true, data: {...} }
-         *
-         * { lead: {...} }
-         *
-         * {...}
-         */
 
         const loadedLead =
           payload?.data?.lead || payload?.data || payload?.lead || payload;
@@ -89,16 +81,6 @@ export default function LeadDetails() {
    * ============================================================
    * CARREGAR PROPOSTAS DO LEAD
    * ============================================================
-   *
-   * Mesmo que o LeadDetails não venha com:
-   *
-   * lead.proposals
-   *
-   * fazemos uma chamada específica:
-   *
-   * GET /api/proposals/lead/:leadId
-   *
-   * Isso evita depender do populate do Lead.
    */
 
   useEffect(() => {
@@ -121,13 +103,6 @@ export default function LeadDetails() {
           setProposals([]);
         }
       } catch (error) {
-        /*
-         * Não bloqueamos o LeadDetails se a busca das propostas
-         * falhar.
-         *
-         * O restante da página continua funcionando.
-         */
-
         console.error('Erro ao carregar propostas do lead:', error);
 
         setProposals([]);
@@ -141,16 +116,98 @@ export default function LeadDetails() {
 
   /*
    * ============================================================
+   * CARREGAR VISITAS DO LEAD
+   * ============================================================
+   *
+   * IMPORTANTE:
+   *
+   * O imóvel exibido neste componente NÃO será mais obtido de:
+   *
+   * lead.property
+   *
+   * O imóvel visitado deve vir da própria visita:
+   *
+   * visit.propertyInfo
+   *
+   * A API de visitas retorna informações como:
+   *
+   * - visit.status
+   * - visit.date
+   * - visit.finishedAt
+   * - visit.leadInfo
+   * - visit.propertyInfo
+   */
+
+  useEffect(() => {
+    async function loadVisits() {
+      if (!id) return;
+
+      try {
+        setLoadingVisits(true);
+
+        const response = await api.get('/api/visits', {
+          params: {
+            page: 1,
+            limit: 100,
+          },
+        });
+
+        const payload = response?.data;
+
+        const loadedVisits =
+          payload?.data?.visits ||
+          payload?.data?.items ||
+          payload?.visits ||
+          payload?.items ||
+          payload?.data ||
+          [];
+
+        if (!Array.isArray(loadedVisits)) {
+          setVisits([]);
+          return;
+        }
+
+        /*
+         * Filtra somente as visitas pertencentes ao Lead atual.
+         *
+         * Compatibilidade com diferentes estruturas possíveis
+         * da API.
+         */
+        const leadVisits = loadedVisits.filter((visit) => {
+          const visitLeadId =
+            visit?.leadInfo?.id ||
+            visit?.leadInfo?._id ||
+            visit?.lead?._id ||
+            visit?.lead?.id ||
+            (typeof visit?.lead === 'string' ? visit.lead : null);
+
+          if (!visitLeadId) {
+            return false;
+          }
+
+          return String(visitLeadId) === String(id);
+        });
+
+        setVisits(leadVisits);
+      } catch (error) {
+        console.error('Erro ao carregar visitas do lead:', error);
+
+        setVisits([]);
+      } finally {
+        setLoadingVisits(false);
+      }
+    }
+
+    loadVisits();
+  }, [id]);
+
+  /*
+   * ============================================================
    * PROPOSTAS NORMALIZADAS
    * ============================================================
    */
 
   const normalizedProposals = useMemo(() => {
-    /*
-     * Se a API do Lead futuramente já devolver proposals,
-     * podemos aproveitar também.
-     */
-
     const leadProposals = Array.isArray(lead?.proposals) ? lead.proposals : [];
 
     const source = proposals.length > 0 ? proposals : leadProposals;
@@ -184,17 +241,9 @@ export default function LeadDetails() {
    */
 
   const proposalDate = useMemo(() => {
-    /*
-     * 1. Primeiro tentamos a data salva diretamente no Lead.
-     */
-
     if (lead?.proposalDate) {
       return lead.proposalDate;
     }
-
-    /*
-     * 2. Caso não exista, usamos a proposta mais recente.
-     */
 
     if (latestProposal) {
       return getProposalDate(latestProposal);
@@ -216,6 +265,88 @@ export default function LeadDetails() {
 
     return getProposalValue(latestProposal);
   }, [latestProposal]);
+
+  /*
+   * ============================================================
+   * VISITAS REALIZADAS COM IMÓVEL
+   * ============================================================
+   *
+   * Aqui está a regra principal:
+   *
+   * Só entram:
+   *
+   * 1. visitas concluídas/realizadas
+   * 2. que possuem um imóvel válido
+   *
+   * Depois ordenamos da mais recente para a mais antiga.
+   */
+
+  const completedVisits = useMemo(() => {
+    if (!Array.isArray(visits)) {
+      return [];
+    }
+
+    return visits
+      .filter((visit) => {
+        if (!isCompletedVisit(visit)) {
+          return false;
+        }
+
+        const property = extractVisitProperty(visit);
+
+        return Boolean(property);
+      })
+      .sort((a, b) => {
+        return getVisitDateValue(b) - getVisitDateValue(a);
+      });
+  }, [visits]);
+
+  /*
+   * ============================================================
+   * ÚLTIMA VISITA REALIZADA
+   * ============================================================
+   */
+
+  const latestCompletedVisit = useMemo(() => {
+    return completedVisits[0] || null;
+  }, [completedVisits]);
+
+  /*
+   * ============================================================
+   * IMÓVEL EFETIVAMENTE VISITADO
+   * ============================================================
+   *
+   * ATENÇÃO:
+   *
+   * Nunca usamos:
+   *
+   * lead.property
+   *
+   * O imóvel é exclusivamente aquele vinculado
+   * à visita realizada.
+   */
+
+  const visitedProperty = useMemo(() => {
+    if (!latestCompletedVisit) {
+      return null;
+    }
+
+    return extractVisitProperty(latestCompletedVisit);
+  }, [latestCompletedVisit]);
+
+  /*
+   * ============================================================
+   * DATA DA VISITA REALIZADA
+   * ============================================================
+   */
+
+  const completedVisitDate = useMemo(() => {
+    if (!latestCompletedVisit) {
+      return null;
+    }
+
+    return getVisitDate(latestCompletedVisit);
+  }, [latestCompletedVisit]);
 
   /*
    * ============================================================
@@ -409,9 +540,18 @@ export default function LeadDetails() {
    * ============================================================
    * DADOS RELACIONADOS
    * ============================================================
+   *
+   * IMPORTANTE:
+   *
+   * Não fazemos:
+   *
+   * const property = lead.property;
+   *
+   * O imóvel visitado agora vem exclusivamente de:
+   *
+   * visitedProperty
    */
 
-  const property = lead.property;
   const assignedTo = lead.assignedTo;
   const createdBy = lead.createdBy;
   const sourceBroker = lead.sourceBroker;
@@ -754,14 +894,18 @@ export default function LeadDetails() {
             </Card>
 
             {/* ==================================================
-                IMÓVEL
+                IMÓVEL EFETIVAMENTE VISITADO
             =================================================== */}
 
-            <PropertyCard
-              property={property}
-              onCreateProposal={handleCreateProposal}
-              navigate={navigate}
-            />
+            {!loadingVisits && visitedProperty && (
+              <PropertyCard
+                property={visitedProperty}
+                visit={latestCompletedVisit}
+                visitDate={completedVisitDate}
+                onCreateProposal={handleCreateProposal}
+                navigate={navigate}
+              />
+            )}
 
             {/* ==================================================
                 PROPOSTAS
@@ -819,8 +963,8 @@ export default function LeadDetails() {
                 />
 
                 <CommercialDate
-                  label="Visita"
-                  value={lead.visitDate}
+                  label="Visita realizada"
+                  value={completedVisitDate}
                   icon={<Calendar size={16} />}
                 />
 
@@ -1277,16 +1421,15 @@ function UserCard({ title, icon, user }) {
    PROPERTY CARD
 ================================================================ */
 
-function PropertyCard({ property, onCreateProposal, navigate }) {
+function PropertyCard({
+  property,
+  visit,
+  visitDate,
+  onCreateProposal,
+  navigate,
+}) {
   if (!property) {
-    return (
-      <Card title="Imóvel de interesse" icon={<Building2 size={18} />}>
-        <EmptyState
-          icon={<Building2 size={20} />}
-          text="Nenhum imóvel vinculado a este lead."
-        />
-      </Card>
-    );
+    return null;
   }
 
   const address = property.address || {};
@@ -1295,9 +1438,15 @@ function PropertyCard({ property, onCreateProposal, navigate }) {
 
   const propertyPrice = property.price;
 
+  const propertyId = property._id || property.id || null;
+
   return (
-    <Card title="Imóvel de interesse" icon={<Building2 size={18} />}>
+    <Card title="Imóvel visitado" icon={<Building2 size={18} />}>
       <div className="space-y-5">
+        {/* ==================================================
+            CABEÇALHO
+        =================================================== */}
+
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1324,8 +1473,41 @@ function PropertyCard({ property, onCreateProposal, navigate }) {
               )}
             </div>
 
-            {(address.street || address.city) && (
-              <div className="mt-2 flex items-start gap-2 text-sm text-slate-400">
+            {/* STATUS DA VISITA */}
+
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span
+                className="
+                  inline-flex
+                  items-center
+                  gap-1.5
+                  rounded-full
+                  border
+                  border-emerald-500/20
+                  bg-emerald-500/10
+                  px-2.5
+                  py-1
+                  text-xs
+                  font-medium
+                  text-emerald-400
+                "
+              >
+                <CheckCircle2 size={14} />
+                Visita realizada
+              </span>
+
+              {visitDate && (
+                <span className="text-xs text-slate-500">
+                  {formatDateStatic(visitDate)}
+                </span>
+              )}
+            </div>
+
+            {(address.street ||
+              address.city ||
+              address.logradouro ||
+              address.cidade) && (
+              <div className="mt-3 flex items-start gap-2 text-sm text-slate-400">
                 <MapPin size={16} className="mt-0.5 shrink-0" />
 
                 <span>{formatPropertyAddress(address)}</span>
@@ -1333,7 +1515,7 @@ function PropertyCard({ property, onCreateProposal, navigate }) {
             )}
           </div>
 
-          {propertyPrice !== undefined && (
+          {propertyPrice !== undefined && propertyPrice !== null && (
             <div className="sm:text-right">
               <p className="text-xs uppercase tracking-wide text-slate-500">
                 Valor
@@ -1346,28 +1528,38 @@ function PropertyCard({ property, onCreateProposal, navigate }) {
           )}
         </div>
 
+        {/* ==================================================
+            DADOS DO IMÓVEL
+        =================================================== */}
+
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {property.type && (
             <PropertyStat label="Tipo" value={formatLabel(property.type)} />
           )}
 
-          {property.bedrooms !== undefined && (
+          {property.bedrooms !== undefined && property.bedrooms !== null && (
             <PropertyStat label="Quartos" value={property.bedrooms} />
           )}
 
-          {property.bathrooms !== undefined && (
+          {property.bathrooms !== undefined && property.bathrooms !== null && (
             <PropertyStat label="Banheiros" value={property.bathrooms} />
           )}
 
-          {property.area?.total !== undefined && (
-            <PropertyStat label="Área" value={`${property.area.total} m²`} />
-          )}
+          {(property.area?.total !== undefined ||
+            property.area?.total !== null) &&
+            property.area?.total && (
+              <PropertyStat label="Área" value={`${property.area.total} m²`} />
+            )}
         </div>
 
+        {/* ==================================================
+            AÇÕES
+        =================================================== */}
+
         <div className="flex flex-col gap-2 sm:flex-row">
-          {property._id && (
+          {propertyId && (
             <button
-              onClick={() => navigate(`/properties/${property._id}`)}
+              onClick={() => navigate(`/properties/${propertyId}`)}
               className="
                 inline-flex
                 flex-1
@@ -1635,6 +1827,7 @@ function MetricCard({ label, value, icon }) {
     >
       <div className="flex items-center gap-2 text-slate-500">
         {icon}
+
         <span className="text-xs">{label}</span>
       </div>
 
@@ -1775,6 +1968,180 @@ function formatLabel(value) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+/*
+ * Normaliza texto para comparações de status.
+ *
+ * Ex:
+ *
+ * "Concluída" -> "concluida"
+ * "CONCLUIDA" -> "concluida"
+ * "concluída" -> "concluida"
+ */
+
+function normalizeText(value) {
+  if (!value) {
+    return '';
+  }
+
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+/* ================================================================
+   VISIT HELPERS
+================================================================ */
+
+/*
+ * Identifica se a visita foi realmente realizada.
+ *
+ * O backend utiliza "concluida", mas deixamos compatibilidade
+ * com outras nomenclaturas que possam existir.
+ */
+
+function isCompletedVisit(visit) {
+  if (!visit) {
+    return false;
+  }
+
+  const status = normalizeText(
+    visit.status || visit.visitStatus || visit.state || '',
+  );
+
+  return [
+    'concluida',
+    'completed',
+    'complete',
+    'realizada',
+    'realizado',
+    'done',
+  ].includes(status);
+}
+
+/*
+ * Retorna a data que representa a visita realizada.
+ *
+ * Prioridade:
+ *
+ * 1. finishedAt
+ * 2. completedAt
+ * 3. realizedAt
+ * 4. realizedDate
+ * 5. date
+ * 6. visitDate
+ * 7. startAt
+ * 8. startDate
+ * 9. scheduledAt
+ * 10. createdAt
+ */
+
+function getVisitDate(visit) {
+  if (!visit) {
+    return null;
+  }
+
+  return (
+    visit.finishedAt ||
+    visit.completedAt ||
+    visit.realizedAt ||
+    visit.realizedDate ||
+    visit.date ||
+    visit.visitDate ||
+    visit.startAt ||
+    visit.startDate ||
+    visit.scheduledAt ||
+    visit.createdAt ||
+    null
+  );
+}
+
+function getVisitDateValue(visit) {
+  const date = getVisitDate(visit);
+
+  if (!date) {
+    return 0;
+  }
+
+  const timestamp = new Date(date).getTime();
+
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+/*
+ * Extrai o imóvel diretamente da visita.
+ *
+ * A estrutura principal esperada é:
+ *
+ * visit.propertyInfo
+ *
+ * Compatibilidade:
+ *
+ * visit.property
+ * visit.propertyData
+ * visit.propertyDetails
+ */
+
+function extractVisitProperty(visit) {
+  if (!visit) {
+    return null;
+  }
+
+  const property =
+    visit.propertyInfo ||
+    visit.property ||
+    visit.propertyData ||
+    visit.propertyDetails ||
+    null;
+
+  /*
+   * Se a propriedade veio somente como ObjectId/string,
+   * não temos dados suficientes para exibir o imóvel.
+   */
+  if (!property || typeof property === 'string') {
+    return null;
+  }
+
+  /*
+   * Também evita considerar um objeto vazio como imóvel.
+   */
+  const hasPropertyIdentifier =
+    property._id ||
+    property.id ||
+    property.code ||
+    property.name ||
+    property.title;
+
+  if (!hasPropertyIdentifier) {
+    return null;
+  }
+
+  return {
+    ...property,
+
+    _id: property._id || property.id || null,
+
+    id: property.id || property._id || null,
+
+    name: property.name || property.title || 'Imóvel sem título',
+
+    title: property.title || property.name || '',
+
+    address: property.address || property.location || {},
+
+    price:
+      property.price ??
+      property.prices?.salePrice ??
+      property.prices?.rentPrice ??
+      null,
+  };
+}
+
+/* ================================================================
+   STATIC FORMATTERS
+================================================================ */
+
 function formatCurrencyStatic(value) {
   if (
     value === undefined ||
@@ -1830,13 +2197,6 @@ function formatPropertyAddress(address = {}) {
 function getProposalDate(proposal) {
   if (!proposal) return null;
 
-  /*
-   * Ordem de prioridade.
-   *
-   * Caso seu Proposal model use outro campo,
-   * adicionamos aqui sem quebrar os atuais.
-   */
-
   return (
     proposal.proposalDate ||
     proposal.submittedAt ||
@@ -1860,11 +2220,6 @@ function getProposalDateValue(proposal) {
 function getProposalValue(proposal) {
   if (!proposal) return null;
 
-  /*
-   * Compatibilidade com diferentes estruturas
-   * possíveis do Proposal model.
-   */
-
   return (
     proposal.values?.proposalPrice ??
     proposal.values?.price ??
@@ -1881,11 +2236,14 @@ function getProposalValue(proposal) {
 ================================================================ */
 
 function getStatusBadgeType(status) {
-  switch (status) {
+  const normalizedStatus = normalizeText(status);
+
+  switch (normalizedStatus) {
     case 'novo':
       return 'blue';
 
     case 'em andamento':
+    case 'in progress':
     case 'in_progress':
       return 'yellow';
 
@@ -1905,7 +2263,9 @@ function getStatusBadgeType(status) {
 ================================================================ */
 
 function getPriorityBadgeType(priority) {
-  switch (priority) {
+  const normalizedPriority = normalizeText(priority);
+
+  switch (normalizedPriority) {
     case 'alta':
     case 'high':
       return 'red';
@@ -1928,7 +2288,9 @@ function getPriorityBadgeType(priority) {
 ================================================================ */
 
 function getProposalBadgeType(status) {
-  switch (status) {
+  const normalizedStatus = normalizeText(status);
+
+  switch (normalizedStatus) {
     case 'accepted':
     case 'aprovada':
       return 'green';

@@ -15,6 +15,27 @@ import {
   Phone,
   Mail,
   Percent,
+  Ruler,
+  Car,
+  Bath,
+  Layers,
+  Calendar,
+  Key,
+  FileText,
+  Building,
+  Tag,
+  Star,
+  Eye,
+  Heart,
+  Users,
+  ClipboardList,
+  Video,
+  File,
+  Award,
+  Shield,
+  Clock,
+  TrendingUp,
+  AlertCircle,
 } from 'lucide-react';
 
 import { formatCurrency, currencyToNumber } from '../utils/currency';
@@ -143,6 +164,19 @@ const sectionTitle = `
   text-white
 `;
 
+const checkboxClass = `
+  h-5
+  w-5
+  rounded
+  border-gray-600
+  bg-gray-700
+  text-blue-600
+  focus:ring-2
+  focus:ring-blue-500
+  focus:ring-offset-2
+  focus:ring-offset-gray-900
+`;
+
 /*
 ==========================================================
 ESTADO INICIAL
@@ -152,6 +186,8 @@ ESTADO INICIAL
 const initialState = {
   name: '',
   description: '',
+  shortDescription: '',
+  code: '',
 
   type: 'casa',
   category: 'casa',
@@ -161,23 +197,40 @@ const initialState = {
   condition: 'usado',
 
   images: [],
+  coverImage: '',
+  video: '',
+  videos: [],
+  documents: [],
+  floorPlan: '',
+  virtualTour: '',
 
   prices: {
     salePrice: '',
     rentPrice: '',
     condominium: '',
     iptu: '',
+    otherFees: '',
   },
 
   area: {
     total: '',
     built: '',
+    landArea: '',
+    frontage: '',
+    background: '',
   },
 
   bedrooms: 0,
   suites: 0,
   bathrooms: 0,
   parkingSpaces: 0,
+  floor: 0,
+  totalFloors: 0,
+
+  furnished: false,
+  acceptsPets: false,
+  acceptsFinancing: true,
+  acceptsFGTS: false,
 
   location: {
     zipCode: '',
@@ -187,27 +240,21 @@ const initialState = {
     district: '',
     city: '',
     state: '',
+    country: 'Brasil',
     region: '',
   },
 
   features: [],
+  highlights: [],
+  tags: [],
 
-  /*
-  ========================================================
-  CAPTAÇÃO
-  ========================================================
-  */
+  registrationNumber: '',
+  deedNumber: '',
 
   captation: {
     broker: '',
     percentage: 0,
   },
-
-  /*
-  ========================================================
-  PROPRIETÁRIO
-  ========================================================
-  */
 
   owner: {
     name: '',
@@ -215,6 +262,11 @@ const initialState = {
     email: '',
     document: '',
   },
+
+  priority: 0,
+  color: '',
+  notes: '',
+  internalNotes: '',
 };
 
 export default function PropertyCreate() {
@@ -223,6 +275,10 @@ export default function PropertyCreate() {
   const { create, loading, error } = useProperties(false);
 
   const [form, setForm] = useState(initialState);
+  const [validationErrors, setValidationErrors] = useState({});
+  const [backendErrors, setBackendErrors] = useState([]);
+  const [tagInput, setTagInput] = useState('');
+  const [highlightInput, setHighlightInput] = useState('');
 
   /*
   ==========================================================
@@ -256,62 +312,32 @@ export default function PropertyCreate() {
 
         if (!storedUser) {
           console.warn('userInfo não encontrado no localStorage.');
-
           return;
         }
 
         const userInfo = JSON.parse(storedUser);
-
         const currentUser = userInfo?.user || userInfo?.data || userInfo;
 
         console.log('USUÁRIO LOGADO:', currentUser);
-
-        /*
-      ======================================================
-      IDENTIFICAR ADMIN
-      ======================================================
-      */
 
         const admin =
           currentUser?.isAdmin === true || currentUser?.role === 'admin';
 
         console.log('É ADMIN?', admin);
 
-        if (!mounted) {
-          return;
-        }
-
+        if (!mounted) return;
         setIsAdmin(admin);
-
-        /*
-      ======================================================
-      SOMENTE ADMIN CARREGA OS CORRETORES
-      ======================================================
-      */
 
         if (!admin) {
           console.warn('Usuário atual não é admin.');
-
           return;
         }
 
         setBrokersLoading(true);
 
-        /*
-      ======================================================
-      BUSCAR CORRETORES
-      ======================================================
-      */
-
         const response = await api.get('/api/users/brokers');
 
         console.log('RESPOSTA COMPLETA BROKERS:', response.data);
-
-        /*
-      ======================================================
-      NORMALIZAR RESPOSTA
-      ======================================================
-      */
 
         const data =
           response.data?.data?.brokers ||
@@ -322,26 +348,16 @@ export default function PropertyCreate() {
 
         console.log('BROKERS EXTRAÍDOS:', data);
 
-        /*
-      ======================================================
-      GARANTIR ARRAY
-      ======================================================
-      */
-
         const normalizedBrokers = Array.isArray(data)
           ? data.filter((broker) => broker && broker._id && broker.name)
           : [];
 
         console.log('BROKERS NORMALIZADOS:', normalizedBrokers);
 
-        if (!mounted) {
-          return;
-        }
-
+        if (!mounted) return;
         setBrokers(normalizedBrokers);
       } catch (err) {
         console.error('Erro ao buscar usuário/corretores:', err);
-
         if (mounted) {
           setBrokers([]);
         }
@@ -366,12 +382,22 @@ export default function PropertyCreate() {
   */
 
   function handleChange(e) {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
 
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    if (type === 'checkbox') {
+      setForm((prev) => ({
+        ...prev,
+        [name]: checked,
+      }));
+    } else {
+      setForm((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
+
+    setValidationErrors((prev) => ({ ...prev, [name]: undefined }));
+    setBackendErrors([]);
   }
 
   /*
@@ -383,12 +409,13 @@ export default function PropertyCreate() {
   function handleNestedChange(group, field, value) {
     setForm((prev) => ({
       ...prev,
-
       [group]: {
         ...prev[group],
         [field]: value,
       },
     }));
+    setValidationErrors((prev) => ({ ...prev, [field]: undefined }));
+    setBackendErrors([]);
   }
 
   /*
@@ -404,15 +431,11 @@ export default function PropertyCreate() {
 
     if (digits === '') {
       handleNestedChange('captation', 'percentage', 0);
-
       return;
     }
 
     const number = Number(digits);
-
-    if (Number.isNaN(number)) {
-      return;
-    }
+    if (Number.isNaN(number)) return;
 
     handleNestedChange(
       'captation',
@@ -439,7 +462,6 @@ export default function PropertyCreate() {
 
   function updateNumber(field, value) {
     const number = Number(value);
-
     setForm((prev) => ({
       ...prev,
       [field]: Number.isNaN(number) ? 0 : number,
@@ -453,7 +475,7 @@ export default function PropertyCreate() {
   */
 
   function handleArea(field, value) {
-    handleNestedChange('area', field, formatArea(value));
+    handleNestedChange('area', field, value);
   }
 
   /*
@@ -465,11 +487,99 @@ export default function PropertyCreate() {
   function toggleFeature(feature) {
     setForm((prev) => ({
       ...prev,
-
       features: prev.features.includes(feature)
         ? prev.features.filter((item) => item !== feature)
         : [...prev.features, feature],
     }));
+  }
+
+  /*
+  ==========================================================
+  TAGS E HIGHLIGHTS
+  ==========================================================
+  */
+
+  function addTag() {
+    if (tagInput.trim() && !form.tags.includes(tagInput.trim())) {
+      setForm((prev) => ({
+        ...prev,
+        tags: [...prev.tags, tagInput.trim()],
+      }));
+      setTagInput('');
+    }
+  }
+
+  function removeTag(tag) {
+    setForm((prev) => ({
+      ...prev,
+      tags: prev.tags.filter((t) => t !== tag),
+    }));
+  }
+
+  function addHighlight() {
+    if (
+      highlightInput.trim() &&
+      !form.highlights.includes(highlightInput.trim())
+    ) {
+      setForm((prev) => ({
+        ...prev,
+        highlights: [...prev.highlights, highlightInput.trim()],
+      }));
+      setHighlightInput('');
+    }
+  }
+
+  function removeHighlight(highlight) {
+    setForm((prev) => ({
+      ...prev,
+      highlights: prev.highlights.filter((h) => h !== highlight),
+    }));
+  }
+
+  /*
+  ==========================================================
+  VALIDAÇÃO
+  ==========================================================
+  */
+
+  function validateForm() {
+    const errors = {};
+
+    if (!form.name || form.name.trim() === '') {
+      errors.name = 'Nome do imóvel é obrigatório';
+    }
+
+    if (!form.location.city || form.location.city.trim() === '') {
+      errors.city = 'Cidade é obrigatória';
+    }
+
+    if (!form.location.state || form.location.state.trim() === '') {
+      errors.state = 'Estado é obrigatório';
+    }
+
+    const salePrice = currencyToNumber(form.prices.salePrice);
+    const rentPrice = currencyToNumber(form.prices.rentPrice);
+
+    if (form.purpose === 'venda' || form.purpose === 'venda_aluguel') {
+      if (salePrice === 0) {
+        errors.salePrice = 'Preço de venda é obrigatório para imóveis à venda';
+      }
+    }
+
+    if (form.purpose === 'aluguel' || form.purpose === 'venda_aluguel') {
+      if (rentPrice === 0) {
+        errors.rentPrice =
+          'Preço de aluguel é obrigatório para imóveis para aluguel';
+      }
+    }
+
+    const totalArea = Number(form.area.total);
+    if (!totalArea || totalArea <= 0) {
+      errors.areaTotal = 'Área total é obrigatória e deve ser maior que 0';
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
   }
 
   /*
@@ -481,70 +591,185 @@ export default function PropertyCreate() {
   async function handleSubmit(e) {
     e.preventDefault();
 
+    setValidationErrors({});
+    setBackendErrors([]);
+
+    if (!validateForm()) {
+      const firstError = document.querySelector('[data-error]');
+      if (firstError) {
+        firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+
     try {
+      const salePrice = currencyToNumber(form.prices.salePrice);
+      const rentPrice = currencyToNumber(form.prices.rentPrice);
+      const condominiumFee = currencyToNumber(form.prices.condominium);
+      const iptu = currencyToNumber(form.prices.iptu);
+      const otherFees = currencyToNumber(form.prices.otherFees);
+
+      const totalArea = Number(form.area.total) || 0;
+      const builtArea = Number(form.area.built) || 0;
+      const landArea = Number(form.area.landArea) || 0;
+      const frontage = Number(form.area.frontage) || 0;
+      const background = Number(form.area.background) || 0;
+
       const payload = {
-        ...form,
+        name: form.name.trim(),
+        description: form.description?.trim() || '',
+        shortDescription: form.shortDescription?.trim() || '',
+        code: form.code?.trim() || '',
+
+        type: form.type,
+        category: form.category,
+        purpose: form.purpose,
+        constructionStatus: form.constructionStatus,
+        condition: form.condition || 'usado',
+
+        images: form.images || [],
+        coverImage: form.coverImage || '',
+        video: form.video || '',
+        videos: form.videos || [],
+        documents: form.documents || [],
+        floorPlan: form.floorPlan || '',
+        virtualTour: form.virtualTour || '',
 
         prices: {
-          salePrice: currencyToNumber(form.prices.salePrice),
-
-          rentPrice: currencyToNumber(form.prices.rentPrice),
-
-          condominiumFee: currencyToNumber(form.prices.condominium),
-
-          iptu: currencyToNumber(form.prices.iptu),
+          salePrice: salePrice,
+          rentPrice: rentPrice,
+          condominiumFee: condominiumFee,
+          iptu: iptu,
+          otherFees: otherFees,
         },
 
         dimensions: {
-          totalArea: areaToNumber(form.area.total),
-
-          builtArea: areaToNumber(form.area.built),
+          totalArea: totalArea,
+          builtArea: builtArea,
+          landArea: landArea,
+          frontage: frontage,
+          background: background,
         },
 
-        bedrooms: Number(form.bedrooms),
+        bedrooms: Number(form.bedrooms) || 0,
+        suites: Number(form.suites) || 0,
+        bathrooms: Number(form.bathrooms) || 0,
+        parkingSpaces: Number(form.parkingSpaces) || 0,
+        floor: Number(form.floor) || 0,
+        totalFloors: Number(form.totalFloors) || 0,
 
-        suites: Number(form.suites),
+        furnished: form.furnished || false,
+        acceptsPets: form.acceptsPets || false,
+        acceptsFinancing:
+          form.acceptsFinancing !== undefined ? form.acceptsFinancing : true,
+        acceptsFGTS: form.acceptsFGTS || false,
 
-        bathrooms: Number(form.bathrooms),
+        location: {
+          zipCode: form.location.zipCode?.trim() || '',
+          street: form.location.street?.trim() || '',
+          number: form.location.number?.trim() || '',
+          complement: form.location.complement?.trim() || '',
+          district: form.location.district?.trim() || '',
+          city: form.location.city?.trim() || '',
+          state: form.location.state?.trim().toUpperCase() || '',
+          country: form.location.country?.trim() || 'Brasil',
+          region: form.location.region || '',
+        },
 
-        parkingSpaces: Number(form.parkingSpaces),
+        features: form.features || [],
+        highlights: form.highlights || [],
+        tags: form.tags || [],
 
-        /*
-        ====================================================
-        CAPTAÇÃO
-        ====================================================
-        */
+        registrationNumber: form.registrationNumber?.trim() || '',
+        deedNumber: form.deedNumber?.trim() || '',
 
         captation: {
           broker: form.captation.broker || null,
-
           percentage: Number(form.captation.percentage) || 0,
         },
 
-        /*
-        ====================================================
-        PROPRIETÁRIO
-        ====================================================
-        */
-
         owner: {
           name: form.owner.name?.trim() || '',
-
           phone: form.owner.phone?.trim() || '',
-
           email: form.owner.email?.trim().toLowerCase() || '',
-
           document: form.owner.document?.trim() || '',
         },
+
+        priority: Number(form.priority) || 0,
+        color: form.color || '',
+        notes: form.notes?.trim() || '',
+        internalNotes: form.internalNotes?.trim() || '',
+
+        active: true,
+        published: true,
+        isDeleted: false,
+        status: 'disponivel',
+        isPublished: true,
+        publishedAt: new Date().toISOString(),
+        featured: false,
+        exclusive: false,
       };
 
-      console.log('Payload do imóvel:', payload);
+      console.log('📦 PAYLOAD ENVIADO:', JSON.stringify(payload, null, 2));
 
       await create(payload);
-
       navigate('/property-list');
     } catch (err) {
-      console.error('Erro ao criar imóvel:', err);
+      console.error('❌ Erro ao criar imóvel:', err);
+
+      if (err.response) {
+        console.error('📡 STATUS:', err.response.status);
+        console.error(
+          '📡 DATA COMPLETA:',
+          JSON.stringify(err.response.data, null, 2),
+        );
+
+        const errorData = err.response.data;
+
+        if (errorData?.errors) {
+          console.error('🔍 ERROS DO BACKEND (RAW):', errorData.errors);
+
+          let errorMessages = [];
+
+          if (Array.isArray(errorData.errors)) {
+            errorData.errors.forEach((item) => {
+              let msg = '';
+              if (typeof item === 'string') {
+                msg = item;
+              } else if (item?.field && item?.message) {
+                msg = `${item.field}: ${item.message}`;
+              } else if (item?.message) {
+                msg = item.message;
+              } else if (item?.msg) {
+                msg = item.msg;
+              } else {
+                msg = JSON.stringify(item);
+              }
+              errorMessages.push(msg);
+            });
+          } else if (typeof errorData.errors === 'object') {
+            Object.entries(errorData.errors).forEach(([field, message]) => {
+              errorMessages.push(`${field}: ${message}`);
+            });
+          }
+
+          setBackendErrors(
+            errorMessages.length > 0
+              ? errorMessages
+              : ['Erro de validação desconhecido'],
+          );
+        } else if (errorData?.message) {
+          setBackendErrors([errorData.message]);
+        } else {
+          setBackendErrors([
+            `Erro ${err.response.status}: ${err.response.statusText}`,
+          ]);
+        }
+      } else if (err.request) {
+        setBackendErrors(['Servidor não respondeu. Verifique sua conexão.']);
+      } else {
+        setBackendErrors([err.message || 'Erro desconhecido ao criar imóvel']);
+      }
     }
   }
 
@@ -554,7 +779,7 @@ export default function PropertyCreate() {
   ==========================================================
   */
 
-  function NumberInput({ label, value, onChange }) {
+  function NumberInput({ label, value, onChange, min = 0, step = 1 }) {
     return (
       <div>
         <label className={labelClass}>{label}</label>
@@ -573,7 +798,7 @@ export default function PropertyCreate() {
         >
           <button
             type="button"
-            onClick={() => onChange(Math.max(0, value - 1))}
+            onClick={() => onChange(Math.max(min, value - step))}
             className="
               h-12
               w-12
@@ -604,7 +829,7 @@ export default function PropertyCreate() {
 
           <button
             type="button"
-            onClick={() => onChange(value + 1)}
+            onClick={() => onChange(value + step)}
             className="
               h-12
               w-12
@@ -622,6 +847,64 @@ export default function PropertyCreate() {
     );
   }
 
+  /*
+  ==========================================================
+  COMPONENTE TAG INPUT
+  ==========================================================
+  */
+
+  function TagInput({
+    label,
+    value,
+    onChange,
+    onAdd,
+    onRemove,
+    items,
+    placeholder,
+  }) {
+    return (
+      <div>
+        <label className={labelClass}>{label}</label>
+
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={value}
+            onChange={onChange}
+            onKeyPress={(e) => e.key === 'Enter' && onAdd()}
+            placeholder={placeholder}
+            className={inputClass}
+          />
+          <button
+            type="button"
+            onClick={onAdd}
+            className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-500"
+          >
+            Adicionar
+          </button>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {items.map((item) => (
+            <span
+              key={item}
+              className="inline-flex items-center gap-2 rounded-full bg-blue-600/20 px-3 py-1.5 text-sm text-blue-400"
+            >
+              {item}
+              <button
+                type="button"
+                onClick={() => onRemove(item)}
+                className="text-blue-300 hover:text-white"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-950">
       <div
@@ -633,10 +916,7 @@ export default function PropertyCreate() {
           md:p-8
         "
       >
-        {/* ======================================================
-            HEADER
-        ====================================================== */}
-
+        {/* HEADER */}
         <div
           className="
             flex
@@ -724,16 +1004,12 @@ export default function PropertyCreate() {
                   bg-emerald-400
                 "
               />
-
               <span className="font-medium text-gray-200">Novo Cadastro</span>
             </div>
           </div>
         </div>
 
-        {/* ======================================================
-            ERRO
-        ====================================================== */}
-
+        {/* ERROS */}
         {error && (
           <div
             className="
@@ -751,6 +1027,27 @@ export default function PropertyCreate() {
           </div>
         )}
 
+        {backendErrors.length > 0 && (
+          <div
+            className="
+              rounded-2xl
+              border
+              border-red-500/20
+              bg-red-500/10
+              p-5
+            "
+          >
+            <h4 className="mb-2 font-semibold text-red-400">
+              Erros de validação do servidor:
+            </h4>
+            <ul className="list-inside list-disc space-y-1 text-sm text-red-400">
+              {backendErrors.map((err, index) => (
+                <li key={index}>{err}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* ======================================================
               INFORMAÇÕES BÁSICAS
@@ -763,22 +1060,59 @@ export default function PropertyCreate() {
             </h2>
 
             <div className="grid gap-6">
-              <div>
-                <label className={labelClass}>Nome do Imóvel</label>
+              <div className="grid gap-6 md:grid-cols-2">
+                <div>
+                  <label className={labelClass}>Nome do Imóvel *</label>
 
-                <input
-                  name="name"
-                  value={form.name}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="Ex.: Casa Alto Padrão Alphaville"
-                  required
-                />
+                  <input
+                    name="name"
+                    value={form.name}
+                    onChange={handleChange}
+                    className={`${inputClass} ${
+                      validationErrors.name ? 'border-red-500' : ''
+                    }`}
+                    placeholder="Ex.: Casa Alto Padrão Alphaville"
+                    required
+                  />
+                  {validationErrors.name && (
+                    <p className="mt-1 text-sm text-red-400" data-error>
+                      {validationErrors.name}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className={labelClass}>Código do Imóvel</label>
+                  <input
+                    name="code"
+                    value={form.code}
+                    onChange={handleChange}
+                    className={inputClass}
+                    placeholder="Ex.: NV-000001"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Deixe em branco para gerar automaticamente
+                  </p>
+                </div>
               </div>
 
               <div>
-                <label className={labelClass}>Descrição</label>
+                <label className={labelClass}>Descrição Curta</label>
+                <input
+                  name="shortDescription"
+                  value={form.shortDescription}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="Resumo rápido do imóvel (máx. 150 caracteres)"
+                  maxLength={150}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  {form.shortDescription.length}/150 caracteres
+                </p>
+              </div>
 
+              <div>
+                <label className={labelClass}>Descrição Completa</label>
                 <textarea
                   rows={6}
                   name="description"
@@ -840,7 +1174,7 @@ export default function PropertyCreate() {
                 </div>
 
                 <div>
-                  <label className={labelClass}>Finalidade</label>
+                  <label className={labelClass}>Finalidade *</label>
 
                   <select
                     className={selectClass}
@@ -858,6 +1192,10 @@ export default function PropertyCreate() {
                       </option>
                     ))}
                   </select>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Selecione "venda" ou "venda_aluguel" para preencher o preço
+                    de venda
+                  </p>
                 </div>
 
                 <div>
@@ -881,182 +1219,145 @@ export default function PropertyCreate() {
                   </select>
                 </div>
               </div>
+
+              <div className="grid gap-6 md:grid-cols-2">
+                <div>
+                  <label className={labelClass}>Condição</label>
+                  <select
+                    className={selectClass}
+                    value={form.condition}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        condition: e.target.value,
+                      }))
+                    }
+                  >
+                    <option value="novo">Novo</option>
+                    <option value="usado">Usado</option>
+                    <option value="reformado">Reformado</option>
+                    <option value="em_obra">Em Obra</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Prioridade</label>
+                  <select
+                    className={selectClass}
+                    value={form.priority}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        priority: Number(e.target.value),
+                      }))
+                    }
+                  >
+                    <option value={0}>Normal</option>
+                    <option value={1}>Baixa</option>
+                    <option value={2}>Média</option>
+                    <option value={3}>Alta</option>
+                    <option value={4}>Urgente</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className={labelClass}>Cor (opcional)</label>
+                <input
+                  type="color"
+                  name="color"
+                  value={form.color}
+                  onChange={handleChange}
+                  className="h-12 w-full rounded-xl border border-gray-700 bg-gray-800/70 p-1"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Use para destacar o imóvel na lista
+                </p>
+              </div>
             </div>
           </section>
 
           {/* ======================================================
-              GALERIA + RESUMO
+              MIDIA
           ====================================================== */}
 
-          <div className="grid gap-8 xl:grid-cols-5">
-            <section className={`${cardClass} xl:col-span-3`}>
-              <div className="mb-8 flex items-center gap-4">
-                <div
-                  className="
-                    flex
-                    h-12
-                    w-12
-                    items-center
-                    justify-center
-                    rounded-xl
-                    bg-blue-600/10
-                    text-blue-400
-                  "
-                >
-                  <ImageIcon size={22} />
+          <section className={cardClass}>
+            <div className="mb-8 flex items-center gap-4">
+              <div
+                className="
+                  flex
+                  h-12
+                  w-12
+                  items-center
+                  justify-center
+                  rounded-xl
+                  bg-purple-600/10
+                  text-purple-400
+                "
+              >
+                <ImageIcon size={22} />
+              </div>
+
+              <div>
+                <h2 className="text-lg font-semibold text-white">Mídia</h2>
+                <p className="text-sm text-gray-400">
+                  Fotos, vídeos, tour virtual e documentos
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <label className={labelClass}>Galeria de Fotos</label>
+                <PropertyImageUpload
+                  images={form.images}
+                  onChange={(images) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      images,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="grid gap-6 md:grid-cols-2">
+                <div>
+                  <label className={labelClass}>
+                    URL do Vídeo (YouTube/Vimeo)
+                  </label>
+                  <input
+                    name="video"
+                    value={form.video}
+                    onChange={handleChange}
+                    className={inputClass}
+                    placeholder="https://www.youtube.com/watch?v=..."
+                  />
                 </div>
 
                 <div>
-                  <h2 className="text-lg font-semibold text-white">
-                    Galeria de Fotos
-                  </h2>
-
-                  <p className="mt-1 text-sm text-gray-400">
-                    Adicione imagens em alta qualidade para destacar o imóvel.
-                  </p>
+                  <label className={labelClass}>Tour Virtual</label>
+                  <input
+                    name="virtualTour"
+                    value={form.virtualTour}
+                    onChange={handleChange}
+                    className={inputClass}
+                    placeholder="https://my.matterport.com/show/..."
+                  />
                 </div>
               </div>
 
-              <PropertyImageUpload
-                images={form.images}
-                onChange={(images) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    images,
-                  }))
-                }
-              />
-            </section>
-
-            <aside className={`${cardClass} xl:col-span-2`}>
-              <div className="mb-8 flex items-center gap-4">
-                <div
-                  className="
-                    flex
-                    h-12
-                    w-12
-                    items-center
-                    justify-center
-                    rounded-xl
-                    bg-emerald-600/10
-                    text-emerald-400
-                  "
-                >
-                  <Building2 size={22} />
-                </div>
-
-                <div>
-                  <h2 className="text-lg font-semibold text-white">Resumo</h2>
-
-                  <p className="text-sm text-gray-400">
-                    Informações principais.
-                  </p>
-                </div>
+              <div>
+                <label className={labelClass}>Planta Baixa</label>
+                <input
+                  name="floorPlan"
+                  value={form.floorPlan}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="URL da planta baixa"
+                />
               </div>
-
-              <div className="space-y-5">
-                <div
-                  className="
-                    rounded-xl
-                    border
-                    border-gray-800
-                    bg-gray-800/40
-                    p-4
-                  "
-                >
-                  <p
-                    className="
-                      text-xs
-                      uppercase
-                      tracking-wider
-                      text-gray-500
-                    "
-                  >
-                    Tipo
-                  </p>
-
-                  <p className="mt-2 font-semibold text-white capitalize">
-                    {form.type}
-                  </p>
-                </div>
-
-                <div
-                  className="
-                    rounded-xl
-                    border
-                    border-gray-800
-                    bg-gray-800/40
-                    p-4
-                  "
-                >
-                  <p
-                    className="
-                      text-xs
-                      uppercase
-                      tracking-wider
-                      text-gray-500
-                    "
-                  >
-                    Finalidade
-                  </p>
-
-                  <p className="mt-2 font-semibold text-white capitalize">
-                    {form.purpose}
-                  </p>
-                </div>
-
-                <div
-                  className="
-                    rounded-xl
-                    border
-                    border-gray-800
-                    bg-gray-800/40
-                    p-4
-                  "
-                >
-                  <p
-                    className="
-                      text-xs
-                      uppercase
-                      tracking-wider
-                      text-gray-500
-                    "
-                  >
-                    Cidade
-                  </p>
-
-                  <p className="mt-2 font-semibold text-white">
-                    {form.location.city || '-'}
-                  </p>
-                </div>
-
-                <div
-                  className="
-                    rounded-xl
-                    border
-                    border-gray-800
-                    bg-gray-800/40
-                    p-4
-                  "
-                >
-                  <p
-                    className="
-                      text-xs
-                      uppercase
-                      tracking-wider
-                      text-gray-500
-                    "
-                  >
-                    Fotos
-                  </p>
-
-                  <p className="mt-2 text-2xl font-bold text-blue-400">
-                    {form.images.length}
-                  </p>
-                </div>
-              </div>
-            </aside>
-          </div>
+            </div>
+          </section>
 
           {/* ======================================================
               VALORES
@@ -1081,12 +1382,29 @@ export default function PropertyCreate() {
 
               <div>
                 <h2 className="text-lg font-semibold text-white">Valores</h2>
-
                 <p className="text-sm text-gray-400">
-                  Configure os valores de venda, aluguel e despesas.
+                  Configure os valores de venda, aluguel e despesas
                 </p>
               </div>
             </div>
+
+            {validationErrors.salePrice && (
+              <div
+                className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400"
+                data-error
+              >
+                {validationErrors.salePrice}
+              </div>
+            )}
+
+            {validationErrors.rentPrice && (
+              <div
+                className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400"
+                data-error
+              >
+                {validationErrors.rentPrice}
+              </div>
+            )}
 
             <div
               className="
@@ -1097,13 +1415,20 @@ export default function PropertyCreate() {
               "
             >
               <div>
-                <label className={labelClass}>Valor de Venda</label>
+                <label className={labelClass}>
+                  Valor de Venda{' '}
+                  {(form.purpose === 'venda' ||
+                    form.purpose === 'venda_aluguel') &&
+                    ' *'}
+                </label>
 
                 <input
                   type="text"
                   inputMode="numeric"
                   placeholder="R$ 0,00"
-                  className={inputClass}
+                  className={`${inputClass} ${
+                    validationErrors.salePrice ? 'border-red-500' : ''
+                  }`}
                   value={form.prices.salePrice}
                   onChange={(e) =>
                     handleMoneyChange('salePrice', e.target.value)
@@ -1112,13 +1437,20 @@ export default function PropertyCreate() {
               </div>
 
               <div>
-                <label className={labelClass}>Valor do Aluguel</label>
+                <label className={labelClass}>
+                  Valor do Aluguel
+                  {(form.purpose === 'aluguel' ||
+                    form.purpose === 'venda_aluguel') &&
+                    ' *'}
+                </label>
 
                 <input
                   type="text"
                   inputMode="numeric"
                   placeholder="R$ 0,00"
-                  className={inputClass}
+                  className={`${inputClass} ${
+                    validationErrors.rentPrice ? 'border-red-500' : ''
+                  }`}
                   value={form.prices.rentPrice}
                   onChange={(e) =>
                     handleMoneyChange('rentPrice', e.target.value)
@@ -1153,6 +1485,20 @@ export default function PropertyCreate() {
                   onChange={(e) => handleMoneyChange('iptu', e.target.value)}
                 />
               </div>
+
+              <div className="md:col-span-2 xl:col-span-4">
+                <label className={labelClass}>Outras Taxas</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="R$ 0,00"
+                  className={inputClass}
+                  value={form.prices.otherFees}
+                  onChange={(e) =>
+                    handleMoneyChange('otherFees', e.target.value)
+                  }
+                />
+              </div>
             </div>
           </section>
 
@@ -1181,9 +1527,8 @@ export default function PropertyCreate() {
                 <h2 className="text-lg font-semibold text-white">
                   Características do Imóvel
                 </h2>
-
                 <p className="text-sm text-gray-400">
-                  Informe os detalhes físicos do imóvel.
+                  Informe os detalhes físicos do imóvel
                 </p>
               </div>
             </div>
@@ -1222,17 +1567,43 @@ export default function PropertyCreate() {
             </div>
 
             <div className="mt-8 grid gap-6 md:grid-cols-2">
+              <NumberInput
+                label="Andar"
+                value={form.floor}
+                onChange={(value) => updateNumber('floor', value)}
+              />
+
+              <NumberInput
+                label="Total de Andares"
+                value={form.totalFloors}
+                onChange={(value) => updateNumber('totalFloors', value)}
+              />
+            </div>
+
+            <div className="mt-8 grid gap-6 md:grid-cols-2">
               <div>
-                <label className={labelClass}>Área Total (m²)</label>
+                <label className={labelClass}>Área Total (m²) *</label>
 
                 <input
                   type="number"
-                  className={inputClass}
+                  step="0.01"
+                  className={`${inputClass} ${
+                    validationErrors.areaTotal ? 'border-red-500' : ''
+                  }`}
                   value={form.area.total}
                   onChange={(e) =>
                     handleNestedChange('area', 'total', e.target.value)
                   }
+                  placeholder="Ex.: 120"
                 />
+                {validationErrors.areaTotal && (
+                  <p className="mt-1 text-sm text-red-400" data-error>
+                    {validationErrors.areaTotal}
+                  </p>
+                )}
+                <p className="mt-1 text-xs text-gray-500">
+                  Área total do imóvel em metros quadrados (obrigatório)
+                </p>
               </div>
 
               <div>
@@ -1240,12 +1611,122 @@ export default function PropertyCreate() {
 
                 <input
                   type="number"
+                  step="0.01"
                   className={inputClass}
                   value={form.area.built}
                   onChange={(e) =>
                     handleNestedChange('area', 'built', e.target.value)
                   }
+                  placeholder="Ex.: 100"
                 />
+                <p className="mt-1 text-xs text-gray-500">
+                  Área construída em metros quadrados (opcional)
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-8 grid gap-6 md:grid-cols-3">
+              <div>
+                <label className={labelClass}>Área do Terreno (m²)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className={inputClass}
+                  value={form.area.landArea}
+                  onChange={(e) =>
+                    handleNestedChange('area', 'landArea', e.target.value)
+                  }
+                  placeholder="Ex.: 300"
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Testada (m)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className={inputClass}
+                  value={form.area.frontage}
+                  onChange={(e) =>
+                    handleNestedChange('area', 'frontage', e.target.value)
+                  }
+                  placeholder="Ex.: 12.5"
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Fundos (m)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className={inputClass}
+                  value={form.area.background}
+                  onChange={(e) =>
+                    handleNestedChange('area', 'background', e.target.value)
+                  }
+                  placeholder="Ex.: 25"
+                />
+              </div>
+            </div>
+
+            <div className="mt-8 grid gap-6 md:grid-cols-2">
+              <div className="flex items-center gap-4">
+                <input
+                  type="checkbox"
+                  id="furnished"
+                  name="furnished"
+                  checked={form.furnished}
+                  onChange={handleChange}
+                  className={checkboxClass}
+                />
+                <label htmlFor="furnished" className="text-sm text-gray-300">
+                  Mobiliado
+                </label>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <input
+                  type="checkbox"
+                  id="acceptsPets"
+                  name="acceptsPets"
+                  checked={form.acceptsPets}
+                  onChange={handleChange}
+                  className={checkboxClass}
+                />
+                <label htmlFor="acceptsPets" className="text-sm text-gray-300">
+                  Aceita Pets
+                </label>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <input
+                  type="checkbox"
+                  id="acceptsFinancing"
+                  name="acceptsFinancing"
+                  checked={form.acceptsFinancing}
+                  onChange={handleChange}
+                  className={checkboxClass}
+                />
+                <label
+                  htmlFor="acceptsFinancing"
+                  className="text-sm text-gray-300"
+                >
+                  Aceita Financiamento
+                </label>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <input
+                  type="checkbox"
+                  id="acceptsFGTS"
+                  name="acceptsFGTS"
+                  checked={form.acceptsFGTS}
+                  onChange={handleChange}
+                  className={checkboxClass}
+                />
+                <label htmlFor="acceptsFGTS" className="text-sm text-gray-300">
+                  Aceita FGTS
+                </label>
               </div>
             </div>
           </section>
@@ -1278,7 +1759,7 @@ export default function PropertyCreate() {
 
                 <p className="mt-1 text-sm text-gray-400">
                   Dados internos do proprietário. Essas informações não serão
-                  exibidas no site público ou nos hotsites dos corretores.
+                  exibidas no site público.
                 </p>
               </div>
             </div>
@@ -1319,8 +1800,6 @@ export default function PropertyCreate() {
                 md:grid-cols-2
               "
             >
-              {/* NOME */}
-
               <div>
                 <label className={labelClass}>Nome completo</label>
 
@@ -1334,8 +1813,6 @@ export default function PropertyCreate() {
                   placeholder="Nome completo do proprietário"
                 />
               </div>
-
-              {/* TELEFONE */}
 
               <div>
                 <label className={labelClass}>Telefone</label>
@@ -1364,8 +1841,6 @@ export default function PropertyCreate() {
                 </div>
               </div>
 
-              {/* EMAIL */}
-
               <div>
                 <label className={labelClass}>E-mail</label>
 
@@ -1392,8 +1867,6 @@ export default function PropertyCreate() {
                   />
                 </div>
               </div>
-
-              {/* DOCUMENTO */}
 
               <div>
                 <label className={labelClass}>CPF / CNPJ</label>
@@ -1438,8 +1911,7 @@ export default function PropertyCreate() {
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-400">
-                  Defina internamente qual corretor realizou a captação e qual
-                  percentual será destinado a ele quando a venda for concluída.
+                  Defina internamente qual corretor realizou a captação
                 </p>
               </div>
             </div>
@@ -1464,7 +1936,7 @@ export default function PropertyCreate() {
 
                   <p className="mt-1 text-xs leading-5 text-gray-500">
                     Essa informação é exclusivamente interna e não será exibida
-                    para o cliente no site público ou no hotsite.
+                    para o cliente.
                   </p>
                 </div>
               </div>
@@ -1477,7 +1949,6 @@ export default function PropertyCreate() {
                 md:grid-cols-2
               "
             >
-              {/* CORRETOR CAPTADOR */}
               <div>
                 <label className={labelClass}>Captado por</label>
 
@@ -1509,7 +1980,6 @@ export default function PropertyCreate() {
                   </p>
                 )}
               </div>
-              {/* PERCENTUAL */}
 
               <div>
                 <label className={labelClass}>Percentual de captação</label>
@@ -1522,12 +1992,12 @@ export default function PropertyCreate() {
                     step="0.01"
                     inputMode="decimal"
                     className={`
-        ${inputClass}
-        pr-12
-        appearance-none
-        [&::-webkit-inner-spin-button]:appearance-none
-        [&::-webkit-outer-spin-button]:appearance-none
-      `}
+                      ${inputClass}
+                      pr-12
+                      appearance-none
+                      [&::-webkit-inner-spin-button]:appearance-none
+                      [&::-webkit-outer-spin-button]:appearance-none
+                    `}
                     value={form.captation.percentage}
                     onChange={(e) => handlePercentageChange(e.target.value)}
                     placeholder="Ex.: 10"
@@ -1536,12 +2006,12 @@ export default function PropertyCreate() {
                   <Percent
                     size={18}
                     className="
-        absolute
-        right-4
-        top-1/2
-        -translate-y-1/2
-        text-gray-500
-      "
+                      absolute
+                      right-4
+                      top-1/2
+                      -translate-y-1/2
+                      text-gray-500
+                    "
                   />
                 </div>
 
@@ -1580,7 +2050,7 @@ export default function PropertyCreate() {
                 </h2>
 
                 <p className="text-sm text-gray-400">
-                  Informe o endereço completo do imóvel.
+                  Informe o endereço completo do imóvel
                 </p>
               </div>
             </div>
@@ -1654,23 +2124,32 @@ export default function PropertyCreate() {
               </div>
 
               <div>
-                <label className={labelClass}>Cidade</label>
+                <label className={labelClass}>Cidade *</label>
 
                 <input
-                  className={inputClass}
+                  className={`${inputClass} ${
+                    validationErrors.city ? 'border-red-500' : ''
+                  }`}
                   value={form.location.city}
                   onChange={(e) =>
                     handleNestedChange('location', 'city', e.target.value)
                   }
                 />
+                {validationErrors.city && (
+                  <p className="mt-1 text-sm text-red-400" data-error>
+                    {validationErrors.city}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className={labelClass}>Estado</label>
+                <label className={labelClass}>Estado *</label>
 
                 <input
                   maxLength={2}
-                  className={inputClass}
+                  className={`${inputClass} ${
+                    validationErrors.state ? 'border-red-500' : ''
+                  }`}
                   value={form.location.state}
                   onChange={(e) =>
                     handleNestedChange(
@@ -1679,6 +2158,24 @@ export default function PropertyCreate() {
                       e.target.value.toUpperCase(),
                     )
                   }
+                />
+                {validationErrors.state && (
+                  <p className="mt-1 text-sm text-red-400" data-error>
+                    {validationErrors.state}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className={labelClass}>País</label>
+
+                <input
+                  className={inputClass}
+                  value={form.location.country}
+                  onChange={(e) =>
+                    handleNestedChange('location', 'country', e.target.value)
+                  }
+                  placeholder="Brasil"
                 />
               </div>
 
@@ -1731,7 +2228,7 @@ export default function PropertyCreate() {
                 </h2>
 
                 <p className="text-sm text-gray-400">
-                  Selecione todos os diferenciais disponíveis.
+                  Selecione todos os diferenciais disponíveis
                 </p>
               </div>
             </div>
@@ -1754,51 +2251,51 @@ export default function PropertyCreate() {
                     type="button"
                     onClick={() => toggleFeature(feature)}
                     className={`
-                        group
-                        flex
-                        items-center
-                        gap-3
-                        rounded-xl
-                        border
-                        p-4
-                        transition-all
-                        duration-300
+                      group
+                      flex
+                      items-center
+                      gap-3
+                      rounded-xl
+                      border
+                      p-4
+                      transition-all
+                      duration-300
 
-                        ${
-                          active
-                            ? `
-                              border-blue-500
-                              bg-blue-600
-                              text-white
-                              shadow-lg
-                              shadow-blue-600/20
-                            `
-                            : `
-                              border-gray-700
-                              bg-gray-800/60
-                              text-gray-300
-                              hover:border-gray-500
-                              hover:bg-gray-800
-                            `
-                        }
-                      `}
+                      ${
+                        active
+                          ? `
+                            border-blue-500
+                            bg-blue-600
+                            text-white
+                            shadow-lg
+                            shadow-blue-600/20
+                          `
+                          : `
+                            border-gray-700
+                            bg-gray-800/60
+                            text-gray-300
+                            hover:border-gray-500
+                            hover:bg-gray-800
+                          `
+                      }
+                    `}
                   >
                     <div
                       className={`
-                          flex
-                          h-6
-                          w-6
-                          items-center
-                          justify-center
-                          rounded-full
-                          transition-all
+                        flex
+                        h-6
+                        w-6
+                        items-center
+                        justify-center
+                        rounded-full
+                        transition-all
 
-                          ${
-                            active
-                              ? 'bg-white text-blue-600'
-                              : 'bg-gray-700 text-gray-400'
-                          }
-                        `}
+                        ${
+                          active
+                            ? 'bg-white text-blue-600'
+                            : 'bg-gray-700 text-gray-400'
+                        }
+                      `}
                     >
                       ✓
                     </div>
@@ -1807,6 +2304,177 @@ export default function PropertyCreate() {
                   </button>
                 );
               })}
+            </div>
+          </section>
+
+          {/* ======================================================
+              TAGS E HIGHLIGHTS
+          ====================================================== */}
+
+          <section className={cardClass}>
+            <div className="mb-8 flex items-center gap-4">
+              <div
+                className="
+                  flex
+                  h-12
+                  w-12
+                  items-center
+                  justify-center
+                  rounded-xl
+                  bg-indigo-600/10
+                  text-indigo-400
+                "
+              >
+                <Tag size={22} />
+              </div>
+
+              <div>
+                <h2 className="text-lg font-semibold text-white">
+                  Tags e Destaques
+                </h2>
+                <p className="text-sm text-gray-400">
+                  Adicione palavras-chave e diferenciais do imóvel
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2">
+              <TagInput
+                label="Tags"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onAdd={addTag}
+                onRemove={removeTag}
+                items={form.tags}
+                placeholder="Ex.: cobertura, vista-mar, lazer..."
+              />
+
+              <TagInput
+                label="Destaques (Highlights)"
+                value={highlightInput}
+                onChange={(e) => setHighlightInput(e.target.value)}
+                onAdd={addHighlight}
+                onRemove={removeHighlight}
+                items={form.highlights}
+                placeholder="Ex.: Varanda Gourmet, Piscina Privativa..."
+              />
+            </div>
+          </section>
+
+          {/* ======================================================
+              DOCUMENTOS E REGISTROS
+          ====================================================== */}
+
+          <section className={cardClass}>
+            <div className="mb-8 flex items-center gap-4">
+              <div
+                className="
+                  flex
+                  h-12
+                  w-12
+                  items-center
+                  justify-center
+                  rounded-xl
+                  bg-rose-600/10
+                  text-rose-400
+                "
+              >
+                <FileText size={22} />
+              </div>
+
+              <div>
+                <h2 className="text-lg font-semibold text-white">
+                  Documentos e Registros
+                </h2>
+                <p className="text-sm text-gray-400">
+                  Números de registro e documentos do imóvel
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2">
+              <div>
+                <label className={labelClass}>Número de Registro</label>
+                <input
+                  name="registrationNumber"
+                  value={form.registrationNumber}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="Número de matrícula do imóvel"
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Número da Escritura</label>
+                <input
+                  name="deedNumber"
+                  value={form.deedNumber}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="Número da escritura pública"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* ======================================================
+              OBSERVAÇÕES
+          ====================================================== */}
+
+          <section className={cardClass}>
+            <div className="mb-8 flex items-center gap-4">
+              <div
+                className="
+                  flex
+                  h-12
+                  w-12
+                  items-center
+                  justify-center
+                  rounded-xl
+                  bg-yellow-600/10
+                  text-yellow-400
+                "
+              >
+                <ClipboardList size={22} />
+              </div>
+
+              <div>
+                <h2 className="text-lg font-semibold text-white">
+                  Observações
+                </h2>
+                <p className="text-sm text-gray-400">
+                  Anotações internas sobre o imóvel
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-6">
+              <div>
+                <label className={labelClass}>Notas Públicas</label>
+                <textarea
+                  rows={3}
+                  name="notes"
+                  value={form.notes}
+                  onChange={handleChange}
+                  className={`${inputClass} resize-none`}
+                  placeholder="Notas que podem ser compartilhadas com clientes..."
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Notas Internas</label>
+                <textarea
+                  rows={3}
+                  name="internalNotes"
+                  value={form.internalNotes}
+                  onChange={handleChange}
+                  className={`${inputClass} resize-none`}
+                  placeholder="Anotações internas apenas para a equipe CRM..."
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Essas notas são visíveis apenas para a equipe interna
+                </p>
+              </div>
             </div>
           </section>
 
