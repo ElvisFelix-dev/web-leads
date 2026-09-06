@@ -767,6 +767,7 @@ export default function PropertyDetails() {
     }));
   }
 
+  // src/pages/PropertyDetails.jsx - handleContactSubmit
   async function handleContactSubmit(event) {
     event.preventDefault();
 
@@ -775,31 +776,28 @@ export default function PropertyDetails() {
     try {
       setContactLoading(true);
 
-      // 🔥 REGISTRAR O CONTATO
+      // 🔥 INCLUIR A REGIÃO DO IMÓVEL
+      const propertyRegion = property?.location?.region || 'central';
+
       const response = await api.post(`/api/lead-capture/property/${id}`, {
         name: form.name,
         email: form.email,
         phone: form.phone,
         message: form.message,
         source: 'public',
-        sourceType: 'company_site',
+        sourceType: 'property_page', // 🔥 MUDAR PARA property_page
         propertyId: id,
+        region: propertyRegion, // 🔥 ADICIONAR REGIÃO
         landingPage: window.location.href,
         referrer: document.referrer || '',
       });
 
-      console.log('LEAD CAPTURADO:', response.data);
+      console.log('✅ LEAD CAPTURADO:', response.data);
 
-      // 🔥 INCREMENTAR CONTATO NO IMÓVEL
-      try {
-        await api.post(`/api/properties/${id}/increment-contact`);
-      } catch (incErr) {
-        console.warn('Erro ao incrementar contato:', incErr);
-      }
-
+      // Incrementar contato no imóvel (via backend)
+      // O backend já faz isso, mas podemos atualizar o estado local
       setContactSuccess(true);
 
-      // 🔥 ATUALIZAR ESTADO LOCAL
       setProperty((current) => {
         if (!current) return current;
 
@@ -815,12 +813,15 @@ export default function PropertyDetails() {
       });
 
       toast.success('Solicitação enviada com sucesso!');
-    } catch (err) {
-      console.error(
-        'Erro ao enviar contato:',
-        err.response?.data || err.message,
-      );
 
+      // 🔥 MOSTRAR QUAL CORRETOR FOI ATRIBUIDO
+      if (response.data?.assignedTo) {
+        toast.info(
+          `Seu contato foi encaminhado para ${response.data.assignedTo.name}`,
+        );
+      }
+    } catch (err) {
+      console.error('Erro ao enviar contato:', err.response?.data || err);
       toast.error(
         err.response?.data?.message ||
           'Não foi possível enviar sua solicitação. Tente novamente.',
