@@ -17,13 +17,14 @@ import Header from '../../components/site/Header';
 import Footer from '../../components/site/Footer';
 
 import api from '../../service/api';
+import { toast } from 'react-toastify';
 
 export default function Contact() {
   const [form, setForm] = useState({
     name: '',
     email: '',
     phone: '',
-    region: 'central', // 🔥 NOVO: Região padrão
+    region: 'central',
     message: '',
   });
 
@@ -42,7 +43,55 @@ export default function Contact() {
     { value: 'grande_sp', label: 'Grande SP' },
   ];
 
+  /* ==========================================================
+     VALIDAÇÕES
+  ========================================================== */
+
+  const validateEmail = (email) => {
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    return emailRegex.test(email);
+  };
+
+  const validatePhone = (phone) => {
+    // Remove todos os caracteres não numéricos
+    const numbers = phone.replace(/\D/g, '');
+    // Verifica se tem 10 ou 11 dígitos (com ou sem 9)
+    if (numbers.length < 10 || numbers.length > 11) {
+      return false;
+    }
+    // Verifica se o DDD é válido (11 a 99)
+    const ddd = parseInt(numbers.substring(0, 2));
+    if (ddd < 11 || ddd > 99) {
+      return false;
+    }
+    return true;
+  };
+
+  const formatPhone = (value) => {
+    const numbers = value.replace(/\D/g, '');
+    if (numbers.length <= 2) {
+      return numbers;
+    } else if (numbers.length <= 6) {
+      return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
+    } else if (numbers.length <= 10) {
+      return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 6)}-${numbers.slice(6)}`;
+    } else {
+      return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`;
+    }
+  };
+
+  /* ==========================================================
+     HANDLERS
+  ========================================================== */
+
   const handleChange = (field, value) => {
+    // 🔥 SE FOR TELEFONE, APLICAR MÁSCARA
+    if (field === 'phone') {
+      const formatted = formatPhone(value);
+      setForm((prev) => ({ ...prev, [field]: formatted }));
+      return;
+    }
+
     setForm((prev) => ({
       ...prev,
       [field]: value,
@@ -56,24 +105,47 @@ export default function Contact() {
     setSuccess(false);
     setLoading(true);
 
+    // 🔥 VALIDAR EMAIL
+    if (!validateEmail(form.email)) {
+      setError('Por favor, digite um e-mail válido (ex: nome@email.com)');
+      toast.error('Por favor, digite um e-mail válido (ex: nome@email.com)');
+      setLoading(false);
+      return;
+    }
+
+    // 🔥 VALIDAR TELEFONE
+    if (!validatePhone(form.phone)) {
+      setError('Por favor, digite um telefone válido (ex: (11) 99999-9999)');
+      toast.error('Por favor, digite um telefone válido (ex: (11) 99999-9999)');
+      setLoading(false);
+      return;
+    }
+
     try {
-      // 🔥 ENVIAR COM REGIÃO
-      const response = await api.post('/api/leads', {
-        name: form.name,
-        email: form.email,
-        phone: form.phone,
-        region: form.region, // 🔥 REGIÃO
+      // 🔥 ENVIAR COM REGIÃO PARA A ROTA CORRETA
+      const response = await api.post('/api/lead-capture/site', {
+        name: form.name.trim(),
+        email: form.email.trim().toLowerCase(),
+        phone: form.phone.trim(),
+        region: form.region,
         source: 'public',
-        sourceType: 'company_site', // 🔥 TIPO DE ORIGEM
-        notes: form.message,
-        message: form.message,
-        // 🔥 CAMPOS PARA DISTRIBUIÇÃO AUTOMÁTICA
-        awaitingAssignment: true,
+        sourceType: 'company_site',
+        notes: form.message.trim(),
+        message: form.message.trim(),
+        landingPage: window.location.href,
+        referrer: document.referrer || '',
       });
 
       console.log('✅ Lead criado:', response.data);
 
       setSuccess(true);
+      toast.success('Solicitação enviada com sucesso!');
+
+      if (response.data?.assignedTo) {
+        toast.info(
+          `Seu contato foi encaminhado para ${response.data.assignedTo.name}`,
+        );
+      }
 
       setForm({
         name: '',
@@ -85,10 +157,12 @@ export default function Contact() {
     } catch (err) {
       console.error('Erro ao enviar contato:', err.response?.data || err);
 
-      setError(
+      const errorMessage =
         err.response?.data?.message ||
-          'Não foi possível enviar sua mensagem. Tente novamente.',
-      );
+        'Não foi possível enviar sua mensagem. Tente novamente.';
+
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -145,7 +219,7 @@ export default function Contact() {
               {/* FORMULÁRIO */}
               <div className="rounded-3xl border border-white/10 bg-gray-900/80 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
                 {success ? (
-                  <div className="flex min-h-[520px] flex-col items-center justify-center text-center">
+                  <div className="flex min-h-[540px] flex-col items-center justify-center text-center">
                     <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-green-500/10 text-green-500">
                       <CheckCircle2 size={42} />
                     </div>
@@ -178,7 +252,7 @@ export default function Contact() {
                     {/* NOME */}
                     <div>
                       <label className="mb-2 block text-sm font-medium text-gray-300">
-                        Nome
+                        Nome <span className="text-red-400">*</span>
                       </label>
                       <div className="relative">
                         <User
@@ -189,17 +263,19 @@ export default function Contact() {
                           type="text"
                           value={form.name}
                           onChange={(e) => handleChange('name', e.target.value)}
-                          placeholder="Seu nome"
+                          placeholder="Seu nome completo"
                           required
+                          minLength={2}
+                          maxLength={100}
                           className="w-full rounded-xl border border-white/10 bg-gray-950 py-3.5 pl-11 pr-4 text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                         />
                       </div>
                     </div>
 
-                    {/* EMAIL */}
+                    {/* EMAIL COM VALIDAÇÃO */}
                     <div>
                       <label className="mb-2 block text-sm font-medium text-gray-300">
-                        E-mail
+                        E-mail <span className="text-red-400">*</span>
                       </label>
                       <div className="relative">
                         <Mail
@@ -214,15 +290,18 @@ export default function Contact() {
                           }
                           placeholder="seu@email.com"
                           required
+                          pattern="[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+                          title="Digite um e-mail válido (ex: nome@email.com)"
                           className="w-full rounded-xl border border-white/10 bg-gray-950 py-3.5 pl-11 pr-4 text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                         />
                       </div>
                     </div>
 
-                    {/* TELEFONE */}
+                    {/* TELEFONE COM VALIDAÇÃO */}
                     <div>
                       <label className="mb-2 block text-sm font-medium text-gray-300">
-                        WhatsApp / Telefone
+                        WhatsApp / Telefone{' '}
+                        <span className="text-red-400">*</span>
                       </label>
                       <div className="relative">
                         <Phone
@@ -237,15 +316,22 @@ export default function Contact() {
                           }
                           placeholder="(11) 99999-9999"
                           required
+                          pattern="\([0-9]{2}\) [0-9]{4,5}-[0-9]{4}"
+                          title="Digite um telefone válido (ex: (11) 99999-9999)"
+                          maxLength={16}
                           className="w-full rounded-xl border border-white/10 bg-gray-950 py-3.5 pl-11 pr-4 text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                         />
                       </div>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Formato: (DDD) 9XXXX-XXXX ou (DDD) XXXX-XXXX
+                      </p>
                     </div>
 
-                    {/* 🔥 REGIÃO - NOVO CAMPO */}
+                    {/* REGIÃO */}
                     <div>
                       <label className="mb-2 block text-sm font-medium text-gray-300">
-                        Região de interesse
+                        Região de interesse{' '}
+                        <span className="text-red-400">*</span>
                       </label>
                       <div className="relative">
                         <MapPin
@@ -285,9 +371,13 @@ export default function Contact() {
                           onChange={(e) =>
                             handleChange('message', e.target.value)
                           }
+                          maxLength={500}
                           placeholder="Ex.: Procuro um apartamento de 2 quartos para comprar..."
                           className="w-full resize-none rounded-xl border border-white/10 bg-gray-950 py-3.5 pl-11 pr-4 text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                         />
+                      </div>
+                      <div className="mt-1 flex justify-end text-xs text-gray-500">
+                        {form.message.length}/500
                       </div>
                     </div>
 

@@ -469,6 +469,43 @@ export default function PropertyDetails() {
   });
 
   /* ==========================================================
+     VALIDAÇÕES 🔥 NOVAS
+  ========================================================== */
+
+  const validateEmail = (email) => {
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    return emailRegex.test(email);
+  };
+
+  const validatePhone = (phone) => {
+    // Remove todos os caracteres não numéricos
+    const numbers = phone.replace(/\D/g, '');
+    // Verifica se tem 10 ou 11 dígitos (com ou sem 9)
+    if (numbers.length < 10 || numbers.length > 11) {
+      return false;
+    }
+    // Verifica se o DDD é válido (11 a 99)
+    const ddd = parseInt(numbers.substring(0, 2));
+    if (ddd < 11 || ddd > 99) {
+      return false;
+    }
+    return true;
+  };
+
+  const formatPhone = (value) => {
+    const numbers = value.replace(/\D/g, '');
+    if (numbers.length <= 2) {
+      return numbers;
+    } else if (numbers.length <= 6) {
+      return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
+    } else if (numbers.length <= 10) {
+      return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 6)}-${numbers.slice(6)}`;
+    } else {
+      return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`;
+    }
+  };
+
+  /* ==========================================================
      BUSCAR IMÓVEL
   ========================================================== */
 
@@ -496,7 +533,6 @@ export default function PropertyDetails() {
         setProperty(data);
         setActiveImage(0);
 
-        // 🔥 VERIFICAR SE O IMÓVEL JÁ ESTÁ FAVORITADO
         if (isPropertyAvailable(data) || isPropertyReserved(data)) {
           await checkFavoriteStatus(data._id || id);
         }
@@ -566,7 +602,7 @@ export default function PropertyDetails() {
   const canContact = isAvailable || isReserved;
 
   /* ==========================================================
-     REGISTRAR VISUALIZAÇÃO 🔥 CORRIGIDO
+     REGISTRAR VISUALIZAÇÃO
   ========================================================== */
 
   useEffect(() => {
@@ -580,14 +616,12 @@ export default function PropertyDetails() {
 
         sessionStorage.setItem('propertySessionId', sessionId);
 
-        // 🔥 USAR A ROTA CORRETA
         await api.post(`/api/properties/${id}/increment-view`, {
           source: 'crm',
           sessionId,
           referrer: document.referrer || '',
         });
 
-        // 🔥 ATUALIZAR O ESTADO LOCAL
         setProperty((current) => {
           if (!current) return current;
 
@@ -613,7 +647,7 @@ export default function PropertyDetails() {
   }, [id, isAvailable]);
 
   /* ==========================================================
-     FAVORITO 🔥 CORRIGIDO
+     FAVORITO
   ========================================================== */
 
   async function handleFavorite() {
@@ -622,17 +656,14 @@ export default function PropertyDetails() {
     try {
       setFavoriteLoading(true);
 
-      // 🔥 USAR A ROTA CORRETA
       const response = await api.post(
         `/api/properties/${id}/increment-favorite`,
       );
 
       const data = response.data?.data || response.data;
 
-      // 🔥 ATUALIZAR O ESTADO LOCAL
       setFavorite((prev) => !prev);
 
-      // 🔥 ATUALIZAR AS ESTATÍSTICAS DO IMÓVEL
       setProperty((current) => {
         if (!current) return current;
 
@@ -652,7 +683,6 @@ export default function PropertyDetails() {
         err.response?.data || err.message,
       );
 
-      // 🔥 TENTAR USAR A ROTA ANTIGA SE A NOVA FALHAR
       try {
         const response = await api.post(`/api/property-favorite/${id}/toggle`);
         const data = response.data?.data || response.data;
@@ -755,47 +785,61 @@ export default function PropertyDetails() {
   }
 
   /* ==========================================================
-     FORMULÁRIO
+     FORMULÁRIO 🔥 COM VALIDAÇÕES
   ========================================================== */
 
-  function handleFormChange(event) {
+  const handleFormChange = (event) => {
     const { name, value } = event.target;
+
+    // 🔥 SE FOR TELEFONE, APLICAR MÁSCARA
+    if (name === 'phone') {
+      const formatted = formatPhone(value);
+      setForm((current) => ({ ...current, [name]: formatted }));
+      return;
+    }
 
     setForm((current) => ({
       ...current,
       [name]: value,
     }));
-  }
+  };
 
-  // src/pages/PropertyDetails.jsx - handleContactSubmit
-  async function handleContactSubmit(event) {
+  const handleContactSubmit = async (event) => {
     event.preventDefault();
 
     if (!id || isSold) return;
 
+    // 🔥 VALIDAR EMAIL
+    if (!validateEmail(form.email)) {
+      toast.error('Por favor, digite um e-mail válido (ex: nome@email.com)');
+      return;
+    }
+
+    // 🔥 VALIDAR TELEFONE
+    if (!validatePhone(form.phone)) {
+      toast.error('Por favor, digite um telefone válido (ex: (11) 99999-9999)');
+      return;
+    }
+
     try {
       setContactLoading(true);
 
-      // 🔥 INCLUIR A REGIÃO DO IMÓVEL
       const propertyRegion = property?.location?.region || 'central';
 
-      const response = await api.post(`/api/lead-capture/property/${id}`, {
-        name: form.name,
-        email: form.email,
-        phone: form.phone,
-        message: form.message,
+      const response = await api.post(`/api/lead-capture/property-page/${id}`, {
+        name: form.name.trim(),
+        email: form.email.trim().toLowerCase(),
+        phone: form.phone.trim(),
+        message: form.message.trim(),
         source: 'public',
-        sourceType: 'property_page', // 🔥 MUDAR PARA property_page
-        propertyId: id,
-        region: propertyRegion, // 🔥 ADICIONAR REGIÃO
+        sourceType: 'property_page',
+        region: propertyRegion,
         landingPage: window.location.href,
         referrer: document.referrer || '',
       });
 
       console.log('✅ LEAD CAPTURADO:', response.data);
 
-      // Incrementar contato no imóvel (via backend)
-      // O backend já faz isso, mas podemos atualizar o estado local
       setContactSuccess(true);
 
       setProperty((current) => {
@@ -814,7 +858,6 @@ export default function PropertyDetails() {
 
       toast.success('Solicitação enviada com sucesso!');
 
-      // 🔥 MOSTRAR QUAL CORRETOR FOI ATRIBUIDO
       if (response.data?.assignedTo) {
         toast.info(
           `Seu contato foi encaminhado para ${response.data.assignedTo.name}`,
@@ -829,7 +872,7 @@ export default function PropertyDetails() {
     } finally {
       setContactLoading(false);
     }
-  }
+  };
 
   function closeContactModal() {
     if (contactLoading) return;
@@ -1016,10 +1059,7 @@ export default function PropertyDetails() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      {/* ======================================================
-          HEADER
-      ====================================================== */}
-
+      {/* HEADER */}
       <header className="sticky top-0 z-40 border-b border-white/10 bg-gray-950/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 md:px-6">
           <button
@@ -1028,7 +1068,6 @@ export default function PropertyDetails() {
             className="inline-flex items-center gap-2 text-sm font-medium text-gray-400 transition hover:text-white"
           >
             <ArrowLeft className="h-4 w-4" />
-
             <span className="hidden sm:inline">Voltar</span>
           </button>
 
@@ -1072,10 +1111,7 @@ export default function PropertyDetails() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 pb-32 pt-6 md:px-6 md:pb-16 md:pt-8">
-        {/* ====================================================
-            BANNER DE IMÓVEL VENDIDO
-        ==================================================== */}
-
+        {/* BANNER DE IMÓVEL VENDIDO */}
         {isSold && (
           <div className="mb-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 md:p-5">
             <div className="flex items-start gap-3">
@@ -1106,10 +1142,7 @@ export default function PropertyDetails() {
           </div>
         )}
 
-        {/* ====================================================
-            GALERIA
-        ==================================================== */}
-
+        {/* GALERIA */}
         <section className="overflow-hidden rounded-3xl border border-white/10 bg-gray-900 shadow-2xl">
           <div className="grid gap-2 md:grid-cols-[2fr_1fr]">
             <button
@@ -1263,10 +1296,7 @@ export default function PropertyDetails() {
           </div>
         )}
 
-        {/* ====================================================
-            HEADER DO IMÓVEL
-        ==================================================== */}
-
+        {/* HEADER DO IMÓVEL */}
         <section className="mt-8">
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_360px]">
             <div>
@@ -1365,10 +1395,7 @@ export default function PropertyDetails() {
                 </div>
               )}
 
-              {/* ==================================================
-                  PREÇO
-              ================================================== */}
-
+              {/* PREÇO */}
               <div className="mt-8">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
                   {isSold ? 'Valor de venda' : isForRent ? 'Aluguel' : 'Venda'}
@@ -1402,7 +1429,6 @@ export default function PropertyDetails() {
               </div>
 
               {/* CARACTERÍSTICAS PRINCIPAIS */}
-
               <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {featuresMain.map(({ icon: Icon, label, value }) => (
                   <div
@@ -1444,10 +1470,7 @@ export default function PropertyDetails() {
                 </div>
               )}
 
-              {/* ==================================================
-                  DESEMPENHO 🔥 ATUALIZADO
-              ================================================== */}
-
+              {/* DESEMPENHO */}
               <section className="mt-8">
                 <div className="rounded-3xl border border-white/10 bg-gray-900 p-5 shadow-xl">
                   <div className="flex items-center justify-between gap-4">
@@ -1533,10 +1556,7 @@ export default function PropertyDetails() {
               </section>
             </div>
 
-            {/* ==================================================
-                CARD DE CONTATO
-            ================================================== */}
-
+            {/* CARD DE CONTATO */}
             <aside className="hidden lg:block">
               <div
                 className={`sticky top-24 rounded-3xl border p-6 shadow-2xl ${
@@ -1644,13 +1664,9 @@ export default function PropertyDetails() {
         </section>
 
         {/* DIVISOR */}
-
         <div className="mt-12 border-t border-white/10" />
 
-        {/* ====================================================
-            DESCRIÇÃO
-        ==================================================== */}
-
+        {/* DESCRIÇÃO */}
         <section className="pt-10">
           <div className="max-w-4xl">
             <h2 className="text-2xl font-bold tracking-tight text-white md:text-3xl">
@@ -1663,10 +1679,7 @@ export default function PropertyDetails() {
           </div>
         </section>
 
-        {/* ====================================================
-            CARACTERÍSTICAS
-        ==================================================== */}
-
+        {/* CARACTERÍSTICAS */}
         <section className="mt-12 border-t border-white/10 pt-10">
           <div className="max-w-5xl">
             <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
@@ -1713,10 +1726,7 @@ export default function PropertyDetails() {
           </div>
         </section>
 
-        {/* ====================================================
-            DETALHES
-        ==================================================== */}
-
+        {/* DETALHES */}
         <section className="mt-12 border-t border-white/10 pt-10">
           <div className="max-w-5xl">
             <h2 className="text-2xl font-bold tracking-tight text-white md:text-3xl">
@@ -1807,10 +1817,7 @@ export default function PropertyDetails() {
           </div>
         </section>
 
-        {/* ====================================================
-            LOCALIZAÇÃO
-        ==================================================== */}
-
+        {/* LOCALIZAÇÃO */}
         <section className="mt-12 border-t border-white/10 pt-10">
           <div className="max-w-5xl">
             <h2 className="text-2xl font-bold tracking-tight text-white md:text-3xl">
@@ -1864,10 +1871,7 @@ export default function PropertyDetails() {
           </div>
         </section>
 
-        {/* ====================================================
-            CTA FINAL
-        ==================================================== */}
-
+        {/* CTA FINAL */}
         <section
           className={`mt-12 overflow-hidden rounded-3xl border px-6 py-10 text-white md:px-10 md:py-12 ${
             isSold
@@ -1922,10 +1926,7 @@ export default function PropertyDetails() {
         </section>
       </main>
 
-      {/* ======================================================
-          MOBILE CTA
-      ====================================================== */}
-
+      {/* MOBILE CTA */}
       {!isSold && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-gray-950/95 p-3 shadow-[0_-8px_30px_rgba(0,0,0,0.4)] backdrop-blur-xl lg:hidden">
           <div className="mx-auto flex max-w-7xl items-center gap-3">
@@ -1970,10 +1971,7 @@ export default function PropertyDetails() {
         </div>
       )}
 
-      {/* ======================================================
-          GALERIA COMPLETA
-      ====================================================== */}
-
+      {/* GALERIA COMPLETA */}
       {showGallery && (
         <div className="fixed inset-0 z-[100] bg-black">
           <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-4 py-4 md:px-8">
@@ -2048,10 +2046,7 @@ export default function PropertyDetails() {
         </div>
       )}
 
-      {/* ======================================================
-          MODAL DE CONTATO
-      ====================================================== */}
-
+      {/* MODAL DE CONTATO - COM VALIDAÇÕES */}
       {showContactModal && !isSold && (
         <div
           className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-sm"
@@ -2090,12 +2085,13 @@ export default function PropertyDetails() {
                 </div>
 
                 <form onSubmit={handleContactSubmit} className="mt-7 space-y-4">
+                  {/* NOME */}
                   <div>
                     <label
                       htmlFor="property-contact-name"
                       className="mb-1.5 block text-sm font-medium text-gray-300"
                     >
-                      Nome
+                      Nome <span className="text-red-400">*</span>
                     </label>
 
                     <input
@@ -2105,18 +2101,21 @@ export default function PropertyDetails() {
                       value={form.name}
                       onChange={handleFormChange}
                       required
+                      minLength={2}
+                      maxLength={100}
                       autoComplete="name"
-                      placeholder="Seu nome"
+                      placeholder="Seu nome completo"
                       className="w-full rounded-xl border border-white/10 bg-gray-950 px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                     />
                   </div>
 
+                  {/* EMAIL COM VALIDAÇÃO */}
                   <div>
                     <label
                       htmlFor="property-contact-email"
                       className="mb-1.5 block text-sm font-medium text-gray-300"
                     >
-                      E-mail
+                      E-mail <span className="text-red-400">*</span>
                     </label>
 
                     <input
@@ -2128,16 +2127,20 @@ export default function PropertyDetails() {
                       required
                       autoComplete="email"
                       placeholder="voce@email.com"
+                      pattern="[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+                      title="Digite um e-mail válido (ex: nome@email.com)"
                       className="w-full rounded-xl border border-white/10 bg-gray-950 px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                     />
                   </div>
 
+                  {/* TELEFONE COM VALIDAÇÃO */}
                   <div>
                     <label
                       htmlFor="property-contact-phone"
                       className="mb-1.5 block text-sm font-medium text-gray-300"
                     >
-                      WhatsApp / Telefone
+                      WhatsApp / Telefone{' '}
+                      <span className="text-red-400">*</span>
                     </label>
 
                     <input
@@ -2149,10 +2152,18 @@ export default function PropertyDetails() {
                       required
                       autoComplete="tel"
                       placeholder="(11) 99999-9999"
+                      pattern="\([0-9]{2}\) [0-9]{4,5}-[0-9]{4}"
+                      title="Digite um telefone válido (ex: (11) 99999-9999)"
+                      maxLength={16}
                       className="w-full rounded-xl border border-white/10 bg-gray-950 px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                     />
+
+                    <p className="mt-1 text-xs text-gray-500">
+                      Formato: (DDD) 9XXXX-XXXX ou (DDD) XXXX-XXXX
+                    </p>
                   </div>
 
+                  {/* MENSAGEM */}
                   <div>
                     <label
                       htmlFor="property-contact-message"
@@ -2167,9 +2178,14 @@ export default function PropertyDetails() {
                       value={form.message}
                       onChange={handleFormChange}
                       rows={4}
+                      maxLength={500}
                       placeholder={`Olá, tenho interesse no imóvel "${title}".`}
                       className="w-full resize-none rounded-xl border border-white/10 bg-gray-950 px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                     />
+
+                    <div className="mt-1 flex justify-end text-xs text-gray-500">
+                      {form.message.length}/500
+                    </div>
                   </div>
 
                   <div className="rounded-2xl border border-white/10 bg-gray-800 p-4">
