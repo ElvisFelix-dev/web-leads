@@ -256,7 +256,10 @@ export default function Brokers() {
               Atualizar
             </button>
 
-            <button className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500">
+            <button
+              onClick={() => navigate('/brokers/new')}
+              className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500"
+            >
               <Plus size={17} />
               Novo Corretor
             </button>

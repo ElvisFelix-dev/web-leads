@@ -22,6 +22,8 @@ import AssignLeads from './pages/AssignLeads'; // nova página
 import MyLeads from './pages/MyLeads';
 import EditLead from './pages/EditLead';
 import Brokers from './pages/Brokers';
+import BrokerNew from './pages/BrokerNew';
+import BrokerEdit from './pages/BrokerEdit';
 import Me from './pages/Me';
 import PropertyDetails from './pages/PropertyDetails';
 import Landing from './pages/Landing';
@@ -91,6 +93,8 @@ export function App() {
           {/* nova rota */}
           <Route path="/my-leads" element={<MyLeads />} />
           <Route path="/brokers" element={<Brokers />} />
+          <Route path="/brokers/new" element={<BrokerNew />} />
+          <Route path="/broker-edit/:id" element={<BrokerEdit />} />
           <Route path="/broker-dashboard" element={<BrokerDashboard />} />
           <Route path="/me" element={<Me />} />
           <Route path="/my-visits" element={<Visits />} />
