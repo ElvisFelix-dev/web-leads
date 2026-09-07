@@ -8,10 +8,6 @@ import {
   AlertCircle,
   Loader2,
   TrendingUp,
-  Users,
-  Building2,
-  DollarSign,
-  Calendar,
 } from 'lucide-react';
 
 import { toast } from 'react-toastify';
@@ -48,29 +44,17 @@ export default function Dashboard() {
       }
       setError(null);
 
+      // Rota correta para o dashboard admin
       const { data } = await api.get('/api/dashboard/stats', {
         headers: {
-          Authorization: `Bearer ${user?.token}`,
+          Authorization: `Bearer ${user.token}`,
         },
       });
 
       console.log('📊 Dados do dashboard:', data);
 
-      // Normaliza os dados
-      const normalizedData = {
-        totals: data?.totals || data?.data?.totals || {},
-        ranking: data?.ranking || data?.data?.ranking || [],
-        latestLeads: data?.latestLeads || data?.data?.latestLeads || [],
-        leadsByBroker: data?.leadsByBroker || data?.data?.leadsByBroker || [],
-        pipeline: data?.pipeline || data?.data?.pipeline || [],
-        salesPerformance:
-          data?.salesPerformance || data?.data?.salesPerformance || [],
-        leadsDaily: data?.leadsDaily || data?.data?.leadsDaily || [],
-        imoveisDaily: data?.imoveisDaily || data?.data?.imoveisDaily || [],
-        activities: data?.activities || data?.data?.activities || [],
-      };
-
-      setDashboard(normalizedData);
+      // Os dados já vêm no formato correto do backend
+      setDashboard(data);
 
       if (showToast) {
         toast.success('Dashboard atualizado!');
@@ -153,20 +137,33 @@ export default function Dashboard() {
     );
   }
 
-  // Dados do dashboard
+  // Dados do dashboard - estrutura exata do backend
   const {
     totals = {},
-    ranking = [],
+    users = [],
     latestLeads = [],
     leadsByBroker = [],
     pipeline = [],
-    salesPerformance = [],
+    ranking = [],
     leadsDaily = [],
     imoveisDaily = [],
     activities = [],
   } = dashboard;
 
-  // Preparar dados do gráfico
+  // Totals do backend
+  const {
+    leads = 0,
+    imoveis = 0,
+    usuarios = 0,
+    corretores = 0,
+    pipeline: pipelineCount = 0,
+    visitas = 0,
+    propostas = 0,
+    fechados = 0,
+    perdidos = 0,
+  } = totals;
+
+  // 🔥 CORREÇÃO: Definindo o chartData
   const chartData = leadsDaily.map((lead) => {
     const property = imoveisDaily.find((item) => item._id === lead._id);
     return {
@@ -177,8 +174,7 @@ export default function Dashboard() {
   });
 
   // Verificar se há dados
-  const hasData =
-    totals?.leads > 0 || totals?.properties > 0 || ranking.length > 0;
+  const hasData = leads > 0 || imoveis > 0 || ranking.length > 0;
 
   return (
     <div className="min-h-screen bg-slate-950 p-4 sm:p-6 lg:p-8">
@@ -216,8 +212,23 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* STATS */}
-        <AdminStats stats={totals} />
+        {/* STATS - Passando os dados no formato que o AdminStats espera */}
+        <AdminStats
+          stats={{
+            leads,
+            leadsDistribuidos: leads - pipelineCount,
+            imoveis,
+            corretores,
+            usuarios,
+            visitas,
+            propostas,
+            fechados,
+            perdidos,
+          }}
+          loading={loading}
+        />
+
+        {/* TOP PROPERTIES */}
         <TopProperties />
 
         {/* LEADS + RANKING */}
@@ -236,11 +247,11 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <SalesPerformance
             stats={{
-              leads: totals.leads || 0,
-              visitas: totals.visitas || 0,
-              propostas: totals.propostas || 0,
-              fechados: totals.fechados || 0,
-              perdidos: totals.perdidos || 0,
+              leads,
+              visitas,
+              propostas,
+              fechados,
+              perdidos,
             }}
           />
           <DashboardChart data={chartData} />
