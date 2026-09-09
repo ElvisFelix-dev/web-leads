@@ -7,13 +7,16 @@ import api from './api';
  * =========================================================
  */
 export const approveProposal = async (proposalId, comment = '') => {
+  // 🔥 CORRIGIDO: Usar a rota correta do proposals
   const response = await api.post(
-    `/orchestrator/proposals/${proposalId}/approve`,
-    { comment },
+    `/api/orchestrator/proposals/${proposalId}/approve`,
+    {
+      comment,
+    },
   );
   return response.data;
 };
-
+// router.post('/proposals/:proposalId/approve'
 /**
  * =========================================================
  * DASHBOARD DO CORRETOR

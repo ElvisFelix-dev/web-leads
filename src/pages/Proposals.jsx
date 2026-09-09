@@ -449,7 +449,7 @@ export default function Proposals() {
         console.log('✅ Proposta aprovada com sucesso:', response);
       } else {
         // Outras ações (reject, cancel) usam a API normal
-        await api.patch(`/api/proposals/${proposalId}/${action}`);
+        await api.patch(`/api/proposals/${proposalId}/approve`);
       }
 
       await Promise.all([

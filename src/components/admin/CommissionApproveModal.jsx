@@ -25,6 +25,23 @@ import { toast } from 'react-toastify';
 
 import { commissionService } from '../../service/commissionService';
 
+// =========================================================
+// HELPERS
+// =========================================================
+
+const formatCurrency = (value) => {
+  const safeValue = Number(value) || 0;
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(safeValue);
+};
+
+const formatPercentage = (value) => {
+  const safeValue = Number(value) || 0;
+  return `${safeValue}%`;
+};
+
 export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
   const [commission, setCommission] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -41,21 +58,6 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
     capturerPercentage: 0,
     companyPercentage: 0,
   });
-
-  // =========================================================
-  // HELPERS
-  // =========================================================
-
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(Number(value) || 0);
-  };
-
-  const formatPercentage = (value) => {
-    return `${Number(value) || 0}%`;
-  };
 
   // =========================================================
   // NORMALIZA ID
@@ -722,10 +724,7 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-5">
       <div className="relative w-full max-w-5xl max-h-[94vh] bg-[#0d1119] border border-gray-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
-        {/* ===================================================
-            HEADER
-        ==================================================== */}
-
+        {/* HEADER */}
         <header className="shrink-0 px-5 sm:px-7 py-5 border-b border-gray-800 bg-[#11151f]/95">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
@@ -761,25 +760,16 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
           </div>
         </header>
 
-        {/* ===================================================
-            CONTENT
-        ==================================================== */}
-
+        {/* CONTENT */}
         <div className="flex-1 overflow-y-auto">
           <div className="p-4 sm:p-6 lg:p-7 space-y-6">
-            {/* =================================================
-                HERO DA VENDA
-            ================================================= */}
-
+            {/* HERO DA VENDA */}
             <section className="relative overflow-hidden rounded-2xl border border-gray-800 bg-gradient-to-br from-gray-900/90 via-gray-900/60 to-gray-950/90">
               <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
 
               <div className="relative p-4 sm:p-5">
                 <div className="flex flex-col lg:flex-row gap-5">
-                  {/* =================================================
-                      IMÓVEL
-                  ================================================= */}
-
+                  {/* IMÓVEL */}
                   <div className="flex items-center gap-4 min-w-0 flex-1">
                     <div className="relative w-24 h-20 sm:w-32 sm:h-24 shrink-0 rounded-xl overflow-hidden border border-gray-700 bg-gray-800">
                       {propertyImage ? (
@@ -833,10 +823,7 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
                     </div>
                   </div>
 
-                  {/* =================================================
-                      VALOR
-                  ================================================= */}
-
+                  {/* VALOR */}
                   <div className="lg:min-w-[220px] lg:border-l lg:border-gray-800 lg:pl-5 flex items-center lg:justify-end">
                     <div className="lg:text-right">
                       <p className="text-[10px] uppercase tracking-[0.16em] text-gray-600 font-semibold">
@@ -856,10 +843,7 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
               </div>
             </section>
 
-            {/* =================================================
-                PARTICIPANTES
-            ================================================= */}
-
+            {/* PARTICIPANTES */}
             <section>
               <div className="flex items-center justify-between mb-3">
                 <div>
@@ -910,10 +894,7 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
               </div>
             </section>
 
-            {/* =================================================
-                INFORMAÇÕES DA VENDA
-            ================================================= */}
-
+            {/* INFORMAÇÕES DA VENDA */}
             <section className="rounded-2xl border border-gray-800 bg-gray-900/50 overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-800 flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
@@ -946,10 +927,7 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
               </div>
             </section>
 
-            {/* =================================================
-                DISTRIBUIÇÃO
-            ================================================= */}
-
+            {/* DISTRIBUIÇÃO */}
             <section className="rounded-2xl border border-gray-800 bg-gray-900/50 overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
@@ -991,7 +969,6 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
               </div>
 
               {/* SUGGESTIONS PANEL */}
-
               {showSuggestions && isEditable && (
                 <div className="px-5 py-4 border-b border-gray-800 bg-amber-500/5">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -1121,8 +1098,8 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
                         label="Vendedor"
                         broker={sellerBroker}
                         icon={FaUser}
-                        amount={calculated.sellerAmount}
-                        percentage={editData.sellerPercentage}
+                        amount={calculated?.sellerAmount ?? 0}
+                        percentage={editData?.sellerPercentage ?? 0}
                         accent="blue"
                       />
 
@@ -1131,8 +1108,8 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
                           label="Captador"
                           broker={capturerBroker}
                           icon={FaUserPlus}
-                          amount={calculated.capturerAmount}
-                          percentage={editData.capturerPercentage}
+                          amount={calculated?.capturerAmount ?? 0}
+                          percentage={editData?.capturerPercentage ?? 0}
                           accent="purple"
                         />
                       ) : (
@@ -1149,8 +1126,8 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
                       <DistributionCard
                         label="Imobiliária"
                         icon={FaBuilding}
-                        amount={calculated.companyAmount}
-                        percentage={editData.companyPercentage}
+                        amount={calculated?.companyAmount ?? 0}
+                        percentage={editData?.companyPercentage ?? 0}
                         accent="emerald"
                       />
                     </div>
@@ -1181,7 +1158,6 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
                     </div>
 
                     {/* RESUMO DA DISTRIBUIÇÃO */}
-
                     <div className="grid grid-cols-3 gap-3 pt-2">
                       <div className="text-center p-2 rounded-lg bg-blue-500/5 border border-blue-500/10">
                         <p className="text-[10px] text-gray-600">Vendedor</p>
@@ -1222,10 +1198,7 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
               </div>
             </section>
 
-            {/* =================================================
-                ERRO
-            ================================================= */}
-
+            {/* ERRO */}
             {error && (
               <div className="flex items-start gap-3 rounded-xl bg-red-500/10 border border-red-500/20 p-4">
                 <FaExclamationTriangle className="text-red-400 mt-0.5 shrink-0" />
@@ -1242,10 +1215,7 @@ export default function CommissionApproveModal({ sale, onClose, onSuccess }) {
           </div>
         </div>
 
-        {/* ===================================================
-            FOOTER
-        ==================================================== */}
-
+        {/* FOOTER */}
         <footer className="shrink-0 px-5 sm:px-7 py-4 border-t border-gray-800 bg-[#11151f]/95">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="text-xs text-gray-600">
@@ -1403,7 +1373,7 @@ function BrokerCard({
 }
 
 // =============================================================
-// DISTRIBUTION CARD
+// DISTRIBUTION CARD (CORRIGIDO)
 // =============================================================
 
 function DistributionCard({
@@ -1415,25 +1385,27 @@ function DistributionCard({
   accent,
   muted = false,
 }) {
+  // 🔥 VALORES PADRÃO PARA EVITAR ERROS
+  const safeAmount = Number(amount) || 0;
+  const safePercentage = Number(percentage) || 0;
+  const safeLabel = label || 'Distribuição';
+
   const themes = {
     blue: {
       card: 'bg-blue-500/5 border-blue-500/10',
       icon: 'bg-blue-500/10 border-blue-500/10',
       text: 'text-blue-400',
     },
-
     purple: {
       card: 'bg-purple-500/5 border-purple-500/10',
       icon: 'bg-purple-500/10 border-purple-500/10',
       text: 'text-purple-400',
     },
-
     emerald: {
       card: 'bg-emerald-500/5 border-emerald-500/10',
       icon: 'bg-emerald-500/10 border-emerald-500/10',
       text: 'text-emerald-400',
     },
-
     gray: {
       card: 'bg-gray-800/20 border-gray-800',
       icon: 'bg-gray-800 border-gray-700',
@@ -1442,6 +1414,9 @@ function DistributionCard({
   };
 
   const theme = themes[accent] || themes.gray;
+
+  // 🔥 VERIFICAR SE O ÍCONE EXISTE
+  const IconComponent = Icon || FaUser;
 
   return (
     <div
@@ -1453,17 +1428,17 @@ function DistributionCard({
         <div
           className={`w-10 h-10 shrink-0 rounded-xl border flex items-center justify-center ${theme.icon}`}
         >
-          <Icon className={`${theme.text} text-sm`} />
+          <IconComponent className={`${theme.text} text-sm`} />
         </div>
 
         <span className={`text-xs font-bold ${theme.text}`}>
-          {formatPercentage(percentage)}
+          {formatPercentage(safePercentage)}
         </span>
       </div>
 
       <div className="mt-4 min-w-0">
         <p className="text-[10px] uppercase tracking-wider text-gray-600 font-semibold">
-          {label}
+          {safeLabel}
         </p>
 
         {broker?.name && (
@@ -1471,7 +1446,7 @@ function DistributionCard({
         )}
 
         <p className="text-lg sm:text-xl font-bold text-white mt-2 truncate">
-          {formatCurrency(amount)}
+          {formatCurrency(safeAmount)}
         </p>
       </div>
     </div>

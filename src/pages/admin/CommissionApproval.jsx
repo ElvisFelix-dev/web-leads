@@ -22,26 +22,227 @@ import {
   FaExclamationTriangle,
 } from 'react-icons/fa';
 
+import { toast } from 'react-toastify';
 import { useCommissions } from '../../hooks/useCommissions';
 import { commissionService } from '../../service/commissionService';
 import CommissionStatusBadge from '../../components/admin/CommissionStatusBadge';
+
+// =============================================================
+// MODAIS - COMPONENTES REUTILIZÁVEIS
+// =============================================================
+
+function ConfirmModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  confirmLabel = 'Confirmar',
+  cancelLabel = 'Cancelar',
+  loading = false,
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md bg-[#11151f] border border-gray-800 rounded-2xl p-6 shadow-2xl">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center">
+            <FaExclamationTriangle className="text-yellow-400" />
+          </div>
+          <h3 className="text-lg font-bold text-white">{title}</h3>
+        </div>
+
+        <p className="text-sm text-gray-400 leading-relaxed">{message}</p>
+
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="flex-1 px-4 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-700 text-sm font-semibold text-gray-300 hover:text-white transition-all disabled:opacity-40"
+          >
+            {cancelLabel}
+          </button>
+
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                Processando...
+              </>
+            ) : (
+              confirmLabel
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PromptModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  inputLabel,
+  inputPlaceholder,
+  confirmLabel = 'Confirmar',
+  cancelLabel = 'Cancelar',
+  loading = false,
+}) {
+  const [value, setValue] = useState('');
+
+  if (!isOpen) return null;
+
+  const handleConfirm = () => {
+    if (value.trim()) {
+      onConfirm(value.trim());
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md bg-[#11151f] border border-gray-800 rounded-2xl p-6 shadow-2xl">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+            <FaMoneyBillWave className="text-blue-400" />
+          </div>
+          <h3 className="text-lg font-bold text-white">{title}</h3>
+        </div>
+
+        <p className="text-sm text-gray-400 leading-relaxed mb-4">{message}</p>
+
+        <div className="mb-4">
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+            {inputLabel}
+          </label>
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={inputPlaceholder}
+            className="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-blue-500 transition-all"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && value.trim()) {
+                handleConfirm();
+              }
+              if (e.key === 'Escape') {
+                onClose();
+              }
+            }}
+          />
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="flex-1 px-4 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-700 text-sm font-semibold text-gray-300 hover:text-white transition-all disabled:opacity-40"
+          >
+            {cancelLabel}
+          </button>
+
+          <button
+            onClick={handleConfirm}
+            disabled={loading || !value.trim()}
+            className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                Processando...
+              </>
+            ) : (
+              confirmLabel
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AlertModal({
+  isOpen,
+  onClose,
+  title,
+  message,
+  type = 'success',
+  buttonLabel = 'OK',
+}) {
+  if (!isOpen) return null;
+
+  const icons = {
+    success: {
+      icon: FaCheck,
+      className: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
+    },
+    error: {
+      icon: FaExclamationTriangle,
+      className: 'bg-red-500/10 border-red-500/20 text-red-400',
+    },
+    warning: {
+      icon: FaExclamationTriangle,
+      className: 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400',
+    },
+  };
+
+  const Icon = icons[type]?.icon || icons.success.icon;
+  const iconClass = icons[type]?.className || icons.success.className;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md bg-[#11151f] border border-gray-800 rounded-2xl p-6 shadow-2xl">
+        <div className="flex items-center gap-3 mb-4">
+          <div
+            className={`w-10 h-10 rounded-xl border flex items-center justify-center ${iconClass}`}
+          >
+            <Icon className="text-lg" />
+          </div>
+          <h3 className="text-lg font-bold text-white">{title}</h3>
+        </div>
+
+        <p className="text-sm text-gray-400 leading-relaxed">{message}</p>
+
+        <button
+          onClick={onClose}
+          className="w-full mt-6 px-4 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-700 text-sm font-semibold text-gray-300 hover:text-white transition-all"
+        >
+          {buttonLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================
+// COMPONENTE PRINCIPAL
+// =============================================================
 
 export default function CommissionApproval() {
   const [filters, setFilters] = useState({ status: 'pending' });
   const [updating, setUpdating] = useState(false);
   const [search, setSearch] = useState('');
 
+  // 🔥 ESTADOS DOS MODAIS
+  const [modalState, setModalState] = useState({
+    confirm: { isOpen: false, data: null, action: null },
+    prompt: { isOpen: false, data: null, action: null },
+    alert: { isOpen: false, type: 'success', title: '', message: '' },
+  });
+
   // =========================================================
-  // COMISSÕES DO FILTRO ATUAL
+  // COMISSÕES
   // =========================================================
 
   const { commissions, loading, error, refetch } = useCommissions(filters);
-
-  // =========================================================
-  // TODAS AS COMISSÕES
-  // Usadas exclusivamente para KPIs e contadores
-  // =========================================================
-
   const {
     commissions: allCommissions,
     loading: loadingAllCommissions,
@@ -61,7 +262,6 @@ export default function CommissionApproval() {
 
   const formatDate = (date) => {
     if (!date) return '-';
-
     return new Date(date).toLocaleDateString('pt-BR', {
       day: '2-digit',
       month: '2-digit',
@@ -75,7 +275,6 @@ export default function CommissionApproval() {
 
   const getInitials = (name) => {
     if (!name) return '??';
-
     return name
       .trim()
       .split(/\s+/)
@@ -86,11 +285,7 @@ export default function CommissionApproval() {
 
   const getImageUrl = (image) => {
     if (!image) return null;
-
-    if (typeof image === 'string') {
-      return image;
-    }
-
+    if (typeof image === 'string') return image;
     return (
       image.url ||
       image.secure_url ||
@@ -107,7 +302,6 @@ export default function CommissionApproval() {
 
   const getPropertyImage = (property) => {
     if (!property) return null;
-
     const candidates = [
       property.coverImage,
       property.mainImage,
@@ -118,23 +312,15 @@ export default function CommissionApproval() {
       property.photos?.[0],
       property.gallery?.[0],
     ];
-
     for (const candidate of candidates) {
       const url = getImageUrl(candidate);
-
-      if (url) {
-        return url;
-      }
+      if (url) return url;
     }
-
     return null;
   };
 
   const getPropertyName = (property) => {
-    if (!property) {
-      return 'Imóvel não informado';
-    }
-
+    if (!property) return 'Imóvel não informado';
     return (
       property.name ||
       property.title ||
@@ -147,20 +333,10 @@ export default function CommissionApproval() {
   };
 
   const getPropertyAddress = (property) => {
-    if (!property) {
-      return null;
-    }
-
-    if (property.fullAddress) {
-      return property.fullAddress;
-    }
-
+    if (!property) return null;
+    if (property.fullAddress) return property.fullAddress;
     const location = property.location;
-
-    if (!location) {
-      return null;
-    }
-
+    if (!location) return null;
     const parts = [
       location.street,
       location.number,
@@ -169,19 +345,12 @@ export default function CommissionApproval() {
       location.city,
       location.state,
     ].filter(Boolean);
-
-    if (!parts.length) {
-      return null;
-    }
-
+    if (!parts.length) return null;
     return parts.join(', ');
   };
 
   const getPropertyCode = (property) => {
-    if (!property) {
-      return null;
-    }
-
+    if (!property) return null;
     return (
       property.formattedCode ||
       property.code ||
@@ -192,10 +361,7 @@ export default function CommissionApproval() {
   };
 
   const getPropertyPrice = (property) => {
-    if (!property) {
-      return 0;
-    }
-
+    if (!property) return 0;
     return (
       property.prices?.salePrice || property.salePrice || property.price || 0
     );
@@ -203,7 +369,6 @@ export default function CommissionApproval() {
 
   const getBrokerAvatar = (broker) => {
     if (!broker) return null;
-
     return getImageUrl(
       broker.avatar ||
         broker.photo ||
@@ -213,32 +378,13 @@ export default function CommissionApproval() {
     );
   };
 
-  // =========================================================
-  // NORMALIZAÇÃO DO IMÓVEL
-  // =========================================================
-
   const getCommissionProperty = (commission) => {
-    if (!commission) {
-      return null;
-    }
-
-    /*
-     * Prioridade:
-     *
-     * 1. commission.property
-     * 2. sale.property
-     *
-     * Isso deixa o componente compatível com diferentes
-     * formatos retornados pela API.
-     */
-
-    const property = commission.property || commission.sale?.property || null;
-
-    return property;
+    if (!commission) return null;
+    return commission.property || commission.sale?.property || null;
   };
 
   // =========================================================
-  // MÉTRICAS GLOBAIS
+  // MÉTRICAS
   // =========================================================
 
   const metrics = useMemo(() => {
@@ -246,34 +392,18 @@ export default function CommissionApproval() {
       Array.isArray(allCommissions) && allCommissions.length
         ? allCommissions
         : [];
-
     const totalAmount = list.reduce(
-      (sum, commission) => sum + Number(commission.totalAmount || 0),
+      (sum, c) => sum + Number(c.totalAmount || 0),
       0,
     );
-
     const saleAmount = list.reduce(
-      (sum, commission) =>
-        sum + Number(commission.sale?.saleAmount || commission.saleAmount || 0),
+      (sum, c) => sum + Number(c.sale?.saleAmount || c.saleAmount || 0),
       0,
     );
-
-    const pending = list.filter(
-      (commission) => commission.status === 'pending',
-    ).length;
-
-    const approved = list.filter(
-      (commission) => commission.status === 'approved',
-    ).length;
-
-    const paid = list.filter(
-      (commission) => commission.status === 'paid',
-    ).length;
-
-    const cancelled = list.filter(
-      (commission) => commission.status === 'cancelled',
-    ).length;
-
+    const pending = list.filter((c) => c.status === 'pending').length;
+    const approved = list.filter((c) => c.status === 'approved').length;
+    const paid = list.filter((c) => c.status === 'paid').length;
+    const cancelled = list.filter((c) => c.status === 'cancelled').length;
     return {
       total: list.length,
       totalAmount,
@@ -291,35 +421,24 @@ export default function CommissionApproval() {
 
   const filteredCommissions = useMemo(() => {
     const list = Array.isArray(commissions) ? commissions : [];
-
-    if (!search.trim()) {
-      return list;
-    }
-
+    if (!search.trim()) return list;
     const term = search.toLowerCase().trim();
-
     return list.filter((commission) => {
       const property = getCommissionProperty(commission) || {};
-
       const searchable = [
         commission.sale?.saleNumber,
-
         commission.lead?.name,
         commission.lead?.email,
         commission.lead?.phone,
-
         commission.sellerBroker?.name,
         commission.sellerBroker?.email,
-
         commission.capturerBroker?.name,
         commission.capturerBroker?.email,
-
         property.name,
         property.title,
         property.propertyName,
         property.code,
         property.formattedCode,
-
         property.fullAddress,
         property.location?.street,
         property.location?.district,
@@ -328,133 +447,163 @@ export default function CommissionApproval() {
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
-
       return searchable.includes(term);
     });
   }, [commissions, search]);
 
   // =========================================================
-  // REFRESH COMPLETO
+  // FUNÇÕES DOS MODAIS
+  // =========================================================
+
+  const showConfirm = (title, message, action, data = null) => {
+    setModalState({
+      ...modalState,
+      confirm: { isOpen: true, data, action },
+    });
+  };
+
+  const showPrompt = (
+    title,
+    message,
+    inputLabel,
+    inputPlaceholder,
+    action,
+    data = null,
+  ) => {
+    setModalState({
+      ...modalState,
+      prompt: { isOpen: true, data, action, inputLabel, inputPlaceholder },
+    });
+  };
+
+  const showAlert = (title, message, type = 'success') => {
+    setModalState({
+      ...modalState,
+      alert: { isOpen: true, title, message, type },
+    });
+  };
+
+  const closeModals = () => {
+    setModalState({
+      confirm: { isOpen: false, data: null, action: null },
+      prompt: { isOpen: false, data: null, action: null },
+      alert: { isOpen: false, type: 'success', title: '', message: '' },
+    });
+  };
+
+  // =========================================================
+  // AÇÕES
   // =========================================================
 
   const handleRefresh = async () => {
     try {
       await Promise.all([refetch(), refetchAll()]);
+      toast.success('✅ Dados atualizados!');
     } catch (error) {
       console.error('Erro ao atualizar comissões:', error);
+      toast.error('❌ Erro ao atualizar dados');
     }
   };
-
-  // =========================================================
-  // APROVAR
-  // =========================================================
 
   const handleApprove = async (commissionId) => {
-    if (!window.confirm('Deseja realmente aprovar esta comissão?')) {
-      return;
-    }
-
-    try {
-      setUpdating(true);
-
-      await commissionService.approve(commissionId);
-
-      await Promise.all([refetch(), refetchAll()]);
-
-      window.alert('✅ Comissão aprovada com sucesso!');
-    } catch (error) {
-      window.alert(
-        '❌ Erro ao aprovar comissão: ' +
-          (error.response?.data?.message || 'Erro desconhecido'),
-      );
-    } finally {
-      setUpdating(false);
-    }
+    showConfirm(
+      'Aprovar Comissão',
+      'Deseja realmente aprovar esta comissão? Esta ação não pode ser desfeita.',
+      async () => {
+        try {
+          setUpdating(true);
+          await commissionService.approve(commissionId);
+          await Promise.all([refetch(), refetchAll()]);
+          closeModals();
+          showAlert('✅ Sucesso!', 'Comissão aprovada com sucesso!', 'success');
+          toast.success('✅ Comissão aprovada!');
+        } catch (error) {
+          closeModals();
+          showAlert(
+            '❌ Erro',
+            error.response?.data?.message || 'Erro ao aprovar comissão',
+            'error',
+          );
+          toast.error('❌ Erro ao aprovar comissão');
+        } finally {
+          setUpdating(false);
+        }
+      },
+      commissionId,
+    );
   };
-
-  // =========================================================
-  // PAGAR
-  // =========================================================
 
   const handlePay = async (commissionId) => {
-    const method = window.prompt(
-      'Método de pagamento:\n\nbank_transfer\npix\ncash\ncheck',
+    showPrompt(
+      'Registrar Pagamento',
+      'Informe o método de pagamento utilizado para esta comissão.',
+      'Método de pagamento',
+      'Ex: bank_transfer, pix, cash, check',
+      async (method) => {
+        try {
+          setUpdating(true);
+          await commissionService.pay(commissionId, { paymentMethod: method });
+          await Promise.all([refetch(), refetchAll()]);
+          closeModals();
+          showAlert('✅ Sucesso!', 'Comissão marcada como paga!', 'success');
+          toast.success('✅ Comissão paga!');
+        } catch (error) {
+          closeModals();
+          showAlert(
+            '❌ Erro',
+            error.response?.data?.message || 'Erro ao pagar comissão',
+            'error',
+          );
+          toast.error('❌ Erro ao pagar comissão');
+        } finally {
+          setUpdating(false);
+        }
+      },
+      commissionId,
     );
-
-    if (!method) {
-      return;
-    }
-
-    if (!window.confirm('Confirmar pagamento desta comissão?')) {
-      return;
-    }
-
-    try {
-      setUpdating(true);
-
-      await commissionService.pay(commissionId, {
-        paymentMethod: method,
-      });
-
-      await Promise.all([refetch(), refetchAll()]);
-
-      window.alert('✅ Comissão marcada como paga!');
-    } catch (error) {
-      window.alert(
-        '❌ Erro ao pagar comissão: ' +
-          (error.response?.data?.message || 'Erro desconhecido'),
-      );
-    } finally {
-      setUpdating(false);
-    }
   };
-
-  // =========================================================
-  // CANCELAR
-  // =========================================================
 
   const handleCancel = async (commissionId) => {
-    const reason = window.prompt('Informe o motivo do cancelamento:');
-
-    if (!reason) {
-      return;
-    }
-
-    if (!window.confirm('Deseja realmente cancelar esta comissão?')) {
-      return;
-    }
-
-    try {
-      setUpdating(true);
-
-      await commissionService.cancel(commissionId, {
-        reason,
-      });
-
-      await Promise.all([refetch(), refetchAll()]);
-
-      window.alert('✅ Comissão cancelada!');
-    } catch (error) {
-      window.alert(
-        '❌ Erro ao cancelar comissão: ' +
-          (error.response?.data?.message || 'Erro desconhecido'),
-      );
-    } finally {
-      setUpdating(false);
-    }
+    showPrompt(
+      'Cancelar Comissão',
+      'Informe o motivo do cancelamento desta comissão.',
+      'Motivo do cancelamento',
+      'Ex: Venda cancelada, erro na comissão...',
+      async (reason) => {
+        try {
+          setUpdating(true);
+          await commissionService.cancel(commissionId, { reason });
+          await Promise.all([refetch(), refetchAll()]);
+          closeModals();
+          showAlert(
+            '✅ Sucesso!',
+            'Comissão cancelada com sucesso!',
+            'success',
+          );
+          toast.success('✅ Comissão cancelada!');
+        } catch (error) {
+          closeModals();
+          showAlert(
+            '❌ Erro',
+            error.response?.data?.message || 'Erro ao cancelar comissão',
+            'error',
+          );
+          toast.error('❌ Erro ao cancelar comissão');
+        } finally {
+          setUpdating(false);
+        }
+      },
+      commissionId,
+    );
   };
 
   // =========================================================
-  // LOADING
+  // LOADING / ERROR
   // =========================================================
 
   if (loading || loadingAllCommissions) {
     return <CommissionApprovalSkeleton />;
   }
-
-  // =========================================================
-  // ERROR
-  // =========================================================
 
   if (error) {
     return (
@@ -464,15 +613,12 @@ export default function CommissionApproval() {
             <div className="mx-auto w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center mb-4">
               <FaExclamationTriangle className="text-red-400" />
             </div>
-
             <h2 className="text-lg font-bold text-white">
               Não foi possível carregar as comissões
             </h2>
-
             <p className="text-sm text-gray-500 mt-2">
               {error?.message || error || 'Ocorreu um erro inesperado.'}
             </p>
-
             <button
               onClick={handleRefresh}
               className="mt-5 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-700 text-sm font-semibold text-gray-300 hover:text-white transition-all"
@@ -493,16 +639,47 @@ export default function CommissionApproval() {
   return (
     <div className="min-h-screen bg-[#080b11] text-white">
       {/* BACKGROUND */}
-
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-blue-600/[0.035] rounded-full blur-[120px]" />
-
         <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-emerald-600/[0.025] rounded-full blur-[120px]" />
       </div>
 
+      {/* MODAIS */}
+      <ConfirmModal
+        isOpen={modalState.confirm.isOpen}
+        onClose={closeModals}
+        onConfirm={modalState.confirm.action}
+        title="Confirmar Ação"
+        message="Deseja realmente confirmar esta ação?"
+        loading={updating}
+      />
+
+      <PromptModal
+        isOpen={modalState.prompt.isOpen}
+        onClose={closeModals}
+        onConfirm={modalState.prompt.action}
+        title={
+          modalState.prompt.inputLabel ? 'Informar Dados' : 'Confirmar Ação'
+        }
+        message="Preencha as informações necessárias para continuar."
+        inputLabel={modalState.prompt.inputLabel || 'Informação'}
+        inputPlaceholder={
+          modalState.prompt.inputPlaceholder || 'Digite aqui...'
+        }
+        loading={updating}
+      />
+
+      <AlertModal
+        isOpen={modalState.alert.isOpen}
+        onClose={closeModals}
+        title={modalState.alert.title}
+        message={modalState.alert.message}
+        type={modalState.alert.type}
+      />
+
+      {/* MAIN CONTENT */}
       <main className="relative max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
         {/* HEADER */}
-
         <header className="mb-7">
           <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
             <div>
@@ -512,11 +689,9 @@ export default function CommissionApproval() {
                 <FaChevronRight className="text-gray-700 text-[8px]" />
                 Comissões
               </div>
-
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
                 Gestão de Comissões
               </h1>
-
               <p className="text-sm text-gray-500 mt-1.5 max-w-2xl">
                 Controle aprovações, pagamentos e distribuição das comissões
                 geradas pelas vendas.
@@ -535,7 +710,6 @@ export default function CommissionApproval() {
         </header>
 
         {/* KPI */}
-
         <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-7">
           <MetricCard
             label="Comissões"
@@ -544,17 +718,13 @@ export default function CommissionApproval() {
             icon={FaReceipt}
             accent="blue"
           />
-
           <MetricCard
             label="Valor em comissões"
             value={formatCurrency(metrics.totalAmount)}
-            description={`Sobre ${formatCurrency(
-              metrics.saleAmount,
-            )} em vendas`}
+            description={`Sobre ${formatCurrency(metrics.saleAmount)} em vendas`}
             icon={FaMoneyBillWave}
             accent="emerald"
           />
-
           <MetricCard
             label="Pendentes"
             value={metrics.pending}
@@ -563,7 +733,6 @@ export default function CommissionApproval() {
             accent="yellow"
             trend={metrics.pending > 0 ? 'Ação necessária' : 'Tudo em dia'}
           />
-
           <MetricCard
             label="Pagas"
             value={metrics.paid}
@@ -573,8 +742,7 @@ export default function CommissionApproval() {
           />
         </section>
 
-        {/* STATUS FILTER */}
-
+        {/* FILTERS */}
         <section className="mb-6">
           <div className="rounded-2xl border border-gray-800 bg-[#0d1119]/90 p-2">
             <div className="flex flex-col lg:flex-row gap-2">
@@ -585,52 +753,32 @@ export default function CommissionApproval() {
                   label="Pendentes"
                   count={metrics.pending}
                   accent="yellow"
-                  onClick={() =>
-                    setFilters({
-                      status: 'pending',
-                    })
-                  }
+                  onClick={() => setFilters({ status: 'pending' })}
                 />
-
                 <StatusFilter
                   active={filters.status === 'approved'}
                   icon={FaClock}
                   label="Aprovadas"
                   count={metrics.approved}
                   accent="blue"
-                  onClick={() =>
-                    setFilters({
-                      status: 'approved',
-                    })
-                  }
+                  onClick={() => setFilters({ status: 'approved' })}
                 />
-
                 <StatusFilter
                   active={filters.status === 'paid'}
                   icon={FaCheck}
                   label="Pagas"
                   count={metrics.paid}
                   accent="green"
-                  onClick={() =>
-                    setFilters({
-                      status: 'paid',
-                    })
-                  }
+                  onClick={() => setFilters({ status: 'paid' })}
                 />
-
                 <StatusFilter
                   active={filters.status === 'cancelled'}
                   icon={FaTimes}
                   label="Canceladas"
                   count={metrics.cancelled}
                   accent="red"
-                  onClick={() =>
-                    setFilters({
-                      status: 'cancelled',
-                    })
-                  }
+                  onClick={() => setFilters({ status: 'cancelled' })}
                 />
-
                 <StatusFilter
                   active={!filters.status}
                   icon={FaChartLine}
@@ -641,11 +789,8 @@ export default function CommissionApproval() {
                 />
               </div>
 
-              {/* SEARCH */}
-
               <div className="lg:ml-auto relative min-w-0 lg:w-80">
                 <FaSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-600 text-xs" />
-
                 <input
                   type="text"
                   value={search}
@@ -659,17 +804,13 @@ export default function CommissionApproval() {
         </section>
 
         {/* RESULTS HEADER */}
-
         <div className="flex items-center justify-between mb-3 px-1">
-          <div>
-            <p className="text-xs text-gray-600">
-              {filteredCommissions.length}{' '}
-              {filteredCommissions.length === 1
-                ? 'comissão encontrada'
-                : 'comissões encontradas'}
-            </p>
-          </div>
-
+          <p className="text-xs text-gray-600">
+            {filteredCommissions.length}{' '}
+            {filteredCommissions.length === 1
+              ? 'comissão encontrada'
+              : 'comissões encontradas'}
+          </p>
           {search && (
             <button
               onClick={() => setSearch('')}
@@ -681,7 +822,6 @@ export default function CommissionApproval() {
         </div>
 
         {/* LIST */}
-
         <section className="space-y-4">
           {filteredCommissions.length === 0 ? (
             <EmptyState
