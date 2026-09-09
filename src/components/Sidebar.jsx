@@ -10,9 +10,10 @@ import {
   FaCalendarCheck,
   FaCalendarAlt,
   FaChevronLeft,
+  FaChevronDown,
+  FaChevronRight,
   FaChartLine,
   FaClipboardList,
-  FaUser,
   FaGlobe,
   FaSignOutAlt,
   FaBuilding,
@@ -21,37 +22,39 @@ import {
   FaTachometerAlt,
   FaPlusSquare,
   FaBullseye,
-  FaMoneyBillWave, // NOVO
-  FaHandshake, // NOVO
-  FaChevronDown, // NOVO
-  FaChevronRight, // NOVO
-  FaShoppingCart, // NOVO
-  FaCheckCircle, // NOVO
-  FaClock, // NOVO
+  FaMoneyBillWave,
+  FaHandshake,
+  FaShoppingCart,
+  FaCheckCircle,
+  FaComments,
 } from 'react-icons/fa';
 
 export default function Sidebar({ onCollapseChange }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [salesMenuOpen, setSalesMenuOpen] = useState(false); // NOVO
+  const [salesMenuOpen, setSalesMenuOpen] = useState(false);
+
   const dropdownRef = useRef(null);
+
   const location = useLocation();
   const navigate = useNavigate();
+
   const { user, logout } = useContext(UserContext);
 
-  /*
-  =========================
-       HELPERS
-  =========================
-  */
+  // ============================================================
+  // HELPERS
+  // ============================================================
 
   const getInitials = (name) => {
     if (!name) return 'U';
+
     return name
-      .split(' ')
-      .map((n) => n[0])
+      .trim()
+      .split(/\s+/)
+      .map((part) => part[0])
       .join('')
+      .slice(0, 2)
       .toUpperCase();
   };
 
@@ -64,16 +67,23 @@ export default function Sidebar({ onCollapseChange }) {
 
   const handleCollapse = () => {
     const value = !collapsed;
+
     setCollapsed(value);
     onCollapseChange?.(value);
   };
 
   const handleLogout = () => {
     logout();
+
     navigate('/');
+
     setMobileOpen(false);
     setDropdownOpen(false);
   };
+
+  // ============================================================
+  // FECHA DROPDOWN DO USUÁRIO AO CLICAR FORA
+  // ============================================================
 
   useEffect(() => {
     const closeDropdown = (event) => {
@@ -83,34 +93,56 @@ export default function Sidebar({ onCollapseChange }) {
     };
 
     document.addEventListener('mousedown', closeDropdown);
+
     return () => {
       document.removeEventListener('mousedown', closeDropdown);
     };
   }, []);
 
-  const isActive = (path) => location.pathname === path;
-  const isActivePath = (paths) =>
-    paths.some((path) => location.pathname === path);
+  // ============================================================
+  // HELPERS DE ROTAS
+  // ============================================================
 
-  // Verifica se está em uma página de vendas para abrir o submenu
-  const isSalesActive = isActivePath(['/sales', '/sales/:id', '/commissions']);
+  const isActive = (path) => {
+    if (!path || path === '#') return false;
 
-  // Abre o submenu automaticamente se estiver em uma página de vendas
+    return location.pathname === path;
+  };
+
+  const isActivePath = (paths = []) => {
+    return paths.some((path) => {
+      if (!path) return false;
+
+      return (
+        location.pathname === path || location.pathname.startsWith(`${path}/`)
+      );
+    });
+  };
+
+  // ============================================================
+  // CHAT ATIVO
+  // ============================================================
+
+  const isChatActive = isActivePath(['/chat']);
+
+  // ============================================================
+  // VENDAS ATIVAS
+  // ============================================================
+
+  const isSalesActive = isActivePath(['/sales', '/commissions']);
+
+  // Abre automaticamente o submenu de vendas
   useEffect(() => {
     if (isSalesActive) {
       setSalesMenuOpen(true);
     }
-  }, [location.pathname]);
+  }, [isSalesActive]);
 
-  /*
-  =========================
-          MENUS
-  =========================
-  */
+  // ============================================================
+  // MENU DE VENDAS
+  // ============================================================
 
-  // 🔥 NOVO: Menu de Vendas com subitens
   const salesMenu = {
-    path: '#',
     label: 'Vendas',
     icon: <FaHandshake />,
     subItems: [
@@ -118,22 +150,33 @@ export default function Sidebar({ onCollapseChange }) {
         path: '/sales',
         label: 'Todas as Vendas',
         icon: <FaShoppingCart />,
-        badge: null, // Poderia mostrar contagem de vendas pendentes
       },
       {
         path: '/commissions',
         label: 'Comissões',
         icon: <FaMoneyBillWave />,
-        badge: null, // Poderia mostrar contagem de comissões pendentes
       },
       {
         path: '/commissions?status=pending',
         label: 'Aprovar Comissões',
         icon: <FaCheckCircle />,
-        badge: null, // Poderia mostrar contagem de comissões pendentes
       },
     ],
   };
+
+  // ============================================================
+  // CHAT
+  // ============================================================
+
+  const chatMenu = {
+    path: '/chat',
+    label: 'Chat',
+    icon: <FaComments />,
+  };
+
+  // ============================================================
+  // MENU ADMIN
+  // ============================================================
 
   const adminLinks = [
     {
@@ -141,46 +184,89 @@ export default function Sidebar({ onCollapseChange }) {
       label: 'Dashboard',
       icon: <FaTachometerAlt />,
     },
+
+    // ----------------------------------------------------------
+    // CHAT
+    // ----------------------------------------------------------
+
+    {
+      path: '/chat',
+      label: 'Chat',
+      icon: <FaComments />,
+    },
+
+    // ----------------------------------------------------------
+    // IMÓVEIS
+    // ----------------------------------------------------------
+
     {
       path: '/create-property',
       label: 'Criar Imóvel',
       icon: <FaPlusSquare />,
     },
+
     {
       path: '/property-list',
       label: 'Imóveis',
       icon: <FaBuilding />,
     },
+
+    // ----------------------------------------------------------
+    // EQUIPE
+    // ----------------------------------------------------------
+
     {
       path: '/brokers',
       label: 'Corretores',
       icon: <FaUserTie />,
     },
+
+    // ----------------------------------------------------------
+    // LEADS
+    // ----------------------------------------------------------
+
     {
       path: '/leads-list',
       label: 'Leads',
       icon: <FaClipboardList />,
     },
+
     {
       path: '/pipeline',
       label: 'Pipeline',
       icon: <FaProjectDiagram />,
     },
+
     {
       path: '/opportunities',
       label: 'Oportunidades',
       icon: <FaGem />,
     },
+
+    // ----------------------------------------------------------
+    // PROPOSTAS
+    // ----------------------------------------------------------
+
     {
       path: '/proposals',
       label: 'Propostas',
       icon: <FaBullseye />,
     },
+
+    // ----------------------------------------------------------
+    // VISITAS
+    // ----------------------------------------------------------
+
     {
       path: '/visits',
       label: 'Agenda de Visitas',
       icon: <FaCalendarAlt />,
     },
+
+    // ----------------------------------------------------------
+    // SITE
+    // ----------------------------------------------------------
+
     {
       path: '/home',
       label: 'Site da Imobiliária',
@@ -189,6 +275,10 @@ export default function Sidebar({ onCollapseChange }) {
     },
   ];
 
+  // ============================================================
+  // MENU CORRETOR
+  // ============================================================
+
   const brokerLinks = user
     ? [
         {
@@ -196,31 +286,67 @@ export default function Sidebar({ onCollapseChange }) {
           label: 'Meu Dashboard',
           icon: <FaChartLine />,
         },
+
+        // ------------------------------------------------------
+        // CHAT
+        // ------------------------------------------------------
+
+        {
+          path: '/chat',
+          label: 'Chat',
+          icon: <FaComments />,
+        },
+
+        // ------------------------------------------------------
+        // LEADS
+        // ------------------------------------------------------
+
         {
           path: '/my-leads',
           label: 'Meus Leads',
           icon: <FaClipboardList />,
         },
+
         {
           path: '/my-pipeline',
           label: 'Meu Pipeline',
           icon: <FaProjectDiagram />,
         },
+
+        // ------------------------------------------------------
+        // VISITAS
+        // ------------------------------------------------------
+
         {
           path: '/my-visits',
           label: 'Minhas Visitas',
           icon: <FaCalendarCheck />,
         },
+
+        // ------------------------------------------------------
+        // OPORTUNIDADES
+        // ------------------------------------------------------
+
         {
           path: '/opportunities',
           label: 'Oportunidades',
           icon: <FaBullseye />,
         },
+
+        // ------------------------------------------------------
+        // IMÓVEIS
+        // ------------------------------------------------------
+
         {
           path: '/property-list',
           label: 'Imóveis',
           icon: <FaBuilding />,
         },
+
+        // ------------------------------------------------------
+        // SITE
+        // ------------------------------------------------------
+
         {
           path: `/broker/${slugify(user.name)}`,
           label: 'Meu Site',
@@ -230,18 +356,13 @@ export default function Sidebar({ onCollapseChange }) {
       ]
     : [];
 
-  const menu = user?.isAdmin ? adminLinks : brokerLinks;
+  // ============================================================
+  // RENDER ITEM NORMAL
+  // ============================================================
 
-  // ============================================
-  // RENDERIZA ITEM DO MENU
-  // ============================================
   const renderMenuItem = (item) => {
-    // Se for o menu de Vendas (admin), renderiza com submenu
-    if (user?.isAdmin && item.label === 'Vendas') {
-      return renderSalesMenu();
-    }
+    const active = isActive(item.path);
 
-    // Item normal
     return (
       <li key={item.path}>
         <Link
@@ -254,58 +375,90 @@ export default function Sidebar({ onCollapseChange }) {
           }}
           title={collapsed ? item.label : ''}
           className={`
+            group
             flex
             items-center
             gap-3
             p-3
             rounded-lg
-            transition
-
+            transition-all
+            duration-200
             ${
-              isActive(item.path)
-                ? 'bg-blue-600 text-white'
+              active
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/10'
                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
             }
           `}
         >
-          <span className="text-lg">{item.icon}</span>
+          {/* Ícone */}
+          <span
+            className={`
+              w-5
+              flex
+              items-center
+              justify-center
+              text-lg
+              shrink-0
+              transition
+              ${active ? 'text-white' : 'text-gray-400 group-hover:text-white'}
+            `}
+          >
+            {item.icon}
+          </span>
 
+          {/* Label */}
           {!collapsed && (
-            <span className="text-sm font-medium">{item.label}</span>
+            <span className="text-sm font-medium truncate">{item.label}</span>
+          )}
+
+          {/* Indicador ativo */}
+          {!collapsed && active && (
+            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-white" />
           )}
         </Link>
       </li>
     );
   };
 
-  // ============================================
-  // RENDERIZA SUBMENU DE VENDAS
-  // ============================================
-  const renderSalesMenu = () => {
-    const isSalesActive = isActivePath(['/admin/sales', '/admin/commissions']);
+  // ============================================================
+  // RENDER MENU DE VENDAS
+  // ============================================================
 
+  const renderSalesMenu = () => {
     return (
       <li>
-        {/* Botão do menu Vendas */}
+        {/* Botão Vendas */}
         <button
-          onClick={() => !collapsed && setSalesMenuOpen(!salesMenuOpen)}
+          type="button"
+          onClick={() => {
+            if (collapsed) {
+              setCollapsed(false);
+              onCollapseChange?.(false);
+              setSalesMenuOpen(true);
+            } else {
+              setSalesMenuOpen((prev) => !prev);
+            }
+          }}
+          title={collapsed ? 'Vendas' : ''}
           className={`
+            group
             w-full
             flex
             items-center
             gap-3
             p-3
             rounded-lg
-            transition
+            transition-all
+            duration-200
             ${
               isSalesActive
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
             }
           `}
-          title={collapsed ? 'Vendas' : ''}
         >
-          <span className="text-lg">
+          {/* Ícone */}
+          <span className="w-5 flex items-center justify-center text-lg shrink-0">
             <FaHandshake />
           </span>
 
@@ -315,73 +468,94 @@ export default function Sidebar({ onCollapseChange }) {
                 Vendas
               </span>
 
-              <span className="text-xs">
+              <span className="text-xs text-gray-400">
                 {salesMenuOpen ? <FaChevronDown /> : <FaChevronRight />}
               </span>
             </>
           )}
         </button>
 
-        {/* Subitens */}
+        {/* Submenu */}
         {!collapsed && salesMenuOpen && (
-          <ul className="ml-6 mt-1 space-y-1 border-l-2 border-gray-700 pl-3">
-            {salesMenu.subItems.map((subItem) => (
-              <li key={subItem.path}>
-                <Link
-                  to={subItem.path}
-                  onClick={() => {
-                    setMobileOpen(false);
-                    setDropdownOpen(false);
-                  }}
-                  className={`
-                    flex
-                    items-center
-                    gap-3
-                    p-2.5
-                    rounded-lg
-                    text-sm
-                    transition
-                    ${
-                      isActive(subItem.path)
-                        ? 'bg-blue-600/30 text-blue-400'
-                        : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                    }
-                  `}
-                >
-                  <span className="text-sm">{subItem.icon}</span>
-                  <span className="flex-1">{subItem.label}</span>
+          <ul className="ml-5 mt-1 space-y-1 border-l border-gray-700 pl-3">
+            {salesMenu.subItems.map((subItem) => {
+              const [pathname] = subItem.path.split('?');
 
-                  {/* Badge para itens pendentes */}
-                  {subItem.badge && (
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-red-500/20 text-red-400">
-                      {subItem.badge}
+              const active = location.pathname === pathname;
+
+              return (
+                <li key={subItem.path}>
+                  <Link
+                    to={subItem.path}
+                    onClick={() => {
+                      setMobileOpen(false);
+                      setDropdownOpen(false);
+                    }}
+                    className={`
+                      group
+                      flex
+                      items-center
+                      gap-3
+                      p-2.5
+                      rounded-lg
+                      text-sm
+                      transition
+                      ${
+                        active
+                          ? 'bg-blue-600/20 text-blue-400'
+                          : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                      }
+                    `}
+                  >
+                    <span className="w-4 flex items-center justify-center text-sm">
+                      {subItem.icon}
                     </span>
-                  )}
-                </Link>
-              </li>
-            ))}
+
+                    <span className="flex-1 truncate">{subItem.label}</span>
+
+                    {active && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
       </li>
     );
   };
 
+  // ============================================================
+  // USER MENU
+  // ============================================================
+
+  const profilePath = user?.isAdmin ? '/me' : '/profile';
+
+  // ============================================================
+  // RENDER
+  // ============================================================
+
   return (
     <>
-      {/* =========================================
+      {/* ========================================================
           MOBILE BUTTON
-      ========================================= */}
+      ======================================================== */}
 
       <button
-        onClick={() => setMobileOpen(!mobileOpen)}
+        type="button"
+        onClick={() => setMobileOpen((prev) => !prev)}
+        aria-label={mobileOpen ? 'Fechar menu' : 'Abrir menu'}
         className="
           fixed
           top-4
           left-4
           z-50
           p-3
-          rounded-lg
+          rounded-xl
           bg-gray-900
+          border
+          border-gray-800
           text-white
           shadow-lg
           sm:hidden
@@ -390,9 +564,9 @@ export default function Sidebar({ onCollapseChange }) {
         <FaBars />
       </button>
 
-      {/* =========================================
+      {/* ========================================================
           MOBILE OVERLAY
-      ========================================= */}
+      ======================================================== */}
 
       {mobileOpen && (
         <div
@@ -400,16 +574,17 @@ export default function Sidebar({ onCollapseChange }) {
           className="
             fixed
             inset-0
-            bg-black/50
+            bg-black/60
+            backdrop-blur-sm
             z-30
             sm:hidden
           "
         />
       )}
 
-      {/* =========================================
+      {/* ========================================================
           SIDEBAR
-      ========================================= */}
+      ======================================================== */}
 
       <aside
         className={`
@@ -418,28 +593,21 @@ export default function Sidebar({ onCollapseChange }) {
           left-0
           z-40
           h-screen
-
           bg-gray-900
-
           border-r
           border-gray-800
-
           transition-all
           duration-300
-
           ${collapsed ? 'w-20' : 'w-64'}
-
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
-
           sm:translate-x-0
-
           flex
           flex-col
         `}
       >
-        {/* =========================================
+        {/* ======================================================
             HEADER
-        ========================================= */}
+        ====================================================== */}
 
         <div
           className="
@@ -449,42 +617,87 @@ export default function Sidebar({ onCollapseChange }) {
             p-4
             border-b
             border-gray-800
+            shrink-0
           "
         >
           {!collapsed && (
-            <h1
+            <div className="flex items-center gap-2">
+              <div
+                className="
+                  w-8
+                  h-8
+                  rounded-lg
+                  bg-blue-600
+                  flex
+                  items-center
+                  justify-center
+                  text-white
+                  font-bold
+                  text-xs
+                "
+              >
+                LN
+              </div>
+
+              <h1 className="text-lg font-bold text-white">
+                Leads
+                <span className="text-blue-500">NaMão</span>
+              </h1>
+            </div>
+          )}
+
+          {collapsed && (
+            <div
               className="
-                text-xl
-                font-bold
+                w-10
+                h-10
+                mx-auto
+                rounded-lg
+                bg-blue-600
+                flex
+                items-center
+                justify-center
                 text-white
+                font-bold
+                text-xs
               "
             >
-              Leads
-              <span className="text-blue-500">NaMão</span>
-            </h1>
+              LN
+            </div>
           )}
 
           <button
+            type="button"
             onClick={handleCollapse}
+            aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'}
+            title={collapsed ? 'Expandir menu' : 'Recolher menu'}
             className="
               hidden
               sm:flex
-              text-gray-400
+              items-center
+              justify-center
+              w-8
+              h-8
+              rounded-lg
+              text-gray-500
+              hover:bg-gray-800
               hover:text-white
+              transition
             "
           >
             <FaChevronLeft
               className={`
-                transition
+                transition-transform
+                duration-300
                 ${collapsed ? 'rotate-180' : ''}
               `}
             />
           </button>
         </div>
 
-        {/* =========================================
-            USER
-        ========================================= */}
+        {/* ======================================================
+            USUÁRIO
+        ====================================================== */}
 
         <div
           ref={dropdownRef}
@@ -492,35 +705,47 @@ export default function Sidebar({ onCollapseChange }) {
             p-4
             border-b
             border-gray-800
+            shrink-0
           "
         >
           <button
-            onClick={() => setDropdownOpen(!dropdownOpen)}
+            type="button"
+            onClick={() => setDropdownOpen((prev) => !prev)}
+            title={collapsed ? user?.name || 'Usuário' : ''}
             className="
               flex
               items-center
               gap-3
               w-full
+              rounded-xl
+              hover:bg-gray-800/60
+              p-1
+              transition
             "
           >
+            {/* Avatar */}
             {user?.avatar ? (
               <img
                 src={user.avatar}
-                alt={user.name}
+                alt={user.name || 'Usuário'}
                 className="
-                  w-12
-                  h-12
+                  w-11
+                  h-11
                   rounded-full
                   object-cover
                   border
-                  border-blue-500
+                  border-blue-500/60
+                  shrink-0
                 "
+                onError={(event) => {
+                  event.currentTarget.style.display = 'none';
+                }}
               />
             ) : (
               <div
                 className="
-                  w-12
-                  h-12
+                  w-11
+                  h-11
                   rounded-full
                   bg-blue-600
                   flex
@@ -528,6 +753,9 @@ export default function Sidebar({ onCollapseChange }) {
                   justify-center
                   text-white
                   font-bold
+                  shrink-0
+                  border
+                  border-blue-500/50
                 "
               >
                 {getInitials(user?.name)}
@@ -535,109 +763,132 @@ export default function Sidebar({ onCollapseChange }) {
             )}
 
             {!collapsed && (
-              <div className="text-left">
-                <p
-                  className="
-                    text-white
-                    text-sm
-                    font-semibold
-                  "
-                >
-                  {user?.name}
+              <div className="text-left min-w-0 flex-1">
+                <p className="text-white text-sm font-semibold truncate">
+                  {user?.name || 'Usuário'}
                 </p>
 
-                <span
-                  className="
-                    text-gray-400
-                    text-xs
-                  "
-                >
+                <span className="text-gray-500 text-xs">
                   {user?.isAdmin ? 'Administrador' : 'Corretor'}
                 </span>
               </div>
             )}
           </button>
 
-          {/* =========================================
+          {/* ====================================================
               USER DROPDOWN
-          ========================================= */}
+          ==================================================== */}
 
           {dropdownOpen && (
             <div
               className="
                 mt-3
                 bg-gray-800
-                rounded-lg
+                border
+                border-gray-700
+                rounded-xl
                 overflow-hidden
+                shadow-xl
               "
             >
               <Link
-                to={user?.isAdmin ? '/me' : '/profile'}
+                to={profilePath}
+                onClick={() => {
+                  setDropdownOpen(false);
+                  setMobileOpen(false);
+                }}
                 className="
-                  block
+                  flex
+                  items-center
+                  gap-3
                   px-4
-                  py-2
+                  py-3
+                  text-sm
                   text-gray-200
                   hover:bg-gray-700
+                  transition
                 "
               >
-                Perfil
+                <FaUserTie size={14} />
+
+                <span>Perfil</span>
               </Link>
 
               <button
+                type="button"
                 onClick={handleLogout}
                 className="
                   flex
                   items-center
-                  gap-2
+                  gap-3
                   w-full
                   px-4
-                  py-2
+                  py-3
+                  text-sm
                   text-gray-200
                   hover:bg-gray-700
+                  transition
                 "
               >
-                <FaSignOutAlt />
-                Sair
+                <FaSignOutAlt size={14} />
+
+                <span>Sair</span>
               </button>
             </div>
           )}
         </div>
 
-        {/* =========================================
-            MENU
-        ========================================= */}
+        {/* ======================================================
+            NAVEGAÇÃO
+        ====================================================== */}
 
         <nav
           className="
             flex-1
             p-3
             overflow-y-auto
+            min-h-0
           "
         >
-          <ul className="space-y-2">
-            {/* Menu para ADMIN */}
+          <ul className="space-y-1.5">
+            {/* ==================================================
+                ADMIN
+            ================================================== */}
+
             {user?.isAdmin ? (
               <>
-                {/* Itens principais */}
+                {/* Menus principais */}
                 {adminLinks.map((item) => renderMenuItem(item))}
 
-                {/* 🔥 Menu de Vendas (com submenu) */}
+                {/* Vendas */}
                 {renderSalesMenu()}
               </>
             ) : (
-              /* Menu para CORRETOR */
+              /* ==================================================
+                 CORRETOR
+              ================================================== */
+
               brokerLinks.map((item) => renderMenuItem(item))
             )}
           </ul>
         </nav>
 
-        {/* =========================================
-            FOOTER (opcional)
-        ========================================= */}
+        {/* ======================================================
+            FOOTER
+        ====================================================== */}
+
         {!collapsed && (
-          <div className="p-4 border-t border-gray-800">
-            <p className="text-xs text-gray-500 text-center">LeadsNaMão v1.0</p>
+          <div
+            className="
+              p-4
+              border-t
+              border-gray-800
+              shrink-0
+            "
+          >
+            <p className="text-[10px] text-gray-600 text-center">
+              LeadsNaMão v1.0
+            </p>
           </div>
         )}
       </aside>
