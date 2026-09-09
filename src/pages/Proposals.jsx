@@ -45,27 +45,22 @@ const STATUS_CONFIG = {
     label: 'Rascunho',
     className: 'bg-slate-500/10 text-slate-300 border-slate-500/20',
   },
-
   pending: {
     label: 'Pendente',
     className: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
   },
-
   accepted: {
     label: 'Aceita',
     className: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
   },
-
   rejected: {
     label: 'Rejeitada',
     className: 'bg-red-500/10 text-red-300 border-red-500/20',
   },
-
   cancelled: {
     label: 'Cancelada',
     className: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
   },
-
   expired: {
     label: 'Expirada',
     className: 'bg-orange-500/10 text-orange-300 border-orange-500/20',
@@ -73,26 +68,11 @@ const STATUS_CONFIG = {
 };
 
 const SORT_OPTIONS = [
-  {
-    value: '-createdAt',
-    label: 'Mais recentes',
-  },
-  {
-    value: 'createdAt',
-    label: 'Mais antigas',
-  },
-  {
-    value: '-updatedAt',
-    label: 'Atualizadas recentemente',
-  },
-  {
-    value: '-submittedAt',
-    label: 'Enviadas recentemente',
-  },
-  {
-    value: '-approvedAt',
-    label: 'Aprovadas recentemente',
-  },
+  { value: '-createdAt', label: 'Mais recentes' },
+  { value: 'createdAt', label: 'Mais antigas' },
+  { value: '-updatedAt', label: 'Atualizadas recentemente' },
+  { value: '-submittedAt', label: 'Enviadas recentemente' },
+  { value: '-approvedAt', label: 'Aprovadas recentemente' },
 ];
 
 /*
@@ -103,41 +83,25 @@ const SORT_OPTIONS = [
 
 function getId(value) {
   if (!value) return '';
-
-  if (typeof value === 'string') {
-    return value;
-  }
-
+  if (typeof value === 'string') return value;
   return value._id || value.id || '';
 }
 
 function getName(value, fallback = '-') {
   if (!value) return fallback;
-
-  if (typeof value === 'string') {
-    return value;
-  }
-
+  if (typeof value === 'string') return value;
   return value.name || value.fullName || value.title || value.email || fallback;
 }
 
 function toNumber(value) {
-  if (value === null || value === undefined || value === '') {
-    return 0;
-  }
-
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : 0;
-  }
+  if (value === null || value === undefined || value === '') return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
 
   let normalized = String(value).replace(/\s/g, '');
-
   if (normalized.includes(',')) {
     normalized = normalized.replace(/\./g, '').replace(',', '.');
   }
-
   const number = Number(normalized);
-
   return Number.isFinite(number) ? number : 0;
 }
 
@@ -159,13 +123,8 @@ function formatPercent(value) {
 
 function formatDate(value) {
   if (!value) return '-';
-
   const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return '-';
-  }
-
+  if (Number.isNaN(date.getTime())) return '-';
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
     month: '2-digit',
@@ -175,13 +134,8 @@ function formatDate(value) {
 
 function formatDateTime(value) {
   if (!value) return '-';
-
   const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return '-';
-  }
-
+  if (Number.isNaN(date.getTime())) return '-';
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
     month: '2-digit',
@@ -199,7 +153,6 @@ function formatDateTime(value) {
 
 function normalizeListResponse(response) {
   const data = response?.data;
-
   const payload = data?.data || data?.result || data;
 
   const proposals =
@@ -225,7 +178,6 @@ function normalizeListResponse(response) {
 
 function normalizeMetricsResponse(response) {
   const data = response?.data;
-
   const metrics = data?.data || data?.result || data || {};
 
   return {
@@ -291,6 +243,14 @@ export default function Proposals() {
   const [actionLoading, setActionLoading] = useState(null);
   const [actionError, setActionError] = useState('');
 
+  // Modal state
+  const [modal, setModal] = useState({
+    isOpen: false,
+    type: '', // 'approve', 'reject', 'cancel'
+    proposal: null,
+    isLoading: false,
+  });
+
   /*
   |--------------------------------------------------------------------------
   | LOAD PROPOSALS
@@ -305,7 +265,6 @@ export default function Proposals() {
         } else {
           setLoading(true);
         }
-
         setError('');
 
         const params = {
@@ -314,33 +273,18 @@ export default function Proposals() {
           sort,
         };
 
-        if (search.trim()) {
-          params.search = search.trim();
-        }
+        if (search.trim()) params.search = search.trim();
+        if (status) params.status = status;
+        if (startDate) params.startDate = startDate;
+        if (endDate) params.endDate = endDate;
 
-        if (status) {
-          params.status = status;
-        }
-
-        if (startDate) {
-          params.startDate = startDate;
-        }
-
-        if (endDate) {
-          params.endDate = endDate;
-        }
-
-        const response = await api.get('/api/proposals', {
-          params,
-        });
-
+        const response = await api.get('/api/proposals', { params });
         const result = normalizeListResponse(response);
 
         setProposals(result.proposals);
         setPagination(result.pagination);
       } catch (err) {
         console.error('Erro ao carregar propostas:', err);
-
         setError(
           err?.response?.data?.message ||
             err?.response?.data?.error ||
@@ -363,21 +307,11 @@ export default function Proposals() {
   const loadMetrics = useCallback(async () => {
     try {
       setLoadingMetrics(true);
-
       const params = {};
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
 
-      if (startDate) {
-        params.startDate = startDate;
-      }
-
-      if (endDate) {
-        params.endDate = endDate;
-      }
-
-      const response = await api.get('/api/proposals/metrics', {
-        params,
-      });
-
+      const response = await api.get('/api/proposals/metrics', { params });
       setMetrics(normalizeMetricsResponse(response));
     } catch (err) {
       console.error('Erro ao carregar métricas:', err);
@@ -411,9 +345,32 @@ export default function Proposals() {
     const timer = setTimeout(() => {
       setPage(1);
     }, 350);
-
     return () => clearTimeout(timer);
   }, [search]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | MODAL HANDLERS
+  |--------------------------------------------------------------------------
+  */
+
+  const openModal = (type, proposal) => {
+    setModal({
+      isOpen: true,
+      type,
+      proposal,
+      isLoading: false,
+    });
+  };
+
+  const closeModal = () => {
+    setModal({
+      isOpen: false,
+      type: '',
+      proposal: null,
+      isLoading: false,
+    });
+  };
 
   /*
   |--------------------------------------------------------------------------
@@ -421,70 +378,56 @@ export default function Proposals() {
   |--------------------------------------------------------------------------
   */
 
-  const executeAction = async (
-    proposal,
-    action,
-    confirmMessage,
-    customComment = '',
-  ) => {
+  const executeAction = async (proposal, action, customComment = '') => {
     const proposalId = getId(proposal);
-
-    if (!proposalId) {
-      return;
-    }
-
-    if (confirmMessage && !window.confirm(confirmMessage)) {
-      return;
-    }
+    if (!proposalId) return;
 
     try {
-      setActionLoading(`${action}-${proposalId}`);
+      setModal((prev) => ({ ...prev, isLoading: true }));
       setActionError('');
 
       let response;
 
       if (action === 'approve') {
-        // 🔥 USAR ORCHESTRATOR PARA APROVAÇÃO COMPLETA
         response = await approveProposal(proposalId, customComment);
         console.log('✅ Proposta aprovada com sucesso:', response);
-      } else {
-        // Outras ações (reject, cancel) usam a API normal
-        await api.patch(`/api/proposals/${proposalId}/approve`);
+      } else if (action === 'reject') {
+        await api.patch(`/api/proposals/${proposalId}/reject`, {
+          comment: customComment,
+        });
+      } else if (action === 'cancel') {
+        await api.patch(`/api/proposals/${proposalId}/cancel`, {
+          comment: customComment,
+        });
       }
 
       await Promise.all([
-        loadProposals({
-          silent: true,
-          requestedPage: page,
-        }),
+        loadProposals({ silent: true, requestedPage: page }),
         loadMetrics(),
       ]);
 
-      // Se for aprovação, mostrar mensagem de sucesso com detalhes
       if (action === 'approve' && response?.data) {
         const { sale, commission } = response.data;
         let message = '✅ Proposta aprovada com sucesso!';
-
         if (sale?.saleNumber) {
           message += ` Venda ${sale.saleNumber} criada.`;
         }
-
         if (commission?.totalAmount) {
           message += ` Comissão de ${formatCurrency(commission.totalAmount)} gerada.`;
         }
-
+        // Show success toast or alert - consider using a toast library
         alert(message);
       }
+
+      closeModal();
     } catch (err) {
       console.error(`Erro ao executar ação ${action}:`, err);
-
       setActionError(
         err?.response?.data?.message ||
           err?.response?.data?.error ||
           'Não foi possível executar esta ação.',
       );
-    } finally {
-      setActionLoading(null);
+      setModal((prev) => ({ ...prev, isLoading: false }));
     }
   };
 
@@ -495,27 +438,22 @@ export default function Proposals() {
   */
 
   const handleApprove = (proposal) => {
-    executeAction(
-      proposal,
-      'approve',
-      'Deseja realmente aprovar esta proposta?\n\nEsta ação irá:\n✅ Aprovar a proposta\n✅ Criar a venda automaticamente\n✅ Gerar a comissão\n✅ Atualizar a oportunidade para WON',
-    );
+    openModal('approve', proposal);
   };
 
   const handleReject = (proposal) => {
-    executeAction(
-      proposal,
-      'reject',
-      'Deseja realmente rejeitar esta proposta?',
-    );
+    openModal('reject', proposal);
   };
 
   const handleCancel = (proposal) => {
-    executeAction(
-      proposal,
-      'cancel',
-      'Deseja realmente cancelar esta proposta?',
-    );
+    openModal('cancel', proposal);
+  };
+
+  const handleModalConfirm = (comment) => {
+    const { proposal, type } = modal;
+    if (proposal) {
+      executeAction(proposal, type, comment);
+    }
   };
 
   /*
@@ -567,13 +505,8 @@ export default function Proposals() {
     if (nextPage < 1 || (pagination.pages && nextPage > pagination.pages)) {
       return;
     }
-
     setPage(nextPage);
-
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth',
-    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   /*
@@ -592,7 +525,6 @@ export default function Proposals() {
     for (let index = start; index <= end; index += 1) {
       result.push(index);
     }
-
     return result;
   }, [pagination.pages, pagination.page, page]);
 
@@ -606,14 +538,12 @@ export default function Proposals() {
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-6">
       <div className="max-w-[1600px] mx-auto space-y-6">
         {/* HEADER */}
-
         <header className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-5">
           <div>
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
                 <FileText size={24} className="text-blue-400" />
               </div>
-
               <div>
                 <h1 className="text-2xl md:text-3xl font-bold">Propostas</h1>
                 <p className="text-sm text-slate-400 mt-1">
@@ -627,10 +557,7 @@ export default function Proposals() {
             <button
               type="button"
               onClick={() =>
-                loadProposals({
-                  silent: true,
-                  requestedPage: page,
-                })
+                loadProposals({ silent: true, requestedPage: page })
               }
               disabled={refreshing}
               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 transition disabled:opacity-50"
@@ -654,7 +581,6 @@ export default function Proposals() {
         </header>
 
         {/* ERRORS */}
-
         {error && (
           <AlertBox type="error" message={error} onClose={() => setError('')} />
         )}
@@ -668,11 +594,9 @@ export default function Proposals() {
         )}
 
         {/* METRICS */}
-
         <MetricsGrid metrics={metrics} loading={loadingMetrics} />
 
         {/* SEARCH + FILTERS */}
-
         <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-5">
           <div className="flex flex-col lg:flex-row gap-3">
             <div className="relative flex-1">
@@ -680,7 +604,6 @@ export default function Proposals() {
                 size={18}
                 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
               />
-
               <input
                 type="text"
                 value={search}
@@ -696,7 +619,6 @@ export default function Proposals() {
               className="bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500"
             >
               <option value="">Todos os status</option>
-
               {Object.entries(STATUS_CONFIG).map(([value, config]) => (
                 <option key={value} value={value}>
                   {config.label}
@@ -729,14 +651,12 @@ export default function Proposals() {
                 value={startDate}
                 onChange={handleStartDateChange}
               />
-
               <FilterInput
                 label="Data final"
                 type="date"
                 value={endDate}
                 onChange={handleEndDateChange}
               />
-
               <FilterInput
                 label="Ordenação"
                 type="select"
@@ -744,7 +664,6 @@ export default function Proposals() {
                 onChange={handleSortChange}
                 options={SORT_OPTIONS}
               />
-
               <div className="flex items-end">
                 <button
                   type="button"
@@ -759,7 +678,6 @@ export default function Proposals() {
         </section>
 
         {/* RESULT SUMMARY */}
-
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <p className="text-sm text-slate-400">
@@ -773,7 +691,6 @@ export default function Proposals() {
 
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-500">Exibir</span>
-
             <select
               value={limit}
               onChange={(event) => {
@@ -787,13 +704,11 @@ export default function Proposals() {
               <option value={50}>50</option>
               <option value={100}>100</option>
             </select>
-
             <span className="text-xs text-slate-500">por página</span>
           </div>
         </div>
 
         {/* CONTENT */}
-
         {loading ? (
           <LoadingState />
         ) : proposals.length === 0 ? (
@@ -834,6 +749,193 @@ export default function Proposals() {
             />
           </>
         )}
+      </div>
+
+      {/* ACTION MODAL */}
+      {modal.isOpen && (
+        <ActionModal
+          type={modal.type}
+          proposal={modal.proposal}
+          isLoading={modal.isLoading}
+          onConfirm={handleModalConfirm}
+          onCancel={closeModal}
+        />
+      )}
+    </div>
+  );
+}
+
+/*
+|--------------------------------------------------------------------------
+| ACTION MODAL
+|--------------------------------------------------------------------------
+*/
+
+function ActionModal({ type, proposal, isLoading, onConfirm, onCancel }) {
+  const [comment, setComment] = useState('');
+
+  const configs = {
+    approve: {
+      title: 'Aprovar Proposta',
+      icon: <Zap size={24} className="text-emerald-400" />,
+      description: (
+        <>
+          <p className="text-slate-300">
+            Você está prestes a{' '}
+            <strong className="text-emerald-400">aprovar</strong> esta proposta.
+          </p>
+          <div className="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+            <p className="text-sm text-emerald-300">Esta ação irá:</p>
+            <ul className="text-sm text-slate-300 mt-2 space-y-1 list-disc list-inside">
+              <li>✅ Aprovar a proposta</li>
+              <li>✅ Criar a venda automaticamente</li>
+              <li>✅ Gerar a comissão</li>
+              <li>✅ Atualizar a oportunidade para WON</li>
+            </ul>
+          </div>
+        </>
+      ),
+      confirmLabel: 'Aprovar',
+      confirmClass: 'bg-emerald-600 hover:bg-emerald-500',
+      showComment: false,
+    },
+    reject: {
+      title: 'Rejeitar Proposta',
+      icon: <X size={24} className="text-red-400" />,
+      description: (
+        <p className="text-slate-300">
+          Você está prestes a <strong className="text-red-400">rejeitar</strong>{' '}
+          esta proposta. Esta ação não pode ser desfeita.
+        </p>
+      ),
+      confirmLabel: 'Rejeitar',
+      confirmClass: 'bg-red-600 hover:bg-red-500',
+      showComment: true,
+    },
+    cancel: {
+      title: 'Cancelar Proposta',
+      icon: <XCircle size={24} className="text-orange-400" />,
+      description: (
+        <p className="text-slate-300">
+          Você está prestes a{' '}
+          <strong className="text-orange-400">cancelar</strong> esta proposta.
+          Esta ação não pode ser desfeita.
+        </p>
+      ),
+      confirmLabel: 'Cancelar',
+      confirmClass: 'bg-orange-600 hover:bg-orange-500',
+      showComment: true,
+    },
+  };
+
+  const config = configs[type] || configs.approve;
+  const proposalId = getId(proposal);
+  const lead = proposal?.lead || proposal?.leadSnapshot;
+  const property = proposal?.property || proposal?.propertySnapshot;
+  const proposalPrice =
+    proposal?.values?.proposalPrice || proposal?.proposalPrice || 0;
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onConfirm(comment);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div
+        className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-5 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-slate-800 flex items-center justify-center">
+              {config.icon}
+            </div>
+            <h3 className="text-lg font-semibold text-white">{config.title}</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isLoading}
+            className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:text-white hover:bg-slate-800 transition"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-5 space-y-4">
+          {/* Proposal summary */}
+          <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs text-slate-500 uppercase">Cliente</p>
+                <p className="text-sm text-slate-200 font-medium mt-1">
+                  {getName(lead)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 uppercase">Valor</p>
+                <p className="text-sm text-emerald-400 font-bold mt-1">
+                  {formatCurrency(proposalPrice)}
+                </p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-xs text-slate-500 uppercase">Imóvel</p>
+                <p className="text-sm text-slate-200 font-medium mt-1">
+                  {getName(property, 'Imóvel não informado')}
+                </p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-xs text-slate-500 uppercase">Proposta</p>
+                <p className="text-sm text-slate-400 mt-1">
+                  #{String(proposalId).slice(-6)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Description */}
+          {config.description}
+
+          {/* Comment field */}
+          {config.showComment && (
+            <div>
+              <label className="block text-sm text-slate-400 mb-2">
+                Motivo <span className="text-slate-600">(opcional)</span>
+              </label>
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="Descreva o motivo desta ação..."
+                rows={3}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder:text-slate-600 outline-none focus:border-blue-500 resize-none"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex flex-col-reverse sm:flex-row gap-3 p-5 border-t border-slate-800">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isLoading}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 transition disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={isLoading}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-white font-medium transition ${config.confirmClass} disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            {isLoading && <Loader2 size={18} className="animate-spin" />}
+            {isLoading ? 'Processando...' : config.confirmLabel}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -904,7 +1006,6 @@ function MetricsGrid({ metrics, loading }) {
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       {cards.map((card) => {
         const Icon = card.icon;
-
         return (
           <div
             key={card.label}
@@ -915,7 +1016,6 @@ function MetricsGrid({ metrics, loading }) {
                 <p className="text-xs text-slate-500 uppercase tracking-wide">
                   {card.label}
                 </p>
-
                 {loading ? (
                   <div className="h-7 w-24 bg-slate-800 rounded-lg animate-pulse mt-2" />
                 ) : (
@@ -923,12 +1023,10 @@ function MetricsGrid({ metrics, loading }) {
                     {card.value}
                   </p>
                 )}
-
                 <p className="text-xs text-slate-500 mt-1">
                   {card.description}
                 </p>
               </div>
-
               <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
                 <Icon size={18} className="text-blue-400" />
               </div>
@@ -984,7 +1082,6 @@ function ProposalTable({
             </th>
           </tr>
         </thead>
-
         <tbody>
           {proposals.map((proposal) => (
             <ProposalRow
@@ -1387,7 +1484,6 @@ function FilterInput({ label, type = 'text', value, onChange, options = [] }) {
             size={16}
             className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
           />
-
           <input
             type={type}
             value={value}
