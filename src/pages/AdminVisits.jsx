@@ -1,14 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import {
+  List,
   CalendarDays,
   Clock3,
   Search,
   RefreshCw,
   MapPin,
   User,
-  Building2,
   CheckCircle2,
   XCircle,
   CalendarCheck,
@@ -39,6 +39,8 @@ import {
   completeVisit,
   cancelVisit,
 } from '../service/visitApi';
+
+import VisitAdminCalendar from '../components/visits/VisitAdminCalendar';
 
 // ============================================================
 // STATUS
@@ -83,7 +85,6 @@ const STATUS_CONFIG = {
 
 // ============================================================
 // CALENDAR TYPES
-// Compatível com seu calendarService
 // ============================================================
 
 const CALENDAR_TYPES = {
@@ -222,12 +223,22 @@ const TYPE_CONFIG = {
 export default function VisitsAdmin() {
   const navigate = useNavigate();
 
+  // ==========================================================
+  // DATA
+  // ==========================================================
+
   const [visits, setVisits] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const [error, setError] = useState('');
+
+  // ==========================================================
+  // VIEW
+  // ==========================================================
+
+  const [viewMode, setViewMode] = useState('list');
 
   // ==========================================================
   // FILTERS
@@ -244,7 +255,8 @@ export default function VisitsAdmin() {
   // ==========================================================
 
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
+
+  const limit = 10;
 
   const [pagination, setPagination] = useState({
     total: 0,
@@ -266,70 +278,71 @@ export default function VisitsAdmin() {
   const hasFilters = Boolean(search || status || type || startDate || endDate);
 
   // ==========================================================
-  // LOAD
+  // LOAD VISITS
   // ==========================================================
 
-  const loadVisits = async ({
-    showRefresh = false,
-    currentPage = page,
-  } = {}) => {
-    try {
-      setError('');
+  const loadVisits = useCallback(
+    async ({ showRefresh = false, currentPage = page } = {}) => {
+      try {
+        setError('');
 
-      if (showRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
+        if (showRefresh) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
+        }
 
-      const response = await getVisits({
-        page: currentPage,
-        limit,
-
-        search: search.trim(),
-
-        status,
-
-        // IMPORTANTE:
-        // envia o tipo para o backend
-        type,
-
-        startDate,
-        endDate,
-
-        sortBy: 'date',
-        order: 'asc',
-      });
-
-      const data = response?.data || response;
-
-      setVisits(data?.visits || []);
-
-      setPagination(
-        data?.pagination || {
-          total: 0,
+        const response = await getVisits({
           page: currentPage,
           limit,
-          pages: 1,
-        },
-      );
-    } catch (err) {
-      console.error('ERRO AO BUSCAR AGENDA:', err);
 
-      setError(
-        err?.response?.data?.message ||
-          'Não foi possível carregar os compromissos.',
-      );
+          search: search.trim(),
 
-      setVisits([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+          status,
+
+          type,
+
+          startDate,
+
+          endDate,
+
+          sortBy: 'date',
+          order: 'asc',
+        });
+
+        const data = response?.data || response;
+
+        const loadedVisits = Array.isArray(data?.visits) ? data.visits : [];
+
+        setVisits(loadedVisits);
+
+        setPagination(
+          data?.pagination || {
+            total: loadedVisits.length,
+            page: currentPage,
+            limit,
+            pages: 1,
+          },
+        );
+      } catch (err) {
+        console.error('ERRO AO BUSCAR AGENDA:', err);
+
+        setError(
+          err?.response?.data?.message ||
+            'Não foi possível carregar os compromissos.',
+        );
+
+        setVisits([]);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [page, search, status, type, startDate, endDate],
+  );
 
   // ==========================================================
-  // LOAD WHEN FILTERS / PAGE CHANGE
+  // FILTER/PAGE EFFECT
   // ==========================================================
 
   useEffect(() => {
@@ -372,17 +385,22 @@ export default function VisitsAdmin() {
   // DETAILS
   // ==========================================================
 
-  const handleDetails = (visit) => {
-    if (!visit?._id) return;
+  const handleDetails = useCallback(
+    (visit) => {
+      if (!visit?._id) return;
 
-    navigate(`/visit-details/${visit._id}`);
-  };
+      navigate(`/visit-details/${visit._id}`);
+    },
+    [navigate],
+  );
 
   // ==========================================================
-  // ACTIONS
+  // CONFIRM
   // ==========================================================
 
   const handleConfirm = async (visit) => {
+    if (!visit?._id) return;
+
     try {
       setProcessingId(visit._id);
 
@@ -394,7 +412,7 @@ export default function VisitsAdmin() {
     } catch (err) {
       console.error('ERRO AO CONFIRMAR:', err);
 
-      alert(
+      window.alert(
         err?.response?.data?.message ||
           'Não foi possível confirmar o compromisso.',
       );
@@ -403,7 +421,13 @@ export default function VisitsAdmin() {
     }
   };
 
+  // ==========================================================
+  // COMPLETE
+  // ==========================================================
+
   const handleComplete = async (visit) => {
+    if (!visit?._id) return;
+
     try {
       setProcessingId(visit._id);
 
@@ -415,7 +439,7 @@ export default function VisitsAdmin() {
     } catch (err) {
       console.error('ERRO AO CONCLUIR:', err);
 
-      alert(
+      window.alert(
         err?.response?.data?.message ||
           'Não foi possível concluir o compromisso.',
       );
@@ -424,7 +448,13 @@ export default function VisitsAdmin() {
     }
   };
 
+  // ==========================================================
+  // CANCEL
+  // ==========================================================
+
   const handleCancel = async (visit) => {
+    if (!visit?._id) return;
+
     const reason = window.prompt('Digite o motivo do cancelamento:');
 
     if (reason === null) return;
@@ -440,7 +470,7 @@ export default function VisitsAdmin() {
     } catch (err) {
       console.error('ERRO AO CANCELAR:', err);
 
-      alert(
+      window.alert(
         err?.response?.data?.message ||
           'Não foi possível cancelar o compromisso.',
       );
@@ -453,7 +483,7 @@ export default function VisitsAdmin() {
   // NORMALIZED TYPE
   // ==========================================================
 
-  const getVisitType = (visit) => {
+  const getVisitType = useCallback((visit) => {
     return normalizeType(
       visit?.type ||
         visit?.eventType ||
@@ -461,7 +491,7 @@ export default function VisitsAdmin() {
         visit?.appointmentType ||
         (visit?.property ? CALENDAR_TYPES.VISIT : CALENDAR_TYPES.OTHER),
     );
-  };
+  }, []);
 
   // ==========================================================
   // SUMMARY
@@ -505,20 +535,43 @@ export default function VisitsAdmin() {
 
       const itemType = getVisitType(item);
 
-      if (itemType === CALENDAR_TYPES.VISIT) result.visits += 1;
-      if (itemType === CALENDAR_TYPES.MEETING) result.meetings += 1;
-      if (itemType === CALENDAR_TYPES.CALL) result.calls += 1;
-      if (itemType === CALENDAR_TYPES.ONLINE_MEETING) result.online += 1;
-      if (itemType === CALENDAR_TYPES.PROPOSAL) result.proposals += 1;
-      if (itemType === CALENDAR_TYPES.NEGOTIATION) {
-        result.negotiations += 1;
+      switch (itemType) {
+        case CALENDAR_TYPES.VISIT:
+          result.visits += 1;
+          break;
+
+        case CALENDAR_TYPES.MEETING:
+          result.meetings += 1;
+          break;
+
+        case CALENDAR_TYPES.CALL:
+          result.calls += 1;
+          break;
+
+        case CALENDAR_TYPES.ONLINE_MEETING:
+          result.online += 1;
+          break;
+
+        case CALENDAR_TYPES.PROPOSAL:
+          result.proposals += 1;
+          break;
+
+        case CALENDAR_TYPES.NEGOTIATION:
+          result.negotiations += 1;
+          break;
+
+        case CALENDAR_TYPES.INTERNAL:
+          result.internal += 1;
+          break;
+
+        default:
+          result.other += 1;
+          break;
       }
-      if (itemType === CALENDAR_TYPES.INTERNAL) result.internal += 1;
-      if (itemType === CALENDAR_TYPES.OTHER) result.other += 1;
     });
 
     return result;
-  }, [visits, pagination.total]);
+  }, [visits, pagination.total, getVisitType]);
 
   // ==========================================================
   // CLEAR FILTERS
@@ -582,12 +635,33 @@ export default function VisitsAdmin() {
 
               <div className="flex items-start gap-4">
                 <div
-                  className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border ${currentTypeConfig.className}`}
+                  className={`
+                    relative
+                    flex
+                    h-14
+                    w-14
+                    shrink-0
+                    items-center
+                    justify-center
+                    rounded-2xl
+                    border
+                    ${currentTypeConfig.className}
+                  `}
                 >
                   <CurrentTypeIcon size={26} />
 
                   <span
-                    className={`absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-[#070b14] ${currentTypeConfig.dot}`}
+                    className={`
+                      absolute
+                      -right-1
+                      -top-1
+                      h-3
+                      w-3
+                      rounded-full
+                      border-2
+                      border-[#070b14]
+                      ${currentTypeConfig.dot}
+                    `}
                   />
                 </div>
 
@@ -794,7 +868,7 @@ export default function VisitsAdmin() {
         </section>
 
         {/* ==================================================
-            STATUS SUMMARY
+            STATUS
         ================================================== */}
 
         <section className="mb-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1088,43 +1162,99 @@ export default function VisitsAdmin() {
         )}
 
         {/* ==================================================
-            CONTENT HEADER
+            VIEW SWITCHER
         ================================================== */}
 
-        {!loading && visits.length > 0 && (
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold text-slate-200">
-                  {type ? currentTypeConfig.plural : 'Compromissos'}
-                </p>
-
-                {type && (
-                  <span
-                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-semibold ${currentTypeConfig.className}`}
-                  >
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${currentTypeConfig.dot}`}
-                    />
-
-                    {currentTypeConfig.label}
-                  </span>
-                )}
-              </div>
-
-              <p className="mt-0.5 text-xs text-slate-600">
-                {pagination.total} compromisso
-                {pagination.total !== 1 ? 's' : ''} encontrado
-                {pagination.total !== 1 ? 's' : ''}
+        <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-slate-200">
+                {type ? currentTypeConfig.plural : 'Compromissos'}
               </p>
+
+              {type && (
+                <span
+                  className={`
+                    inline-flex
+                    items-center
+                    gap-1.5
+                    rounded-lg
+                    border
+                    px-2
+                    py-1
+                    text-[10px]
+                    font-semibold
+                    ${currentTypeConfig.className}
+                  `}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${currentTypeConfig.dot}`}
+                  />
+
+                  {currentTypeConfig.label}
+                </span>
+              )}
             </div>
 
-            <div className="hidden items-center gap-2 text-xs text-slate-600 sm:flex">
-              <CalendarClock size={14} />
-              Ordenado por data
-            </div>
+            <p className="mt-0.5 text-xs text-slate-600">
+              {pagination.total} compromisso
+              {pagination.total !== 1 ? 's' : ''} encontrado
+              {pagination.total !== 1 ? 's' : ''}
+            </p>
           </div>
-        )}
+
+          {/* VIEW TOGGLE */}
+
+          <div className="flex items-center self-start rounded-xl border border-slate-800 bg-slate-950 p-1 sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`
+                inline-flex
+                items-center
+                gap-2
+                rounded-lg
+                px-4
+                py-2.5
+                text-xs
+                font-semibold
+                transition
+                ${
+                  viewMode === 'list'
+                    ? 'bg-slate-800 text-white shadow-lg'
+                    : 'text-slate-500 hover:text-slate-200'
+                }
+              `}
+            >
+              <List size={15} />
+              Lista
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('calendar')}
+              className={`
+                inline-flex
+                items-center
+                gap-2
+                rounded-lg
+                px-4
+                py-2.5
+                text-xs
+                font-semibold
+                transition
+                ${
+                  viewMode === 'calendar'
+                    ? 'bg-blue-500/15 text-blue-400 shadow-lg'
+                    : 'text-slate-500 hover:text-slate-200'
+                }
+              `}
+            >
+              <CalendarDays size={15} />
+              Calendário
+            </button>
+          </div>
+        </div>
 
         {/* ==================================================
             CONTENT
@@ -1132,6 +1262,17 @@ export default function VisitsAdmin() {
 
         {loading ? (
           <LoadingState />
+        ) : viewMode === 'calendar' ? (
+          <VisitAdminCalendar
+            visits={visits}
+            onSelectEvent={handleDetails}
+            onSelectSlot={({ start, end }) => {
+              console.log('Novo compromisso:', {
+                start,
+                end,
+              });
+            }}
+          />
         ) : visits.length === 0 ? (
           <EmptyState
             hasFilters={hasFilters}
@@ -1273,7 +1414,17 @@ function SummaryCard({ label, value, icon, accent, description }) {
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4 shadow-xl shadow-black/5 backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-700">
       <div
-        className={`pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full blur-2xl ${config.glow}`}
+        className={`
+          pointer-events-none
+          absolute
+          -right-8
+          -top-8
+          h-24
+          w-24
+          rounded-full
+          blur-2xl
+          ${config.glow}
+        `}
       />
 
       <div className="relative flex items-center justify-between gap-3">
@@ -1292,7 +1443,17 @@ function SummaryCard({ label, value, icon, accent, description }) {
         </div>
 
         <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${config.icon}`}
+          className={`
+            flex
+            h-11
+            w-11
+            shrink-0
+            items-center
+            justify-center
+            rounded-xl
+            border
+            ${config.icon}
+          `}
         >
           {icon}
         </div>
@@ -1308,8 +1469,11 @@ function SummaryCard({ label, value, icon, accent, description }) {
 function MiniSummary({ label, value, icon, accent }) {
   const config = {
     blue: 'text-blue-400 border-blue-500/15 bg-blue-500/[0.05]',
+
     amber: 'text-amber-400 border-amber-500/15 bg-amber-500/[0.05]',
+
     emerald: 'text-emerald-400 border-emerald-500/15 bg-emerald-500/[0.05]',
+
     red: 'text-red-400 border-red-500/15 bg-red-500/[0.05]',
   };
 
@@ -1317,9 +1481,16 @@ function MiniSummary({ label, value, icon, accent }) {
     <div className="flex items-center justify-between rounded-xl border border-slate-800/80 bg-slate-900/40 px-4 py-3">
       <div className="flex items-center gap-2.5">
         <div
-          className={`flex h-8 w-8 items-center justify-center rounded-lg border ${
-            config[accent]
-          }`}
+          className={`
+            flex
+            h-8
+            w-8
+            items-center
+            justify-center
+            rounded-lg
+            border
+            ${config[accent]}
+          `}
         >
           {icon}
         </div>
@@ -1456,7 +1627,7 @@ function FilterBadge({ label, onRemove }) {
 }
 
 // ============================================================
-// VISIT / EVENT CARD
+// VISIT CARD
 // ============================================================
 
 function VisitCard({
@@ -1500,8 +1671,11 @@ function VisitCard({
 
   const statusConfig = STATUS_CONFIG[visit.status] || {
     label: visit.status || 'Desconhecido',
+
     className: 'border-slate-500/20 bg-slate-500/10 text-slate-400',
+
     icon: Clock3,
+
     dot: 'bg-slate-400',
   };
 
@@ -1512,9 +1686,7 @@ function VisitCard({
   return (
     <article className="group overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/50 shadow-xl shadow-black/10 backdrop-blur-xl transition-all duration-300 hover:border-slate-700 hover:shadow-2xl hover:shadow-black/20">
       <div className="flex flex-col xl:flex-row">
-        {/* ==================================================
-            IMAGE
-        ================================================== */}
+        {/* IMAGE */}
 
         <div className="relative h-56 w-full shrink-0 overflow-hidden bg-[#050812] xl:min-h-[320px] xl:h-auto xl:w-72">
           {propertyImage ? (
@@ -1534,7 +1706,16 @@ function VisitCard({
           ) : (
             <div className="flex h-full min-h-56 items-center justify-center">
               <div
-                className={`flex h-20 w-20 items-center justify-center rounded-3xl border ${typeConfig.className}`}
+                className={`
+                  flex
+                  h-20
+                  w-20
+                  items-center
+                  justify-center
+                  rounded-3xl
+                  border
+                  ${typeConfig.className}
+                `}
               >
                 <TypeIcon size={38} strokeWidth={1.3} />
               </div>
@@ -1563,7 +1744,12 @@ function VisitCard({
               `}
             >
               <span
-                className={`h-1.5 w-1.5 rounded-full ${statusConfig.dot}`}
+                className={`
+                  h-1.5
+                  w-1.5
+                  rounded-full
+                  ${statusConfig.dot}
+                `}
               />
 
               <StatusIcon size={13} />
@@ -1599,13 +1785,9 @@ function VisitCard({
           </div>
         </div>
 
-        {/* ==================================================
-            CONTENT
-        ================================================== */}
+        {/* CONTENT */}
 
         <div className="min-w-0 flex-1 p-5 sm:p-6">
-          {/* TOP */}
-
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -1636,13 +1818,32 @@ function VisitCard({
               )}
             </div>
 
-            {/* DATE BLOCK */}
+            {/* DATE */}
 
             <div
-              className={`relative shrink-0 overflow-hidden rounded-2xl border px-4 py-3.5 ${typeConfig.className}`}
+              className={`
+                relative
+                shrink-0
+                overflow-hidden
+                rounded-2xl
+                border
+                px-4
+                py-3.5
+                ${typeConfig.className}
+              `}
             >
               <div
-                className={`pointer-events-none absolute -right-5 -top-5 h-14 w-14 rounded-full blur-xl ${typeConfig.glow}`}
+                className={`
+                  pointer-events-none
+                  absolute
+                  -right-5
+                  -top-5
+                  h-14
+                  w-14
+                  rounded-full
+                  blur-xl
+                  ${typeConfig.glow}
+                `}
               />
 
               <div className="relative">
@@ -1666,8 +1867,6 @@ function VisitCard({
               </div>
             </div>
           </div>
-
-          {/* DIVIDER */}
 
           <div className="my-5 border-t border-slate-800/80" />
 
@@ -1763,7 +1962,7 @@ function VisitCard({
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {/* VISIT ACTIONS */}
+              {/* CONFIRM */}
 
               {isVisit && visit.status === VISIT_STATUS.SCHEDULED && (
                 <ActionButton
@@ -1774,6 +1973,8 @@ function VisitCard({
                   variant="amber"
                 />
               )}
+
+              {/* COMPLETE */}
 
               {isVisit &&
                 (visit.status === VISIT_STATUS.SCHEDULED ||
@@ -1787,6 +1988,8 @@ function VisitCard({
                   />
                 )}
 
+              {/* CANCEL */}
+
               {isVisit &&
                 (visit.status === VISIT_STATUS.SCHEDULED ||
                   visit.status === VISIT_STATUS.CONFIRMED) && (
@@ -1798,6 +2001,8 @@ function VisitCard({
                     variant="red"
                   />
                 )}
+
+              {/* DETAILS */}
 
               <ActionButton
                 icon={<Eye size={14} />}
@@ -1893,7 +2098,9 @@ function ActionButton({
 }
 
 function processingIcon(icon, disabled) {
-  if (!disabled) return icon;
+  if (!disabled) {
+    return icon;
+  }
 
   return (
     <span className="relative flex items-center justify-center">

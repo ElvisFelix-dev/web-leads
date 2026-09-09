@@ -14,14 +14,14 @@ import {
   FaShieldAlt,
   FaUserLock,
   FaBan,
-  FaHome,
-  FaUsers,
   FaUser,
   FaBriefcase,
   FaChevronDown,
   FaFilter,
   FaLayerGroup,
   FaArrowRight,
+  FaChevronLeft,
+  FaChevronRight,
 } from 'react-icons/fa';
 
 import {
@@ -55,13 +55,10 @@ export default function Visits() {
   const [showModal, setShowModal] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState(null);
 
+  // calendar | list
   const [viewMode, setViewMode] = useState('calendar');
 
-  /**
-   * commercial
-   * personal
-   * all
-   */
+  // all | commercial | personal
   const [agendaMode, setAgendaMode] = useState('all');
 
   const [showCreateMenu, setShowCreateMenu] = useState(false);
@@ -88,7 +85,7 @@ export default function Visits() {
   const createMenuRef = useRef(null);
 
   // ============================================================
-  // MOUNT / UNMOUNT
+  // MOUNT
   // ============================================================
 
   useEffect(() => {
@@ -165,7 +162,7 @@ export default function Visits() {
   }, []);
 
   // ============================================================
-  // EVENT TYPE HELPERS
+  // EVENT TYPES
   // ============================================================
 
   const COMMERCIAL_TYPES = useMemo(
@@ -197,7 +194,7 @@ export default function Visits() {
   );
 
   // ============================================================
-  // FILTER EVENTS BY AGENDA MODE
+  // FILTER BY AGENDA
   // ============================================================
 
   const visibleVisits = useMemo(() => {
@@ -315,9 +312,6 @@ export default function Visits() {
         getProperties(),
       ]);
 
-      console.log('👤 LEADS:', leadsResponse);
-      console.log('🏠 PROPERTIES:', propertiesResponse);
-
       const leadsList =
         leadsResponse?.data ||
         leadsResponse?.leads ||
@@ -337,6 +331,7 @@ export default function Visits() {
       if (!mountedRef.current) return;
 
       setLeads(Array.isArray(leadsList) ? leadsList : []);
+
       setProperties(Array.isArray(propertiesList) ? propertiesList : []);
     } catch (error) {
       console.error(
@@ -355,7 +350,7 @@ export default function Visits() {
   }, [loadFormData]);
 
   // ============================================================
-  // LOAD CALENDAR WHEN FILTERS CHANGE
+  // FILTER CHANGE
   // ============================================================
 
   useEffect(() => {
@@ -364,7 +359,7 @@ export default function Visits() {
   }, [loadCalendar, loadMetrics]);
 
   // ============================================================
-  // AUTO CLEAR SUCCESS
+  // SUCCESS AUTO CLEAR
   // ============================================================
 
   useEffect(() => {
@@ -384,29 +379,32 @@ export default function Visits() {
   // ============================================================
 
   const handleCreate = useCallback(
-    (mode = 'commercial') => {
-      if (saving || saveLockRef.current) return;
+    (mode = 'commercial', date = null) => {
+      if (saving || saveLockRef.current) {
+        return;
+      }
 
       clearFeedback();
 
       setShowCreateMenu(false);
-      setSelectedVisit(null);
 
-      /**
-       * O modo escolhido fica disponível para o VisitModal
-       * através do objeto de configuração.
-       *
-       * Não enviamos tipo diretamente para a API aqui.
-       * O modal continua sendo responsável por montar o payload.
-       */
       setSelectedVisit({
         __new: true,
         __agendaMode: mode,
+
+        // Permite que o calendário informe
+        // a data selecionada ao criar.
+        ...(date
+          ? {
+              start: date,
+              end: date,
+            }
+          : {}),
       });
 
       setShowModal(true);
     },
-    [clearFeedback, saving],
+    [saving, clearFeedback],
   );
 
   // ============================================================
@@ -415,14 +413,16 @@ export default function Visits() {
 
   const handleEdit = useCallback(
     (visit) => {
-      if (!visit || saving || saveLockRef.current) return;
+      if (!visit || saving || saveLockRef.current) {
+        return;
+      }
 
       clearFeedback();
 
       setSelectedVisit(visit);
       setShowModal(true);
     },
-    [clearFeedback, saving],
+    [saving, clearFeedback],
   );
 
   // ============================================================
@@ -430,7 +430,9 @@ export default function Visits() {
   // ============================================================
 
   const handleCloseModal = useCallback(() => {
-    if (saving || saveLockRef.current) return;
+    if (saving || saveLockRef.current) {
+      return;
+    }
 
     setSelectedVisit(null);
     setFormError('');
@@ -445,8 +447,6 @@ export default function Visits() {
   const handleSuccess = useCallback(
     async (data) => {
       if (saving || saveLockRef.current) {
-        console.warn('⚠️ Salvamento ignorado: operação já em andamento.');
-
         return null;
       }
 
@@ -459,51 +459,23 @@ export default function Visits() {
         setError('');
         setSuccessMessage('');
 
-        /**
-         * __new é usado somente internamente para diferenciar
-         * o estado inicial do modal.
-         */
         const isEditing = Boolean(selectedVisit?._id && !selectedVisit?.__new);
 
-        console.log('🧩 CALENDAR SAVE DEBUG:', {
-          selectedVisit,
-          selectedVisitId: selectedVisit?._id,
-          isEditing,
-          data,
-        });
-
         let response;
-
-        // ======================================================
-        // EDIT
-        // ======================================================
 
         if (isEditing) {
           response = await updateCalendarEvent(selectedVisit._id, data);
 
-          console.log('✅ COMPROMISSO ATUALIZADO:', response);
-
           if (mountedRef.current) {
             setSuccessMessage('Compromisso atualizado com sucesso.');
           }
-        }
-
-        // ======================================================
-        // CREATE
-        // ======================================================
-        else {
+        } else {
           response = await createCalendarEvent(data);
-
-          console.log('✅ COMPROMISSO CRIADO:', response);
 
           if (mountedRef.current) {
             setSuccessMessage('Compromisso agendado com sucesso.');
           }
         }
-
-        // ======================================================
-        // CLOSE MODAL
-        // ======================================================
 
         if (mountedRef.current) {
           setSelectedVisit(null);
@@ -512,11 +484,12 @@ export default function Visits() {
           setFormErrorType('error');
         }
 
-        // ======================================================
-        // REFRESH
-        // ======================================================
-
-        await Promise.all([loadCalendar({ silent: true }), loadMetrics()]);
+        await Promise.all([
+          loadCalendar({
+            silent: true,
+          }),
+          loadMetrics(),
+        ]);
 
         return response;
       } catch (error) {
@@ -538,10 +511,6 @@ export default function Visits() {
 
         const conflict = getConflict(error);
 
-        // ======================================================
-        // 409
-        // ======================================================
-
         if (status === 409) {
           let conflictMessage =
             message || 'Já existe um compromisso neste horário.';
@@ -551,14 +520,11 @@ export default function Visits() {
           }
 
           setFormError(conflictMessage);
+
           setFormErrorType('conflict');
 
           return null;
         }
-
-        // ======================================================
-        // 400
-        // ======================================================
 
         if (status === 400) {
           setFormError(
@@ -570,10 +536,6 @@ export default function Visits() {
           return null;
         }
 
-        // ======================================================
-        // 401
-        // ======================================================
-
         if (status === 401) {
           setFormError('Sua sessão expirou. Faça login novamente.');
 
@@ -582,10 +544,6 @@ export default function Visits() {
           return null;
         }
 
-        // ======================================================
-        // 403
-        // ======================================================
-
         if (status === 403) {
           setFormError('Você não possui permissão para realizar esta ação.');
 
@@ -593,10 +551,6 @@ export default function Visits() {
 
           return null;
         }
-
-        // ======================================================
-        // 404
-        // ======================================================
 
         if (status === 404) {
           setFormError(
@@ -608,10 +562,6 @@ export default function Visits() {
           return null;
         }
 
-        // ======================================================
-        // 422
-        // ======================================================
-
         if (status === 422) {
           setFormError(
             message || 'Os dados enviados não puderam ser processados.',
@@ -621,10 +571,6 @@ export default function Visits() {
 
           return null;
         }
-
-        // ======================================================
-        // 429
-        // ======================================================
 
         if (status === 429) {
           setFormError(
@@ -636,10 +582,6 @@ export default function Visits() {
           return null;
         }
 
-        // ======================================================
-        // 500+
-        // ======================================================
-
         if (status >= 500) {
           setFormError(
             'O servidor encontrou um problema ao salvar o compromisso. Tente novamente em alguns instantes.',
@@ -650,10 +592,6 @@ export default function Visits() {
           return null;
         }
 
-        // ======================================================
-        // NETWORK
-        // ======================================================
-
         if (!error?.response) {
           setFormError(
             'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.',
@@ -663,10 +601,6 @@ export default function Visits() {
 
           return null;
         }
-
-        // ======================================================
-        // GENERIC
-        // ======================================================
 
         setFormError(message);
         setFormErrorType('error');
@@ -696,11 +630,18 @@ export default function Visits() {
   // ============================================================
 
   const handleRefresh = useCallback(async () => {
-    if (loading || refreshing || saving) return;
+    if (loading || refreshing || saving) {
+      return;
+    }
 
     clearFeedback();
 
-    await Promise.all([loadCalendar({ silent: true }), loadMetrics()]);
+    await Promise.all([
+      loadCalendar({
+        silent: true,
+      }),
+      loadMetrics(),
+    ]);
   }, [loading, refreshing, saving, clearFeedback, loadCalendar, loadMetrics]);
 
   // ============================================================
@@ -787,7 +728,6 @@ export default function Visits() {
         icon: FaBriefcase,
         color: 'text-blue-400',
         bg: 'bg-blue-500/10',
-        border: 'border-blue-500/20',
       };
     }
 
@@ -798,7 +738,6 @@ export default function Visits() {
         icon: FaUser,
         color: 'text-violet-400',
         bg: 'bg-violet-500/10',
-        border: 'border-violet-500/20',
       };
     }
 
@@ -808,7 +747,6 @@ export default function Visits() {
       icon: FaLayerGroup,
       color: 'text-cyan-400',
       bg: 'bg-cyan-500/10',
-      border: 'border-cyan-500/20',
     };
   }, [agendaMode]);
 
@@ -819,94 +757,35 @@ export default function Visits() {
   // ============================================================
 
   return (
-    <div
-      className="
-        min-h-screen
-        bg-gray-950
-        p-4
-        text-white
-        sm:p-6
-        lg:p-8
-      "
-    >
-      <div className="mx-auto max-w-[1600px] space-y-7">
+    <div className="min-h-screen bg-gray-950 p-4 text-white sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-[1600px] space-y-6">
         {/* ======================================================
             HEADER
         ====================================================== */}
 
-        <div
-          className="
-            flex
-            flex-col
-            gap-5
-            lg:flex-row
-            lg:items-center
-            lg:justify-between
-          "
-        >
-          <div>
-            <div className="flex items-center gap-3">
-              <div
-                className="
-                  flex
-                  h-13
-                  w-13
-                  items-center
-                  justify-center
-                  rounded-2xl
-                  border
-                  border-blue-500/20
-                  bg-blue-500/10
-                  text-blue-400
-                  shadow-lg
-                  shadow-blue-500/5
-                "
-              >
-                <FaCalendarAlt size={21} />
+        <header className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-400">
+              <FaCalendarAlt size={21} />
+            </div>
+
+            <div>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                  Minha Agenda
+                </h1>
+
+                {!loading && (
+                  <span className="rounded-full border border-gray-800 bg-gray-900 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                    {totalEvents}{' '}
+                    {totalEvents === 1 ? 'compromisso' : 'compromissos'}
+                  </span>
+                )}
               </div>
 
-              <div>
-                <div className="flex items-center gap-3">
-                  <h1
-                    className="
-                      text-2xl
-                      font-bold
-                      tracking-tight
-                      text-white
-                      sm:text-3xl
-                    "
-                  >
-                    Minha Agenda
-                  </h1>
-
-                  {!loading && (
-                    <span
-                      className="
-                        hidden
-                        rounded-full
-                        border
-                        border-gray-800
-                        bg-gray-900
-                        px-2.5
-                        py-1
-                        text-[10px]
-                        font-bold
-                        uppercase
-                        tracking-wider
-                        text-gray-500
-                        sm:inline-flex
-                      "
-                    >
-                      {totalEvents}{' '}
-                      {totalEvents === 1 ? 'compromisso' : 'compromissos'}
-                    </span>
-                  )}
-                </div>
-
-                <p className="mt-1 text-sm text-gray-400">
-                  Organize sua rotina comercial e seus compromissos pessoais.
-                </p>
-              </div>
+              <p className="mt-1 text-sm text-gray-400">
+                Organize sua rotina comercial e seus compromissos pessoais.
+              </p>
             </div>
           </div>
 
@@ -918,210 +797,68 @@ export default function Visits() {
               onClick={handleRefresh}
               disabled={loading || refreshing || saving}
               title="Atualizar agenda"
-              className="
-                flex
-                h-11
-                w-11
-                items-center
-                justify-center
-                rounded-xl
-                border
-                border-gray-800
-                bg-gray-900
-                text-gray-400
-                shadow-sm
-                transition
-                hover:border-gray-700
-                hover:bg-gray-800
-                hover:text-white
-                disabled:cursor-not-allowed
-                disabled:opacity-50
-              "
+              className="flex h-11 w-11 items-center justify-center rounded-xl border border-gray-800 bg-gray-900 text-gray-400 transition hover:border-gray-700 hover:bg-gray-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               <FaSyncAlt
                 className={loading || refreshing ? 'animate-spin' : ''}
               />
             </button>
 
-            {/* CREATE MENU */}
+            {/* CREATE */}
 
             <div ref={createMenuRef} className="relative">
               <button
                 type="button"
                 onClick={() => setShowCreateMenu((value) => !value)}
                 disabled={saving}
-                className="
-                  flex
-                  items-center
-                  justify-center
-                  gap-2
-                  rounded-xl
-                  bg-blue-600
-                  px-5
-                  py-3
-                  text-sm
-                  font-semibold
-                  text-white
-                  shadow-lg
-                  shadow-blue-600/20
-                  transition
-                  hover:bg-blue-500
-                  hover:shadow-blue-600/30
-                  disabled:cursor-not-allowed
-                  disabled:opacity-50
-                "
+                className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FaPlus />
-                Novo compromisso
+
+                <span>Novo compromisso</span>
+
                 <FaChevronDown
                   size={10}
-                  className={`
-                    transition-transform
-                    ${showCreateMenu ? 'rotate-180' : ''}
-                  `}
+                  className={
+                    showCreateMenu
+                      ? 'rotate-180 transition-transform'
+                      : 'transition-transform'
+                  }
                 />
               </button>
 
               {showCreateMenu && (
-                <div
-                  className="
-                    absolute
-                    right-0
-                    top-[calc(100%+8px)]
-                    z-50
-                    w-72
-                    overflow-hidden
-                    rounded-2xl
-                    border
-                    border-gray-800
-                    bg-gray-900
-                    p-2
-                    shadow-2xl
-                    shadow-black/40
-                  "
-                >
-                  <button
-                    type="button"
+                <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-72 overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 p-2 shadow-2xl shadow-black/40">
+                  <CreateOption
+                    icon={<FaBriefcase />}
+                    iconClass="bg-blue-500/10 text-blue-400"
+                    title="Compromisso comercial"
+                    description="Visita, lead, reunião ou negociação"
                     onClick={() => handleCreate('commercial')}
-                    className="
-                      flex
-                      w-full
-                      items-center
-                      gap-3
-                      rounded-xl
-                      p-3
-                      text-left
-                      transition
-                      hover:bg-gray-800
-                    "
-                  >
-                    <div
-                      className="
-                        flex
-                        h-10
-                        w-10
-                        shrink-0
-                        items-center
-                        justify-center
-                        rounded-xl
-                        bg-blue-500/10
-                        text-blue-400
-                      "
-                    >
-                      <FaBriefcase size={14} />
-                    </div>
+                  />
 
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-white">
-                        Compromisso comercial
-                      </p>
-
-                      <p className="mt-0.5 text-xs text-gray-500">
-                        Visita, lead, reunião ou negociação
-                      </p>
-                    </div>
-
-                    <FaArrowRight size={10} className="ml-auto text-gray-600" />
-                  </button>
-
-                  <button
-                    type="button"
+                  <CreateOption
+                    icon={<FaUser />}
+                    iconClass="bg-violet-500/10 text-violet-400"
+                    title="Compromisso pessoal"
+                    description="Interno, pessoal ou administrativo"
                     onClick={() => handleCreate('personal')}
-                    className="
-                      flex
-                      w-full
-                      items-center
-                      gap-3
-                      rounded-xl
-                      p-3
-                      text-left
-                      transition
-                      hover:bg-gray-800
-                    "
-                  >
-                    <div
-                      className="
-                        flex
-                        h-10
-                        w-10
-                        shrink-0
-                        items-center
-                        justify-center
-                        rounded-xl
-                        bg-violet-500/10
-                        text-violet-400
-                      "
-                    >
-                      <FaUser size={14} />
-                    </div>
-
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-white">
-                        Compromisso pessoal
-                      </p>
-
-                      <p className="mt-0.5 text-xs text-gray-500">
-                        Interno, pessoal ou administrativo
-                      </p>
-                    </div>
-
-                    <FaArrowRight size={10} className="ml-auto text-gray-600" />
-                  </button>
+                  />
                 </div>
               )}
             </div>
           </div>
-        </div>
+        </header>
 
         {/* ======================================================
-            AGENDA TYPE SELECTOR
+            AGENDA TYPE
         ====================================================== */}
 
-        <div
-          className="
-            overflow-hidden
-            rounded-2xl
-            border
-            border-gray-800
-            bg-gray-900
-            shadow-lg
-            shadow-black/10
-          "
-        >
+        <section className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 shadow-lg">
           <div className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
               <div
-                className={`
-                  flex
-                  h-10
-                  w-10
-                  shrink-0
-                  items-center
-                  justify-center
-                  rounded-xl
-                  ${agendaSummary.bg}
-                  ${agendaSummary.color}
-                `}
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${agendaSummary.bg} ${agendaSummary.color}`}
               >
                 <AgendaIcon size={15} />
               </div>
@@ -1137,21 +874,7 @@ export default function Visits() {
               </div>
             </div>
 
-            <div
-              className="
-                flex
-                w-full
-                flex-wrap
-                items-center
-                gap-1
-                rounded-xl
-                border
-                border-gray-800
-                bg-gray-950
-                p-1
-                lg:w-auto
-              "
-            >
+            <div className="flex w-full flex-wrap items-center gap-1 rounded-xl border border-gray-800 bg-gray-950 p-1 lg:w-auto">
               <AgendaModeButton
                 active={agendaMode === 'all'}
                 onClick={() => setAgendaMode('all')}
@@ -1177,7 +900,7 @@ export default function Visits() {
               />
             </div>
           </div>
-        </div>
+        </section>
 
         {/* ======================================================
             FEEDBACK
@@ -1200,18 +923,7 @@ export default function Visits() {
               <button
                 type="button"
                 onClick={handleRefresh}
-                className="
-                  shrink-0
-                  rounded-lg
-                  bg-red-500/10
-                  px-3
-                  py-1.5
-                  text-xs
-                  font-medium
-                  text-red-300
-                  transition
-                  hover:bg-red-500/20
-                "
+                className="shrink-0 rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/20"
               >
                 Tentar novamente
               </button>
@@ -1223,14 +935,7 @@ export default function Visits() {
             METRICS
         ====================================================== */}
 
-        <div
-          className="
-            grid
-            grid-cols-2
-            gap-3
-            lg:grid-cols-5
-          "
-        >
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <MetricCard
             label="Total"
             value={totalEvents}
@@ -1279,50 +984,15 @@ export default function Visits() {
         <VisitFilters filters={filters} setFilters={setFilters} />
 
         {/* ======================================================
-            MAIN CARD
+            MAIN
         ====================================================== */}
 
-        <div
-          className="
-            overflow-hidden
-            rounded-[24px]
-            border
-            border-gray-800
-            bg-gray-900
-            shadow-2xl
-            shadow-black/20
-          "
-        >
+        <section className="overflow-hidden rounded-[24px] border border-gray-800 bg-gray-900 shadow-2xl shadow-black/20">
           {/* TOOLBAR */}
 
-          <div
-            className="
-              flex
-              flex-col
-              gap-4
-              border-b
-              border-gray-800
-              bg-gray-900/80
-              p-4
-              sm:p-5
-              lg:flex-row
-              lg:items-center
-              lg:justify-between
-            "
-          >
+          <div className="flex flex-col gap-4 border-b border-gray-800 bg-gray-900/80 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
-              <div
-                className="
-                  flex
-                  h-10
-                  w-10
-                  items-center
-                  justify-center
-                  rounded-xl
-                  bg-gray-950
-                  text-gray-400
-                "
-              >
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-950 text-gray-400">
                 <FaFilter size={13} />
               </div>
 
@@ -1340,22 +1010,9 @@ export default function Visits() {
               </div>
             </div>
 
-            {/* VIEW MODE */}
+            {/* VIEW SWITCHER */}
 
-            <div
-              className="
-                flex
-                w-full
-                items-center
-                gap-1
-                rounded-xl
-                border
-                border-gray-800
-                bg-gray-950
-                p-1
-                sm:w-fit
-              "
-            >
+            <div className="flex w-full items-center gap-1 rounded-xl border border-gray-800 bg-gray-950 p-1 sm:w-fit">
               <ViewButton
                 active={viewMode === 'calendar'}
                 onClick={() => setViewMode('calendar')}
@@ -1372,63 +1029,41 @@ export default function Visits() {
             </div>
           </div>
 
-          {/* ====================================================
-              CONTENT
-          ==================================================== */}
+          {/* CONTENT */}
 
           <div className="p-3 sm:p-5 lg:p-6">
             {loading ? (
               <CalendarLoading />
             ) : viewMode === 'calendar' ? (
-              <div
-                className="
-                  overflow-hidden
-                  rounded-2xl
-                  border
-                  border-gray-800
-                  bg-gray-950/40
-                "
-              >
-                <div
-                  className="
-                    border-b
-                    border-gray-800
-                    bg-gray-900/60
-                    px-4
-                    py-3
-                  "
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <FaCalendarAlt className="text-blue-400" size={13} />
-
-                      <span className="text-sm font-semibold text-gray-200">
-                        Calendário
-                      </span>
-                    </div>
-
-                    <span className="text-xs text-gray-500">
-                      Clique em um compromisso para editar
-                    </span>
-                  </div>
-                </div>
-
-                <div className="p-2 sm:p-4">
-                  <VisitCalendar
-                    visits={visibleVisits}
-                    onSelectDate={handleEdit}
-                  />
-                </div>
-              </div>
+              <CalendarView
+                visits={visibleVisits}
+                onSelectEvent={handleEdit}
+                onSelectDate={(date) =>
+                  handleCreate(
+                    agendaMode === 'personal' ? 'personal' : 'commercial',
+                    date,
+                  )
+                }
+                onCreate={() =>
+                  handleCreate(
+                    agendaMode === 'personal' ? 'personal' : 'commercial',
+                  )
+                }
+              />
             ) : (
-              <VisitList
+              <ListView
                 visits={visibleVisits}
                 onEdit={handleEdit}
                 onRefresh={loadCalendar}
+                onCreate={() =>
+                  handleCreate(
+                    agendaMode === 'personal' ? 'personal' : 'commercial',
+                  )
+                }
               />
             )}
           </div>
-        </div>
+        </section>
 
         {/* ======================================================
             MODAL
@@ -1457,6 +1092,96 @@ export default function Visits() {
         )}
       </div>
     </div>
+  );
+}
+
+// ============================================================
+// CALENDAR VIEW
+// ============================================================
+
+function CalendarView({ visits, onSelectEvent, onSelectDate, onCreate }) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-950/40">
+      <div className="flex flex-col gap-3 border-b border-gray-800 bg-gray-900/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+            <FaCalendarAlt size={13} />
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold text-gray-200">Calendário</p>
+
+            <p className="text-[11px] text-gray-500">
+              {visits.length}{' '}
+              {visits.length === 1 ? 'compromisso' : 'compromissos'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <span className="hidden sm:inline">
+            Clique em um compromisso para editar
+          </span>
+
+          <button
+            type="button"
+            onClick={onCreate}
+            className="flex items-center gap-2 rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-xs font-medium text-gray-300 transition hover:border-blue-500/30 hover:bg-blue-500/10 hover:text-blue-300"
+          >
+            <FaPlus size={10} />
+            Novo
+          </button>
+        </div>
+      </div>
+
+      <div className="p-2 sm:p-4">
+        {visits.length === 0 ? (
+          <CalendarEmptyState onCreate={onCreate} />
+        ) : (
+          <VisitCalendar visits={visits} onSelectDate={onSelectEvent} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// LIST VIEW
+// ============================================================
+
+function ListView({ visits, onEdit, onRefresh, onCreate }) {
+  if (!visits.length) {
+    return <EmptyListState onCreate={onCreate} />;
+  }
+
+  return <VisitList visits={visits} onEdit={onEdit} onRefresh={onRefresh} />;
+}
+
+// ============================================================
+// CREATE OPTION
+// ============================================================
+
+function CreateOption({ icon, iconClass, title, description, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-gray-800"
+    >
+      <div
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconClass}`}
+      >
+        {icon}
+      </div>
+
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-white">{title}</p>
+
+        <p className="mt-0.5 text-xs text-gray-500">{description}</p>
+      </div>
+
+      <FaArrowRight size={10} className="ml-auto text-gray-600" />
+    </button>
   );
 }
 
@@ -1546,7 +1271,68 @@ function ViewButton({ active, onClick, icon, label }) {
 }
 
 // ============================================================
-// FORM ERROR BANNER
+// CALENDAR EMPTY
+// ============================================================
+
+function CalendarEmptyState({ onCreate }) {
+  return (
+    <div className="flex min-h-[520px] flex-col items-center justify-center px-6 text-center">
+      <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-gray-800 bg-gray-900 text-blue-400 shadow-xl">
+        <FaCalendarAlt size={30} />
+      </div>
+
+      <h3 className="mt-5 text-lg font-semibold text-white">Agenda livre</h3>
+
+      <p className="mt-2 max-w-md text-sm leading-6 text-gray-500">
+        Você não possui compromissos para os filtros selecionados. Aproveite
+        para organizar sua próxima atividade.
+      </p>
+
+      <button
+        type="button"
+        onClick={onCreate}
+        className="mt-5 flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-500"
+      >
+        <FaPlus />
+        Novo compromisso
+      </button>
+    </div>
+  );
+}
+
+// ============================================================
+// LIST EMPTY
+// ============================================================
+
+function EmptyListState({ onCreate }) {
+  return (
+    <div className="flex min-h-[360px] flex-col items-center justify-center rounded-2xl border border-dashed border-gray-800 bg-gray-950/30 px-6 text-center">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-900 text-gray-500">
+        <FaList size={22} />
+      </div>
+
+      <h3 className="mt-4 text-base font-semibold text-white">
+        Nenhum compromisso encontrado
+      </h3>
+
+      <p className="mt-2 max-w-md text-sm text-gray-500">
+        Ajuste os filtros ou crie um novo compromisso para começar.
+      </p>
+
+      <button
+        type="button"
+        onClick={onCreate}
+        className="mt-5 flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-500"
+      >
+        <FaPlus />
+        Novo compromisso
+      </button>
+    </div>
+  );
+}
+
+// ============================================================
+// FORM ERROR
 // ============================================================
 
 function FormErrorBanner({ type = 'error', message, onClose }) {
@@ -1558,7 +1344,6 @@ function FormErrorBanner({ type = 'error', message, onClose }) {
       wrapper: 'border-amber-500/30 bg-amber-500/[0.06]',
       iconWrapper: 'bg-amber-500/10 text-amber-400',
       titleClass: 'text-amber-100',
-      messageClass: 'text-gray-300',
     },
 
     validation: {
@@ -1568,7 +1353,6 @@ function FormErrorBanner({ type = 'error', message, onClose }) {
       wrapper: 'border-blue-500/30 bg-blue-500/[0.06]',
       iconWrapper: 'bg-blue-500/10 text-blue-400',
       titleClass: 'text-blue-100',
-      messageClass: 'text-gray-300',
     },
 
     auth: {
@@ -1578,7 +1362,6 @@ function FormErrorBanner({ type = 'error', message, onClose }) {
       wrapper: 'border-orange-500/30 bg-orange-500/[0.06]',
       iconWrapper: 'bg-orange-500/10 text-orange-400',
       titleClass: 'text-orange-100',
-      messageClass: 'text-gray-300',
     },
 
     permission: {
@@ -1588,7 +1371,6 @@ function FormErrorBanner({ type = 'error', message, onClose }) {
       wrapper: 'border-red-500/30 bg-red-500/[0.06]',
       iconWrapper: 'bg-red-500/10 text-red-400',
       titleClass: 'text-red-100',
-      messageClass: 'text-gray-300',
     },
 
     notFound: {
@@ -1598,7 +1380,6 @@ function FormErrorBanner({ type = 'error', message, onClose }) {
       wrapper: 'border-purple-500/30 bg-purple-500/[0.06]',
       iconWrapper: 'bg-purple-500/10 text-purple-400',
       titleClass: 'text-purple-100',
-      messageClass: 'text-gray-300',
     },
 
     network: {
@@ -1608,7 +1389,6 @@ function FormErrorBanner({ type = 'error', message, onClose }) {
       wrapper: 'border-red-500/30 bg-red-500/[0.06]',
       iconWrapper: 'bg-red-500/10 text-red-400',
       titleClass: 'text-red-100',
-      messageClass: 'text-gray-300',
     },
 
     server: {
@@ -1618,7 +1398,6 @@ function FormErrorBanner({ type = 'error', message, onClose }) {
       wrapper: 'border-red-500/30 bg-red-500/[0.06]',
       iconWrapper: 'bg-red-500/10 text-red-400',
       titleClass: 'text-red-100',
-      messageClass: 'text-gray-300',
     },
 
     rateLimit: {
@@ -1628,7 +1407,6 @@ function FormErrorBanner({ type = 'error', message, onClose }) {
       wrapper: 'border-yellow-500/30 bg-yellow-500/[0.06]',
       iconWrapper: 'bg-yellow-500/10 text-yellow-400',
       titleClass: 'text-yellow-100',
-      messageClass: 'text-gray-300',
     },
 
     error: {
@@ -1638,7 +1416,6 @@ function FormErrorBanner({ type = 'error', message, onClose }) {
       wrapper: 'border-red-500/30 bg-red-500/[0.06]',
       iconWrapper: 'bg-red-500/10 text-red-400',
       titleClass: 'text-red-100',
-      messageClass: 'text-gray-300',
     },
   };
 
@@ -1647,18 +1424,7 @@ function FormErrorBanner({ type = 'error', message, onClose }) {
   const Icon = config.icon;
 
   return (
-    <div
-      className="
-        pointer-events-none
-        fixed
-        inset-x-0
-        bottom-5
-        z-[70]
-        flex
-        justify-center
-        px-4
-      "
-    >
+    <div className="pointer-events-none fixed inset-x-0 bottom-5 z-[70] flex justify-center px-4">
       <div
         className={`
           pointer-events-auto
@@ -1692,13 +1458,7 @@ function FormErrorBanner({ type = 'error', message, onClose }) {
         </div>
 
         <div className="min-w-0 flex-1">
-          <p
-            className={`
-              text-sm
-              font-semibold
-              ${config.titleClass}
-            `}
-          >
+          <p className={`text-sm font-semibold ${config.titleClass}`}>
             {config.title}
           </p>
 
@@ -1706,30 +1466,12 @@ function FormErrorBanner({ type = 'error', message, onClose }) {
             {config.description}
           </p>
 
-          <div
-            className={`
-              mt-2
-              rounded-lg
-              bg-black/10
-              px-3
-              py-2
-              text-sm
-              leading-5
-              ${config.messageClass}
-            `}
-          >
+          <div className="mt-2 rounded-lg bg-black/10 px-3 py-2 text-sm leading-5 text-gray-300">
             {message}
           </div>
 
           {type === 'conflict' && (
-            <p
-              className="
-                mt-2
-                text-xs
-                font-medium
-                text-amber-400/80
-              "
-            >
+            <p className="mt-2 text-xs font-medium text-amber-400/80">
               Altere o horário do compromisso e tente novamente.
             </p>
           )}
@@ -1738,19 +1480,7 @@ function FormErrorBanner({ type = 'error', message, onClose }) {
         <button
           type="button"
           onClick={onClose}
-          className="
-            flex
-            h-8
-            w-8
-            shrink-0
-            items-center
-            justify-center
-            rounded-lg
-            text-gray-500
-            transition
-            hover:bg-gray-800
-            hover:text-white
-          "
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-800 hover:text-white"
           aria-label="Fechar mensagem"
         >
           ×
@@ -1761,27 +1491,27 @@ function FormErrorBanner({ type = 'error', message, onClose }) {
 }
 
 // ============================================================
-// FEEDBACK BANNER
+// FEEDBACK
 // ============================================================
 
 function FeedbackBanner({ type = 'info', title, message, action, onClose }) {
   const config = {
     success: {
-      wrapper: 'border-green-500/20 bg-green-500/5 text-green-300',
+      wrapper: 'border-green-500/20 bg-green-500/5',
       icon: 'bg-green-500/10 text-green-400',
       Icon: FaCheck,
       defaultTitle: 'Tudo certo',
     },
 
     error: {
-      wrapper: 'border-red-500/20 bg-red-500/5 text-red-300',
+      wrapper: 'border-red-500/20 bg-red-500/5',
       icon: 'bg-red-500/10 text-red-400',
       Icon: FaTimesCircle,
       defaultTitle: 'Ocorreu um erro',
     },
 
     info: {
-      wrapper: 'border-blue-500/20 bg-blue-500/5 text-blue-300',
+      wrapper: 'border-blue-500/20 bg-blue-500/5',
       icon: 'bg-blue-500/10 text-blue-400',
       Icon: FaInfoCircle,
       defaultTitle: 'Informação',
@@ -1834,19 +1564,7 @@ function FeedbackBanner({ type = 'info', title, message, action, onClose }) {
         <button
           type="button"
           onClick={onClose}
-          className="
-            flex
-            h-8
-            w-8
-            shrink-0
-            items-center
-            justify-center
-            rounded-lg
-            text-gray-500
-            transition
-            hover:bg-gray-800
-            hover:text-white
-          "
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-800 hover:text-white"
           aria-label="Fechar"
         >
           ×
@@ -1857,7 +1575,7 @@ function FeedbackBanner({ type = 'info', title, message, action, onClose }) {
 }
 
 // ============================================================
-// METRIC CARD
+// METRIC
 // ============================================================
 
 function MetricCard({
@@ -1868,24 +1586,7 @@ function MetricCard({
   iconBg = 'bg-blue-500/10',
 }) {
   return (
-    <div
-      className="
-        group
-        rounded-2xl
-        border
-        border-gray-800
-        bg-gray-900
-        p-4
-        shadow-lg
-        shadow-black/5
-        transition
-        hover:-translate-y-0.5
-        hover:border-gray-700
-        hover:shadow-xl
-        hover:shadow-black/10
-        sm:p-5
-      "
-    >
+    <div className="group rounded-2xl border border-gray-800 bg-gray-900 p-4 shadow-lg shadow-black/5 transition hover:-translate-y-0.5 hover:border-gray-700 hover:shadow-xl sm:p-5">
       <div className="flex items-center justify-between gap-3">
         <span className="text-xs text-gray-500 sm:text-sm">{label}</span>
 
@@ -1910,15 +1611,7 @@ function MetricCard({
       </div>
 
       <div className="mt-3 sm:mt-4">
-        <span
-          className="
-            text-2xl
-            font-bold
-            tracking-tight
-            text-white
-            sm:text-3xl
-          "
-        >
+        <span className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
           {value}
         </span>
       </div>
@@ -1937,38 +1630,14 @@ function CalendarLoading() {
         {[1, 2, 3].map((item) => (
           <div
             key={item}
-            className="
-              h-24
-              animate-pulse
-              rounded-xl
-              bg-gray-800
-            "
+            className="h-24 animate-pulse rounded-xl bg-gray-800"
           />
         ))}
       </div>
 
-      <div
-        className="
-          flex
-          min-h-[420px]
-          items-center
-          justify-center
-          rounded-2xl
-          border
-          border-gray-800
-          bg-gray-950/40
-        "
-      >
+      <div className="flex min-h-[520px] items-center justify-center rounded-2xl border border-gray-800 bg-gray-950/40">
         <div className="text-center">
-          <FaCalendarAlt
-            className="
-              mx-auto
-              mb-4
-              animate-pulse
-              text-3xl
-              text-blue-500/50
-            "
-          />
+          <FaCalendarAlt className="mx-auto mb-4 animate-pulse text-3xl text-blue-500/50" />
 
           <p className="text-sm text-gray-400">Carregando agenda...</p>
 
