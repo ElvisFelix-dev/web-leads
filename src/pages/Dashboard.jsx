@@ -161,6 +161,8 @@ export default function Dashboard() {
     propostas = 0,
     fechados = 0,
     perdidos = 0,
+    leadsDistribuidos = 0, // ✅ ADICIONAR
+    leadsPendentes = 0, // ✅ ADICIONAR
   } = totals;
 
   // 🔥 CORREÇÃO: Definindo o chartData
@@ -224,6 +226,8 @@ export default function Dashboard() {
             propostas,
             fechados,
             perdidos,
+            leadsDistribuidos, // ✅ ADICIONAR
+            leadsPendentes, // ✅ ADICIONAR
           }}
           loading={loading}
         />
