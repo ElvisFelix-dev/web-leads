@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:3333 || https://leadsnamao.onrender.com',
+  baseURL: 'https://leadsnamao.onrender.com',
 });
 
 api.interceptors.request.use((config) => {
