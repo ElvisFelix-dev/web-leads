@@ -36,16 +36,253 @@ export default function ChatArea({ onBack }) {
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [sending, setSending] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const emojiPickerRef = useRef(null);
 
   const otherUser = currentConversation
     ? getOtherParticipant(currentConversation)
     : null;
 
   const online = otherUser ? isUserOnline(otherUser._id) : false;
+
+  // =========================================================
+  // EMOJIS
+  // =========================================================
+
+  const emojiCategories = [
+    {
+      label: 'Mais usados',
+      emojis: [
+        '😀',
+        '😂',
+        '🤣',
+        '😊',
+        '😍',
+        '🥰',
+        '😘',
+        '😎',
+        '🤔',
+        '😅',
+        '😉',
+        '🙂',
+        '🙌',
+        '👏',
+        '👍',
+        '👎',
+        '❤️',
+        '🔥',
+        '✨',
+        '🎉',
+        '🚀',
+        '💪',
+        '🙏',
+        '✅',
+      ],
+    },
+    {
+      label: 'Rostos',
+      emojis: [
+        '😀',
+        '😃',
+        '😄',
+        '😁',
+        '😆',
+        '😅',
+        '😂',
+        '🤣',
+        '😊',
+        '😇',
+        '🙂',
+        '🙃',
+        '😉',
+        '😌',
+        '😍',
+        '🥰',
+        '😘',
+        '😗',
+        '😙',
+        '😚',
+        '😋',
+        '😛',
+        '😝',
+        '😜',
+        '🤪',
+        '🤨',
+        '🧐',
+        '🤓',
+        '😎',
+        '🤩',
+        '🥳',
+        '😏',
+        '😒',
+        '😞',
+        '😔',
+        '😟',
+        '😕',
+        '🙁',
+        '☹️',
+        '😣',
+        '😖',
+        '😫',
+        '😩',
+        '🥺',
+        '😢',
+        '😭',
+        '😤',
+        '😠',
+        '😡',
+        '🤬',
+        '🤯',
+        '😳',
+        '🥵',
+        '🥶',
+        '😱',
+        '😨',
+        '😰',
+        '😥',
+        '😓',
+        '🤗',
+        '🤔',
+        '🫡',
+        '🤭',
+        '🤫',
+        '🤥',
+        '😶',
+        '😐',
+        '😑',
+        '😬',
+        '🙄',
+        '😯',
+        '😦',
+        '😧',
+        '😮',
+        '😲',
+        '🥱',
+        '😴',
+        '🤤',
+        '😪',
+        '😵',
+        '🤐',
+        '🥴',
+        '🤢',
+        '🤮',
+        '🤧',
+        '😷',
+        '🤒',
+        '🤕',
+      ],
+    },
+    {
+      label: 'Gestos',
+      emojis: [
+        '👍',
+        '👎',
+        '👌',
+        '✌️',
+        '🤞',
+        '🤟',
+        '🤘',
+        '🤙',
+        '👈',
+        '👉',
+        '👆',
+        '👇',
+        '☝️',
+        '✋',
+        '🤚',
+        '🖐️',
+        '🖖',
+        '👋',
+        '🤏',
+        '💪',
+        '👏',
+        '🙌',
+        '👐',
+        '🤝',
+        '🙏',
+        '✍️',
+        '💅',
+        '🤳',
+      ],
+    },
+    {
+      label: 'Símbolos',
+      emojis: [
+        '❤️',
+        '🧡',
+        '💛',
+        '💚',
+        '💙',
+        '💜',
+        '🖤',
+        '🤍',
+        '🤎',
+        '💔',
+        '❣️',
+        '💕',
+        '💞',
+        '💓',
+        '💗',
+        '💖',
+        '💘',
+        '💝',
+        '💟',
+        '✨',
+        '⭐',
+        '🌟',
+        '💫',
+        '🔥',
+        '🎉',
+        '🎊',
+        '💯',
+        '✅',
+        '❌',
+        '⚠️',
+        '❗',
+        '❓',
+        '💡',
+      ],
+    },
+    {
+      label: 'Objetos',
+      emojis: [
+        '📱',
+        '💻',
+        '⌨️',
+        '🖥️',
+        '📷',
+        '📸',
+        '☎️',
+        '📞',
+        '💼',
+        '📁',
+        '📂',
+        '📄',
+        '📝',
+        '📌',
+        '📍',
+        '🔑',
+        '🔒',
+        '🔓',
+        '💰',
+        '💵',
+        '💳',
+        '🏠',
+        '🏢',
+        '🚗',
+        '📅',
+        '⏰',
+        '🎯',
+        '🎁',
+        '🏆',
+        '🚀',
+      ],
+    },
+  ];
 
   // =========================================================
   // HELPERS
@@ -126,6 +363,84 @@ export default function ChatArea({ onBack }) {
   };
 
   // =========================================================
+  // EMOJI PICKER
+  // =========================================================
+
+  const insertEmoji = (emoji) => {
+    const textarea = inputRef.current;
+
+    if (!textarea) {
+      setInputMessage((previous) => `${previous}${emoji}`);
+      return;
+    }
+
+    const start = textarea.selectionStart ?? inputMessage.length;
+    const end = textarea.selectionEnd ?? inputMessage.length;
+
+    const newValue =
+      inputMessage.slice(0, start) + emoji + inputMessage.slice(end);
+
+    setInputMessage(newValue);
+
+    if (currentConversation) {
+      if (!isTyping) {
+        setIsTyping(true);
+        sendTyping(currentConversation._id, true);
+      }
+
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      typingTimeoutRef.current = setTimeout(() => {
+        setIsTyping(false);
+        sendTyping(currentConversation._id, false);
+      }, 2000);
+    }
+
+    setShowEmojiPicker(false);
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+
+      const cursorPosition = start + emoji.length;
+
+      textarea.setSelectionRange(cursorPosition, cursorPosition);
+    });
+  };
+
+  // =========================================================
+  // CLOSE EMOJI PICKER OUTSIDE
+  // =========================================================
+
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+
+    const handleClickOutside = (event) => {
+      if (
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(event.target)
+      ) {
+        setShowEmojiPicker(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showEmojiPicker]);
+
+  // =========================================================
+  // CLOSE EMOJI PICKER ON CONVERSATION CHANGE
+  // =========================================================
+
+  useEffect(() => {
+    setShowEmojiPicker(false);
+  }, [currentConversation?._id]);
+
+  // =========================================================
   // SCROLL
   // =========================================================
 
@@ -183,6 +498,7 @@ export default function ChatArea({ onBack }) {
 
       setInputMessage('');
       setIsTyping(false);
+      setShowEmojiPicker(false);
 
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
@@ -225,10 +541,12 @@ export default function ChatArea({ onBack }) {
       clearTimeout(typingTimeoutRef.current);
     }
 
-    typingTimeoutRef.current = setTimeout(() => {
-      setIsTyping(false);
-      sendTyping(currentConversation._id, false);
-    }, 2000);
+    if (value.length > 0) {
+      typingTimeoutRef.current = setTimeout(() => {
+        setIsTyping(false);
+        sendTyping(currentConversation._id, false);
+      }, 2000);
+    }
   };
 
   // =========================================================
@@ -256,7 +574,6 @@ export default function ChatArea({ onBack }) {
   if (!currentConversation) {
     return (
       <div className="relative flex h-full flex-1 items-center justify-center overflow-hidden bg-[#0d1119]">
-        {/* Ambient background */}
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute left-1/2 top-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/[0.025] blur-3xl" />
         </div>
@@ -337,7 +654,6 @@ export default function ChatArea({ onBack }) {
         "
       >
         <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
-          {/* Mobile back */}
           <button
             type="button"
             onClick={onBack}
@@ -360,7 +676,6 @@ export default function ChatArea({ onBack }) {
             <FaChevronLeft size={14} />
           </button>
 
-          {/* Avatar */}
           <div className="relative shrink-0">
             <div
               className="
@@ -398,7 +713,6 @@ export default function ChatArea({ onBack }) {
               )}
             </div>
 
-            {/* Online indicator */}
             {!isChannel && online && (
               <span
                 className="
@@ -419,7 +733,6 @@ export default function ChatArea({ onBack }) {
             )}
           </div>
 
-          {/* Conversation info */}
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="truncate text-[13px] font-bold text-white sm:text-sm">
@@ -492,7 +805,6 @@ export default function ChatArea({ onBack }) {
           </div>
         </div>
 
-        {/* Header actions */}
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -571,14 +883,12 @@ export default function ChatArea({ onBack }) {
           sm:py-5
         "
       >
-        {/* Subtle background */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute -right-40 top-20 h-72 w-72 rounded-full bg-blue-600/[0.015] blur-3xl" />
           <div className="absolute -left-40 bottom-20 h-72 w-72 rounded-full bg-indigo-600/[0.012] blur-3xl" />
         </div>
 
         <div className="relative mx-auto w-full max-w-4xl">
-          {/* Loading */}
           {loading ? (
             <div className="flex min-h-[300px] flex-col items-center justify-center">
               <div
@@ -612,9 +922,6 @@ export default function ChatArea({ onBack }) {
               </p>
             </div>
           ) : messages.length === 0 ? (
-            /* =================================================
-               EMPTY
-            ================================================== */
             <div className="flex min-h-[350px] items-center justify-center">
               <div className="max-w-xs px-5 text-center">
                 <div
@@ -647,12 +954,8 @@ export default function ChatArea({ onBack }) {
               </div>
             </div>
           ) : (
-            /* =================================================
-               MESSAGE LIST
-            ================================================== */
             <div className="space-y-1">
               {messages.map((msg, index) => {
-                // Safety
                 if (!msg || !msg._id) {
                   return null;
                 }
@@ -667,9 +970,11 @@ export default function ChatArea({ onBack }) {
                   msg.status === 'failed' || msg.status === 'error';
 
                 const previousMessage = messages[index - 1];
+
                 const currentDate = msg.createdAt
                   ? new Date(msg.createdAt)
                   : null;
+
                 const previousDate = previousMessage?.createdAt
                   ? new Date(previousMessage.createdAt)
                   : null;
@@ -696,7 +1001,6 @@ export default function ChatArea({ onBack }) {
                       ${isSending ? 'message-sending' : ''}
                     `}
                   >
-                    {/* Date separator */}
                     {showDate && (
                       <div className="flex items-center gap-3 py-5">
                         <div className="h-px flex-1 bg-white/[0.04]" />
@@ -722,7 +1026,6 @@ export default function ChatArea({ onBack }) {
                       </div>
                     )}
 
-                    {/* Message row */}
                     <div
                       className={`
                         group
@@ -733,7 +1036,6 @@ export default function ChatArea({ onBack }) {
                         ${sameSenderAsPrevious ? 'mt-0.5' : 'mt-2.5'}
                       `}
                     >
-                      {/* Received avatar */}
                       {!isOwn && (
                         <div className="w-7 shrink-0">
                           {!sameSenderAsPrevious && (
@@ -767,18 +1069,16 @@ export default function ChatArea({ onBack }) {
                         </div>
                       )}
 
-                      {/* Bubble */}
                       <div
                         className={`
                           relative
+                          flex
                           max-w-[88%]
+                          flex-col
                           sm:max-w-[72%]
                           ${isOwn ? 'items-end' : 'items-start'}
-                          flex
-                          flex-col
                         `}
                       >
-                        {/* Sender name */}
                         {!isOwn && !sameSenderAsPrevious && (
                           <div className="mb-1 ml-1 flex items-center gap-2">
                             <span className="text-[9px] font-semibold text-blue-400">
@@ -821,7 +1121,6 @@ export default function ChatArea({ onBack }) {
                             ${isFailed ? 'border-red-500/30 bg-red-500/10' : ''}
                           `}
                         >
-                          {/* Content */}
                           <p
                             className="
                               whitespace-pre-wrap
@@ -833,7 +1132,6 @@ export default function ChatArea({ onBack }) {
                             {msg.content || ''}
                           </p>
 
-                          {/* Metadata */}
                           <div
                             className={`
                               mt-1
@@ -872,9 +1170,6 @@ export default function ChatArea({ onBack }) {
                 );
               })}
 
-              {/* =================================================
-                  TYPING
-              ================================================== */}
               {isTypingUser && (
                 <div className="mt-3 flex items-end gap-2">
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/[0.06] bg-gray-800">
@@ -891,109 +1186,89 @@ export default function ChatArea({ onBack }) {
                     )}
                   </div>
 
-                  <div>
-                    <div
-                      className="
-                        flex
-                        items-center
-                        gap-1
-                        rounded-2xl
-                        rounded-bl-md
-                        border
-                        border-white/[0.045]
-                        bg-[#171d28]
-                        px-3.5
-                        py-3
-                      "
-                    >
-                      <span
-                        className="
-                          h-1.5
-                          w-1.5
-                          animate-bounce
-                          rounded-full
-                          bg-gray-500
-                        "
-                        style={{
-                          animationDelay: '0ms',
-                        }}
-                      />
-
-                      <span
-                        className="
-                          h-1.5
-                          w-1.5
-                          animate-bounce
-                          rounded-full
-                          bg-gray-500
-                        "
-                        style={{
-                          animationDelay: '150ms',
-                        }}
-                      />
-
-                      <span
-                        className="
-                          h-1.5
-                          w-1.5
-                          animate-bounce
-                          rounded-full
-                          bg-gray-500
-                        "
-                        style={{
-                          animationDelay: '300ms',
-                        }}
-                      />
+                  <div className="rounded-2xl rounded-bl-md border border-white/[0.045] bg-[#171d28] px-3.5 py-2.5">
+                    <div className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.3s]" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.15s]" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400" />
                     </div>
-
-                    <p className="ml-1 mt-1 text-[8px] text-gray-700">
-                      {otherUser?.name || 'Usuário'} está digitando...
-                    </p>
                   </div>
                 </div>
               )}
 
-              <div ref={messagesEndRef} className="h-1" />
+              <div ref={messagesEndRef} />
             </div>
           )}
         </div>
       </div>
 
       {/* =====================================================
-          INPUT AREA
+          INPUT FOOTER
       ====================================================== */}
-      <div
-        className="
-          relative
-          z-10
-          border-t
-          border-white/[0.06]
-          bg-[#11151f]/95
-          p-3
-          backdrop-blur-xl
-          sm:p-4
-        "
-      >
+      <footer className="relative z-10 shrink-0 border-t border-white/[0.06] bg-[#11151f]/95 p-3 backdrop-blur-xl sm:p-4">
+        {showEmojiPicker && (
+          <div
+            ref={emojiPickerRef}
+            className="absolute bottom-full left-3 mb-2 w-72 sm:w-80 rounded-2xl border border-white/[0.08] bg-[#171d28] p-3 shadow-2xl backdrop-blur-xl z-20"
+          >
+            <div className="mb-2 flex items-center justify-between border-b border-white/[0.06] pb-2">
+              <span className="text-xs font-semibold text-gray-300">
+                Emojis
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker(false)}
+                className="text-gray-500 hover:text-white"
+              >
+                <FaTimes size={12} />
+              </button>
+            </div>
+            <div className="max-h-48 overflow-y-auto space-y-3 pr-1">
+              {emojiCategories.map((category) => (
+                <div key={category.label}>
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                    {category.label}
+                  </p>
+                  <div className="grid grid-gap-1 grid-cols-8 gap-1">
+                    {category.emojis.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => insertEmoji(emoji)}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-white/[0.08] text-base transition"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <form
           onSubmit={handleSend}
-          className="relative mx-auto flex w-full max-w-4xl items-center gap-2"
+          className="relative mx-auto flex max-w-4xl items-center gap-2"
         >
           <div className="flex items-center gap-1">
             <button
               type="button"
+              onClick={() => setShowEmojiPicker((prev) => !prev)}
+              aria-label="Abrir seletor de emojis"
+              className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${
+                showEmojiPicker
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-500 hover:bg-white/[0.05] hover:text-gray-300'
+              }`}
+            >
+              <FaSmile size={16} />
+            </button>
+
+            <button
+              type="button"
               aria-label="Anexar arquivo"
-              className="
-                flex
-                h-10
-                w-10
-                items-center
-                justify-center
-                rounded-xl
-                text-gray-500
-                transition
-                hover:bg-white/[0.05]
-                hover:text-gray-300
-              "
+              className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 transition hover:bg-white/[0.05] hover:text-gray-300"
             >
               <FaPaperclip size={15} />
             </button>
@@ -1005,73 +1280,23 @@ export default function ChatArea({ onBack }) {
               value={inputMessage}
               onChange={handleTyping}
               onKeyDown={handleInputKeyDown}
-              placeholder="Digite uma mensagem..."
+              placeholder="Digite sua mensagem..."
               rows={1}
-              className="
-                w-full
-                resize-none
-                rounded-xl
-                border
-                border-white/[0.07]
-                bg-[#171d28]
-                px-4
-                py-2.5
-                text-[13px]
-                text-white
-                placeholder-gray-500
-                focus:border-blue-500/50
-                focus:outline-none
-                focus:ring-1
-                focus:ring-blue-500/50
-              "
+              className="w-full resize-none rounded-xl border border-white/[0.07] bg-[#171d28] px-4 py-2.5 text-xs text-gray-200 placeholder-gray-600 focus:border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/50 sm:text-sm"
+              style={{ maxHeight: '120px' }}
             />
           </div>
 
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-label="Emojis"
-              className="
-                hidden
-                h-10
-                w-10
-                items-center
-                justify-center
-                rounded-xl
-                text-gray-500
-                transition
-                hover:bg-white/[0.05]
-                hover:text-gray-300
-                sm:flex
-              "
-            >
-              <FaSmile size={16} />
-            </button>
-
-            <button
-              type="submit"
-              disabled={!inputMessage.trim() || sending}
-              aria-label="Enviar mensagem"
-              className="
-                flex
-                h-10
-                w-10
-                items-center
-                justify-center
-                rounded-xl
-                bg-blue-600
-                text-white
-                transition
-                hover:bg-blue-500
-                disabled:cursor-not-allowed
-                disabled:opacity-40
-              "
-            >
-              <FaPaperPlane size={13} />
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={!inputMessage.trim() || sending}
+            aria-label="Enviar mensagem"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-900/20 transition hover:bg-blue-500 disabled:opacity-40 disabled:hover:bg-blue-600"
+          >
+            <FaPaperPlane size={14} />
+          </button>
         </form>
-      </div>
+      </footer>
     </div>
   );
 }

@@ -13,6 +13,59 @@ import api from '../service/api';
 
 import { UserContext } from './UserContext';
 
+// =========================================================
+// HELPERS DE SANITIZAÇÃO - GARANTEM RENDERIZAÇÃO SEGURA
+// =========================================================
+
+const safeString = (value, fallback = '') => {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean')
+    return String(value);
+
+  if (typeof value === 'object') {
+    if (typeof value.text === 'string') return value.text;
+    if (typeof value.content === 'string') return value.content;
+    if (typeof value.message === 'string') return value.message;
+    return fallback;
+  }
+
+  return fallback;
+};
+
+const sanitizeMessage = (message) => {
+  if (!message || typeof message !== 'object') return null;
+
+  return {
+    ...message,
+    content: safeString(message.content, ''),
+    lastMessage: safeString(message.lastMessage, ''),
+  };
+};
+
+const sanitizeConversation = (conversation) => {
+  if (!conversation || typeof conversation !== 'object') return null;
+
+  let lastMessageText = '';
+  let lastMessageObject = null;
+
+  if (typeof conversation.lastMessage === 'string') {
+    lastMessageText = conversation.lastMessage;
+  } else if (
+    conversation.lastMessage &&
+    typeof conversation.lastMessage === 'object'
+  ) {
+    lastMessageText = safeString(conversation.lastMessage.content, '');
+    lastMessageObject = conversation.lastMessage;
+  }
+
+  return {
+    ...conversation,
+    lastMessage: lastMessageText,
+    lastMessageObject,
+  };
+};
+
 const ChatContext = createContext(null);
 
 export const useChat = () => {
@@ -68,6 +121,29 @@ export const ChatProvider = ({ children }) => {
 
   const messagesRequestRef = useRef(0);
 
+  const processedNotificationIdsRef = useRef(new Map());
+
+  const realtimeConversationVersionRef = useRef(0);
+
+  // =========================================================
+  // LIMPEZA AUTOMÁTICA DO CACHE DE NOTIFICAÇÕES
+  // =========================================================
+
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      const fiveMinutes = 5 * 60 * 1000;
+
+      processedNotificationIdsRef.current.forEach((timestamp, id) => {
+        if (now - timestamp > fiveMinutes) {
+          processedNotificationIdsRef.current.delete(id);
+        }
+      });
+    }, 60000);
+
+    return () => clearInterval(cleanupInterval);
+  }, []);
+
   // =========================================================
   // MANTER CURRENT CONVERSATION ATUAL NO REF
   // =========================================================
@@ -77,7 +153,7 @@ export const ChatProvider = ({ children }) => {
   }, [currentConversation]);
 
   // =========================================================
-  // HELPERS
+  // HELPERS ESTABILIZADOS
   // =========================================================
 
   const getId = useCallback((value) => {
@@ -139,12 +215,15 @@ export const ChatProvider = ({ children }) => {
   // =========================================================
 
   const loadConversations = useCallback(async () => {
-    if (!user?._id) return;
+    if (!user?._id) {
+      return;
+    }
 
-    // Evita várias requisições simultâneas
     if (loadingConversationsRef.current) {
       return;
     }
+
+    const requestRealtimeVersion = realtimeConversationVersionRef.current;
 
     try {
       loadingConversationsRef.current = true;
@@ -154,8 +233,16 @@ export const ChatProvider = ({ children }) => {
       const response = await api.get('/api/chat/conversations');
 
       const conversationsData = Array.isArray(response.data?.data)
-        ? response.data.data
+        ? response.data.data.map(sanitizeConversation).filter(Boolean)
         : [];
+
+      if (requestRealtimeVersion !== realtimeConversationVersionRef.current) {
+        console.log(
+          '⚡ Ignorando resposta antiga de conversas após atualização do socket.',
+        );
+
+        return conversations;
+      }
 
       setConversations(conversationsData);
 
@@ -166,7 +253,6 @@ export const ChatProvider = ({ children }) => {
 
       setUnreadCount(total);
 
-      // Entrar nas salas das conversas
       if (socketRef.current?.connected) {
         conversationsData.forEach((conversation) => {
           if (conversation?._id) {
@@ -179,8 +265,11 @@ export const ChatProvider = ({ children }) => {
     } catch (error) {
       console.error('❌ Erro ao carregar conversas:', error);
 
-      setConversations([]);
-      setUnreadCount(0);
+      if (requestRealtimeVersion === realtimeConversationVersionRef.current) {
+        setConversations([]);
+
+        setUnreadCount(0);
+      }
 
       return [];
     } finally {
@@ -191,6 +280,60 @@ export const ChatProvider = ({ children }) => {
   }, [user?._id]);
 
   // =========================================================
+  // ATUALIZAR CONVERSA A PARTIR DE UMA MENSAGEM
+  // =========================================================
+
+  const updateConversationFromMessage = useCallback(
+    (message, conversationId, shouldIncrementUnread = false) => {
+      if (!message || !conversationId) return;
+
+      // ✅ Sanitiza a mensagem
+      const sanitized = sanitizeMessage(message);
+      if (!sanitized) return;
+
+      realtimeConversationVersionRef.current += 1;
+
+      setConversations((prev) => {
+        const index = prev.findIndex((conversation) =>
+          isSameId(conversation?._id, conversationId),
+        );
+
+        if (index === -1) return prev;
+
+        const conversation = prev[index];
+        const currentUnread = Number(conversation?.unreadCount || 0);
+
+        const updatedConversation = {
+          ...conversation,
+          // ✅ Salva a mensagem completa como objeto
+          lastMessageObject: sanitized,
+          // ✅ E também como string para renderização
+          lastMessage: safeString(sanitized.content, ''),
+          lastMessageAt: sanitized.createdAt || new Date().toISOString(),
+          updatedAt:
+            sanitized.createdAt ||
+            conversation?.updatedAt ||
+            new Date().toISOString(),
+          unreadCount: shouldIncrementUnread
+            ? currentUnread + 1
+            : currentUnread,
+        };
+
+        const newList = [...prev];
+        newList[index] = updatedConversation;
+        newList.splice(index, 1);
+        newList.unshift(updatedConversation);
+
+        return newList;
+      });
+
+      if (shouldIncrementUnread) {
+        setUnreadCount((prev) => prev + 1);
+      }
+    },
+    [isSameId],
+  );
+  // =========================================================
   // CARREGAR MENSAGENS
   // =========================================================
 
@@ -198,6 +341,7 @@ export const ChatProvider = ({ children }) => {
     async (conversationId) => {
       if (!conversationId) {
         setError('ID da conversa não informado');
+
         return;
       }
 
@@ -212,8 +356,6 @@ export const ChatProvider = ({ children }) => {
           `/api/chat/conversations/${conversationId}/messages`,
         );
 
-        // Se outra conversa foi carregada depois,
-        // ignora essa resposta antiga.
         if (requestId !== messagesRequestRef.current) {
           return;
         }
@@ -222,18 +364,20 @@ export const ChatProvider = ({ children }) => {
           ? response.data.data
           : [];
 
-        // Sanitiza mensagens
-        const validMessages = messagesData.filter(
-          (message) =>
-            message &&
-            typeof message === 'object' &&
-            message._id &&
-            message.conversation,
-        );
+        // ✅ CORRIGIDO: Sanitiza mensagens para garantir que content seja string
+        const validMessages = messagesData
+          .filter(
+            (message) =>
+              message &&
+              typeof message === 'object' &&
+              message._id &&
+              message.conversation,
+          )
+          .map(sanitizeMessage)
+          .filter(Boolean);
 
         setMessages(validMessages);
 
-        // Marcar conversa como lida
         try {
           await api.post(`/api/chat/conversations/${conversationId}/read`);
         } catch (readError) {
@@ -246,6 +390,7 @@ export const ChatProvider = ({ children }) => {
 
         if (requestId === messagesRequestRef.current) {
           setMessages([]);
+
           setError('Erro ao carregar mensagens');
         }
       } finally {
@@ -255,6 +400,136 @@ export const ChatProvider = ({ children }) => {
       }
     },
     [loadConversations],
+  );
+
+  // =========================================================
+  // HANDLER UNIFICADO DE MENSAGENS RECEBIDAS - CORRIGIDO
+  // =========================================================
+
+  const handleMessageReceived = useCallback(
+    (message) => {
+      // -----------------------------------------------------
+      // VALIDAÇÃO
+      // -----------------------------------------------------
+
+      if (!message || typeof message !== 'object') {
+        console.warn('⚠️ Mensagem inválida recebida via socket:', message);
+        return;
+      }
+
+      if (!message._id) {
+        console.warn('⚠️ Mensagem sem _id recebida via socket:', message);
+        return;
+      }
+
+      if (!message.conversation) {
+        console.warn(
+          '⚠️ Mensagem sem conversation recebida via socket:',
+          message,
+        );
+        return;
+      }
+
+      console.log('📩 Nova mensagem recebida via socket:', message);
+
+      const conversationId = getId(message.conversation);
+      if (!conversationId) {
+        console.warn('⚠️ conversationId inválido na mensagem:', message);
+        return;
+      }
+
+      const messageId = getId(message._id);
+
+      const alreadyProcessed =
+        messageId && processedNotificationIdsRef.current.has(messageId);
+
+      if (alreadyProcessed) {
+        console.log('🔁 Mensagem ignorada (já processada):', messageId);
+        return;
+      }
+
+      const sanitizedMessage = sanitizeMessage(message);
+
+      if (!sanitizedMessage) {
+        console.warn('⚠️ Mensagem inválida:', message);
+        return;
+      }
+
+      // ✅ CORRIGIDO: Garantir que a mensagem tenha content como string
+
+      const current = currentConversationRef.current;
+      const currentConversationId = getId(current?._id);
+      const isCurrentConversation = currentConversationId === conversationId;
+      const isOwnMessage = isSameId(sanitizedMessage?.sender?._id, user?._id);
+
+      // -----------------------------------------------------
+      // ADICIONAR MENSAGEM AO HISTÓRICO
+      // -----------------------------------------------------
+
+      if (isCurrentConversation) {
+        setMessages((prev) => {
+          // Evita duplicação
+          const alreadyExists = prev.some((msg) =>
+            isSameId(msg?._id, sanitizedMessage._id),
+          );
+          if (alreadyExists) {
+            return prev;
+          }
+
+          // Remove mensagem otimista correspondente
+          const withoutOptimistic = prev.filter(
+            (msg) =>
+              !(
+                msg?.isOptimistic &&
+                msg?.content === sanitizedMessage?.content &&
+                isSameId(msg?.conversation, sanitizedMessage?.conversation)
+              ),
+          );
+
+          return [...withoutOptimistic, sanitizedMessage];
+        });
+
+        // Mensagem da conversa atual: marcar como lida automaticamente
+        api
+          .post(`/api/chat/conversations/${conversationId}/read`)
+          .catch(() => {});
+      }
+
+      // -----------------------------------------------------
+      // ATUALIZAR CONVERSA E BADGE
+      // -----------------------------------------------------
+
+      const shouldIncrementUnread = !isCurrentConversation && !isOwnMessage;
+
+      updateConversationFromMessage(
+        sanitizedMessage,
+        conversationId,
+        shouldIncrementUnread,
+      );
+
+      // -----------------------------------------------------
+      // DEDUPLICAÇÃO
+      // -----------------------------------------------------
+
+      if (messageId) {
+        processedNotificationIdsRef.current.set(messageId, Date.now());
+      }
+
+      // -----------------------------------------------------
+      // SOM DE NOTIFICAÇÃO
+      // -----------------------------------------------------
+
+      if (shouldIncrementUnread) {
+        playNotificationSound();
+      }
+    },
+    [
+      getId,
+      isSameId,
+      user?._id,
+      updateConversationFromMessage,
+      playNotificationSound,
+    ],
   );
 
   // =========================================================
@@ -275,13 +550,19 @@ export const ChatProvider = ({ children }) => {
           userId: user._id,
         },
 
-        transports: ['websocket'],
+        transports: ['websocket', 'polling'],
 
         reconnection: true,
 
-        reconnectionAttempts: 5,
+        reconnectionAttempts: 10,
 
         reconnectionDelay: 1000,
+
+        reconnectionDelayMax: 5000,
+
+        timeout: 20000,
+
+        forceNew: true,
       },
     );
 
@@ -300,7 +581,6 @@ export const ChatProvider = ({ children }) => {
 
       newSocket.emit('join_conversations');
 
-      // Recarrega as conversas após conectar
       loadConversations();
     };
 
@@ -315,158 +595,23 @@ export const ChatProvider = ({ children }) => {
     };
 
     // =======================================================
-    // NOVA MENSAGEM
+    // EVENTOS DE MENSAGEM - UNIFICADO
     // =======================================================
 
-    const handleNewMessage = (message) => {
-      // -----------------------------------------------------
-      // VALIDAÇÃO
-      // -----------------------------------------------------
-
-      if (!message || typeof message !== 'object') {
-        console.warn('⚠️ Mensagem inválida recebida via socket:', message);
-
-        return;
-      }
-
-      if (!message._id) {
-        console.warn('⚠️ Mensagem sem _id recebida via socket:', message);
-
-        return;
-      }
-
-      if (!message.conversation) {
-        console.warn(
-          '⚠️ Mensagem sem conversation recebida via socket:',
-          message,
-        );
-
-        return;
-      }
-
-      console.log('📩 Nova mensagem recebida via socket:', message);
-
-      const conversationId = getId(message.conversation);
-
-      if (!conversationId) {
-        console.warn('⚠️ conversationId inválido na mensagem:', message);
-
-        return;
-      }
-
-      const current = currentConversationRef.current;
-
-      const currentConversationId = getId(current?._id);
-
-      const isCurrentConversation = currentConversationId === conversationId;
-
-      // -----------------------------------------------------
-      // ADICIONAR MENSAGEM
-      // -----------------------------------------------------
-
-      if (isCurrentConversation) {
-        setMessages((prev) => {
-          // Evita duplicação
-          const alreadyExists = prev.some((msg) =>
-            isSameId(msg?._id, message._id),
-          );
-
-          if (alreadyExists) {
-            return prev;
-          }
-
-          // Remove mensagem otimista correspondente
-          const withoutOptimistic = prev.filter(
-            (msg) =>
-              !(
-                msg?.isOptimistic &&
-                msg?.content === message?.content &&
-                isSameId(msg?.conversation, message?.conversation)
-              ),
-          );
-
-          return [...withoutOptimistic, message];
-        });
-
-        // Mensagem da conversa atual:
-        // marcar como lida automaticamente
-        api
-          .post(`/api/chat/conversations/${conversationId}/read`)
-          .catch(() => {});
-      }
-
-      // -----------------------------------------------------
-      // ATUALIZAR CONVERSAS
-      // -----------------------------------------------------
-
-      loadConversations();
-    };
-
-    // =======================================================
-    // NOTIFICAÇÃO DE NOVA MENSAGEM
-    // =======================================================
-
-    const handleNewMessageNotification = (data) => {
-      if (!data || typeof data !== 'object') {
-        console.warn('⚠️ Notificação inválida recebida:', data);
-
-        return;
-      }
-
-      const conversationId = getId(data.conversationId);
-
-      if (!conversationId) {
-        console.warn('⚠️ Notificação sem conversationId:', data);
-
-        return;
-      }
-
-      const notificationMessage = data.message;
-
-      console.log('🔔 Nova notificação de mensagem:', conversationId);
-
-      const current = currentConversationRef.current;
-
-      const currentConversationId = getId(current?._id);
-
-      const isCurrentConversation = currentConversationId === conversationId;
-
-      // -----------------------------------------------------
-      // IMPORTANTE
-      //
-      // NÃO adicionamos a mensagem aqui.
-      //
-      // O evento "new_message" já faz isso.
-      //
-      // Aqui cuidamos apenas da notificação.
-      // -----------------------------------------------------
-
-      if (!isCurrentConversation) {
-        playNotificationSound();
-      }
-
-      // Atualiza lista de conversas
-      loadConversations();
-
-      // Caso o backend envie uma notificação válida,
-      // podemos atualizar a conversa sem duplicar mensagens.
-      if (notificationMessage && typeof notificationMessage === 'object') {
-        console.log(
-          '🔔 Notificação associada à mensagem:',
-          notificationMessage._id,
-        );
-      }
-    };
+    newSocket.on('new_message', handleMessageReceived);
 
     // =======================================================
     // DIGITANDO
     // =======================================================
 
     const handleUserTyping = ({ userId, isTyping }) => {
-      if (!userId) return;
+      if (!userId) {
+        return;
+      }
 
       setTypingUsers((prev) => ({
         ...prev,
+
         [getId(userId)]: Boolean(isTyping),
       }));
     };
@@ -478,7 +623,9 @@ export const ChatProvider = ({ children }) => {
     const handleUserOnline = (userId) => {
       const id = getId(userId);
 
-      if (!id) return;
+      if (!id) {
+        return;
+      }
 
       setOnlineUsers((prev) => {
         if (prev.includes(id)) {
@@ -496,7 +643,9 @@ export const ChatProvider = ({ children }) => {
     const handleUserOffline = (userId) => {
       const id = getId(userId);
 
-      if (!id) return;
+      if (!id) {
+        return;
+      }
 
       setOnlineUsers((prev) => prev.filter((existingId) => existingId !== id));
     };
@@ -508,10 +657,6 @@ export const ChatProvider = ({ children }) => {
     newSocket.on('connect', handleConnect);
 
     newSocket.on('disconnect', handleDisconnect);
-
-    newSocket.on('new_message', handleNewMessage);
-
-    newSocket.on('new_message_notification', handleNewMessageNotification);
 
     newSocket.on('user_typing', handleUserTyping);
 
@@ -530,9 +675,7 @@ export const ChatProvider = ({ children }) => {
 
       newSocket.off('disconnect', handleDisconnect);
 
-      newSocket.off('new_message', handleNewMessage);
-
-      newSocket.off('new_message_notification', handleNewMessageNotification);
+      newSocket.off('new_message', handleMessageReceived);
 
       newSocket.off('user_typing', handleUserTyping);
 
@@ -550,10 +693,10 @@ export const ChatProvider = ({ children }) => {
 
       setIsConnected(false);
     };
-  }, [user?._id, getId, isSameId, loadConversations, playNotificationSound]);
+  }, [user?._id, getId, handleMessageReceived, loadConversations]);
 
   // =========================================================
-  // ENVIAR MENSAGEM
+  // ENVIAR MENSAGEM - CORRIGIDO
   // =========================================================
 
   const sendMessage = useCallback(
@@ -564,10 +707,7 @@ export const ChatProvider = ({ children }) => {
 
       const trimmedContent = content.trim();
 
-      // -----------------------------------------------------
-      // MENSAGEM OTIMISTA
-      // -----------------------------------------------------
-
+      // ✅ CORRIGIDO: Mensagem otimista com content como string
       const optimisticMessage = {
         _id: `temp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
 
@@ -577,7 +717,9 @@ export const ChatProvider = ({ children }) => {
 
         sender: {
           _id: user?._id,
+
           name: user?.name || 'Você',
+
           avatar: user?.avatar || null,
         },
 
@@ -602,25 +744,27 @@ export const ChatProvider = ({ children }) => {
 
         const newMessage = response.data?.data;
 
-        // ---------------------------------------------------
-        // VALIDAR RESPOSTA DO BACKEND
-        // ---------------------------------------------------
-
         if (!newMessage || typeof newMessage !== 'object' || !newMessage._id) {
           throw new Error('O servidor retornou uma mensagem inválida.');
         }
 
         console.log('✅ Mensagem criada:', newMessage);
 
-        // ---------------------------------------------------
-        // SUBSTITUIR MENSAGEM OTIMISTA
-        // ---------------------------------------------------
+        // ✅ CORRIGIDO: Sanitizar a mensagem do backend
+        const sanitizedMessage = {
+          ...newMessage,
+          content:
+            typeof newMessage.content === 'string' ? newMessage.content : '',
+          ...(typeof newMessage.content === 'object' &&
+          newMessage.content !== null
+            ? { content: JSON.stringify(newMessage.content) }
+            : {}),
+        };
 
         setMessages((prev) => {
-          // Se o socket já adicionou a mensagem real,
-          // remove a otimista e mantém a real.
           const hasRealMessage = prev.some(
-            (msg) => !msg?.isOptimistic && isSameId(msg?._id, newMessage._id),
+            (msg) =>
+              !msg?.isOptimistic && isSameId(msg?._id, sanitizedMessage._id),
           );
 
           if (hasRealMessage) {
@@ -628,17 +772,16 @@ export const ChatProvider = ({ children }) => {
           }
 
           return prev.map((msg) =>
-            msg?._id === optimisticMessage._id ? newMessage : msg,
+            msg?._id === optimisticMessage._id ? sanitizedMessage : msg,
           );
         });
 
-        loadConversations();
+        updateConversationFromMessage(sanitizedMessage, conversationId, false);
 
-        return newMessage;
+        return sanitizedMessage;
       } catch (error) {
         console.error('❌ Erro ao enviar mensagem:', error);
 
-        // Remove otimista
         setMessages((prev) =>
           prev.filter((msg) => msg?._id !== optimisticMessage._id),
         );
@@ -651,7 +794,13 @@ export const ChatProvider = ({ children }) => {
         throw error;
       }
     },
-    [user?._id, user?.name, user?.avatar, isSameId, loadConversations],
+    [
+      user?._id,
+      user?.name,
+      user?.avatar,
+      isSameId,
+      updateConversationFromMessage,
+    ],
   );
 
   // =========================================================
@@ -668,7 +817,6 @@ export const ChatProvider = ({ children }) => {
         throw new Error('Selecione pelo menos um participante');
       }
 
-      // Remove IDs duplicados
       const uniqueParticipants = [
         ...new Set(
           participants.map((participant) => getId(participant)).filter(Boolean),
@@ -678,7 +826,9 @@ export const ChatProvider = ({ children }) => {
       try {
         const response = await api.post('/api/chat/conversations', {
           participants: uniqueParticipants,
+
           type,
+
           name,
         });
 
@@ -761,18 +911,14 @@ export const ChatProvider = ({ children }) => {
         return;
       }
 
-      // Atualiza imediatamente a conversa atual
       setCurrentConversation(conversation);
 
       currentConversationRef.current = conversation;
 
-      // Invalida requisições anteriores
       messagesRequestRef.current += 1;
 
-      // Limpa mensagens antigas enquanto carrega
       setMessages([]);
 
-      // Entra na sala
       if (socketRef.current?.connected) {
         socketRef.current.emit('join_conversation', conversationId);
       }
@@ -805,7 +951,9 @@ export const ChatProvider = ({ children }) => {
     (userId) => {
       const id = getId(userId);
 
-      if (!id) return false;
+      if (!id) {
+        return false;
+      }
 
       return onlineUsers.includes(id);
     },
@@ -927,6 +1075,10 @@ export const ChatProvider = ({ children }) => {
     setIsConnected(false);
 
     messagesRequestRef.current += 1;
+
+    realtimeConversationVersionRef.current = 0;
+
+    processedNotificationIdsRef.current.clear();
 
     if (socketRef.current) {
       socketRef.current.disconnect();

@@ -129,13 +129,32 @@ export default function ConversationList({ onSelect, onNewChat }) {
    * Limita o tamanho da mensagem exibida.
    */
   const getLastMessage = (conversation) => {
-    const message = String(conversation?.lastMessage || '').trim();
-
-    if (!message) {
-      return 'Nenhuma mensagem';
+    // ✅ Tenta pegar a string diretamente
+    if (typeof conversation?.lastMessage === 'string') {
+      const msg = conversation.lastMessage.trim();
+      return msg || 'Nenhuma mensagem';
     }
 
-    return message;
+    // ✅ Se for objeto, tenta extrair o content
+    if (
+      conversation?.lastMessage &&
+      typeof conversation.lastMessage === 'object'
+    ) {
+      const content = conversation.lastMessage.content;
+      if (typeof content === 'string') {
+        return content.trim() || 'Nenhuma mensagem';
+      }
+    }
+
+    // ✅ Fallback para o objeto completo
+    if (conversation?.lastMessageObject?.content) {
+      const content = conversation.lastMessageObject.content;
+      if (typeof content === 'string') {
+        return content.trim() || 'Nenhuma mensagem';
+      }
+    }
+
+    return 'Nenhuma mensagem';
   };
 
   /**
