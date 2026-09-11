@@ -6,6 +6,7 @@ import { UserContext } from '../context/UserContext';
 
 import Sidebar from './Sidebar';
 import ChatWidget from './chat/ChatWidget';
+import ChatNotificationToast from './chat/ChatNotificationToast';
 
 export default function Layout() {
   const location = useLocation();
@@ -113,6 +114,8 @@ export default function Layout() {
 
       {/* Chat disponível somente dentro do CRM */}
       <ChatWidget />
+
+      <ChatNotificationToast />
     </div>
   );
 }

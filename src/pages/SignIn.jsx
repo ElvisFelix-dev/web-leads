@@ -337,18 +337,6 @@ export default function SignIn() {
               "
             >
               Ainda não possui conta?
-              <Link
-                to="/sign-up"
-
-                className="
-                ml-2
-                text-blue-400
-                font-semibold
-                hover:text-blue-300
-                "
-              >
-                Criar conta
-              </Link>
             </p>
           </form>
         </div>

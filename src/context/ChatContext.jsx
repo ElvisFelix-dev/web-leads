@@ -66,6 +66,63 @@ const sanitizeConversation = (conversation) => {
   };
 };
 
+// =========================================================
+// NOTIFICAÇÕES DO NAVEGADOR (WEB PUSH API)
+// =========================================================
+
+const requestNotificationPermission = async () => {
+  if (typeof window === 'undefined') return false;
+  if (!('Notification' in window)) return false;
+  if (Notification.permission === 'granted') return true;
+  if (Notification.permission === 'denied') return false;
+
+  try {
+    const permission = await Notification.requestPermission();
+    return permission === 'granted';
+  } catch {
+    return false;
+  }
+};
+
+const showBrowserNotification = ({ title, body, avatar, onClick }) => {
+  if (typeof window === 'undefined') return;
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+
+  // Não mostra se a aba estiver ativa
+  if (document.visibilityState === 'visible') return;
+
+  try {
+    const notification = new Notification(title, {
+      body,
+      icon: avatar || '/favicon.ico',
+      badge: '/favicon.ico',
+      tag: 'chat-message',
+      requireInteraction: false,
+    });
+
+    notification.onclick = () => {
+      window.focus();
+      if (onClick) onClick();
+      notification.close();
+    };
+
+    setTimeout(() => {
+      try {
+        notification.close();
+      } catch {
+        // Silencioso
+      }
+    }, 8000);
+  } catch (err) {
+    console.warn('Erro ao mostrar notificação do navegador:', err);
+  }
+};
+
+// =========================================================
+// CONTEXT
+// =========================================================
+
 const ChatContext = createContext(null);
 
 export const useChat = () => {
@@ -106,6 +163,9 @@ export const ChatProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   const [isConnected, setIsConnected] = useState(false);
+
+  // ✅ NOVO: Estado de notificação global em tempo real
+  const [lastNotification, setLastNotification] = useState(null);
 
   // =========================================================
   // REFS
@@ -333,6 +393,7 @@ export const ChatProvider = ({ children }) => {
     },
     [isSameId],
   );
+
   // =========================================================
   // CARREGAR MENSAGENS
   // =========================================================
@@ -455,8 +516,6 @@ export const ChatProvider = ({ children }) => {
         return;
       }
 
-      // ✅ CORRIGIDO: Garantir que a mensagem tenha content como string
-
       const current = currentConversationRef.current;
       const currentConversationId = getId(current?._id);
       const isCurrentConversation = currentConversationId === conversationId;
@@ -516,11 +575,35 @@ export const ChatProvider = ({ children }) => {
       }
 
       // -----------------------------------------------------
-      // SOM DE NOTIFICAÇÃO
+      // ✅ NOTIFICAÇÕES EM TEMPO REAL
       // -----------------------------------------------------
 
       if (shouldIncrementUnread) {
+        // 1. Dispara notificação global (toast)
+        setLastNotification({
+          id: `${messageId}_${Date.now()}`,
+          messageId,
+          conversationId,
+          message: sanitizedMessage,
+          senderName: sanitizedMessage.sender?.name || 'Nova mensagem',
+          senderAvatar: sanitizedMessage.sender?.avatar || null,
+          preview:
+            safeString(sanitizedMessage.content).substring(0, 80) ||
+            'Nova mensagem recebida',
+          timestamp: Date.now(),
+        });
+
+        // 2. Toca som
         playNotificationSound();
+
+        // 3. Notificação do navegador (se aba em background)
+        showBrowserNotification({
+          title: `💬 ${sanitizedMessage.sender?.name || 'Nova mensagem'}`,
+          body:
+            safeString(sanitizedMessage.content).substring(0, 100) ||
+            'Nova mensagem recebida',
+          avatar: sanitizedMessage.sender?.avatar,
+        });
       }
     },
     [
@@ -547,7 +630,8 @@ export const ChatProvider = ({ children }) => {
       import.meta.env.VITE_API_URL || 'http://localhost:3333',
       {
         auth: {
-          userId: user._id,
+          // ✅ CORRIGIDO: Força string para evitar problemas com ObjectId
+          userId: String(user._id),
         },
 
         transports: ['websocket', 'polling'],
@@ -582,6 +666,9 @@ export const ChatProvider = ({ children }) => {
       newSocket.emit('join_conversations');
 
       loadConversations();
+
+      // ✅ Pede permissão de notificação do navegador
+      requestNotificationPermission();
     };
 
     // =======================================================
@@ -696,6 +783,20 @@ export const ChatProvider = ({ children }) => {
   }, [user?._id, getId, handleMessageReceived, loadConversations]);
 
   // =========================================================
+  // ✅ BADGE NO TÍTULO DA ABA
+  // =========================================================
+
+  useEffect(() => {
+    const baseTitle = 'Leads Na Mão';
+
+    if (unreadCount > 0) {
+      document.title = `(${unreadCount > 99 ? '99+' : unreadCount}) ${baseTitle}`;
+    } else {
+      document.title = baseTitle;
+    }
+  }, [unreadCount]);
+
+  // =========================================================
   // ENVIAR MENSAGEM - CORRIGIDO
   // =========================================================
 
@@ -751,15 +852,11 @@ export const ChatProvider = ({ children }) => {
         console.log('✅ Mensagem criada:', newMessage);
 
         // ✅ CORRIGIDO: Sanitizar a mensagem do backend
-        const sanitizedMessage = {
-          ...newMessage,
-          content:
-            typeof newMessage.content === 'string' ? newMessage.content : '',
-          ...(typeof newMessage.content === 'object' &&
-          newMessage.content !== null
-            ? { content: JSON.stringify(newMessage.content) }
-            : {}),
-        };
+        const sanitizedMessage = sanitizeMessage(newMessage);
+
+        if (!sanitizedMessage) {
+          throw new Error('Mensagem inválida retornada pelo servidor.');
+        }
 
         setMessages((prev) => {
           const hasRealMessage = prev.some(
@@ -1074,6 +1171,8 @@ export const ChatProvider = ({ children }) => {
 
     setIsConnected(false);
 
+    setLastNotification(null);
+
     messagesRequestRef.current += 1;
 
     realtimeConversationVersionRef.current = 0;
@@ -1087,6 +1186,8 @@ export const ChatProvider = ({ children }) => {
     }
 
     setSocket(null);
+
+    document.title = 'Leads Na Mão';
   }, [user]);
 
   // =========================================================
@@ -1115,6 +1216,11 @@ export const ChatProvider = ({ children }) => {
     isConnected,
 
     socket,
+
+    // ✅ NOVO: Notificações
+    lastNotification,
+
+    clearNotification: () => setLastNotification(null),
 
     loadConversations,
 
