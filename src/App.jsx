@@ -6,7 +6,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import Layout from './components/Layout';
 
 import SignIn from './pages/SignIn';
-import SignUp from './pages/SignUp';
+// import SignUp from './pages/SignUp';
 import ForgtPassword from './pages/Forgot-Password';
 import ResetPassword from './pages/Reset-Password';
 import Dashboard from './pages/Dashboard';
@@ -62,7 +62,7 @@ export function App() {
       <Routes>
         {/* Páginas SEM sidebar */}
         <Route path="/" element={<SignIn />} />
-        <Route path="/sign-up" element={<SignUp />} />
+        {/*<Route path="/sign-up" element={<SignUp />} />*/}
         <Route path="/forgot-password" element={<ForgtPassword />} />
         <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route path="/broker/:slug" element={<BrokerHotsite />} />
