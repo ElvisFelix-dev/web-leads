@@ -328,16 +328,7 @@ export default function SignIn() {
               Entrar
             </button>
 
-            <p
-              className="
-              text-center
-              text-gray-400
-              text-sm
-              mt-6
-              "
-            >
-              Ainda não possui conta?
-            </p>
+            
           </form>
         </div>
 
