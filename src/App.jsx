@@ -13,7 +13,9 @@ import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import DashboardCorretor from './pages/DashboardCorretor';
 import BrokerHotsite from './pages/hotsite/BrokerHotsite';
+import BrokerProperties from './pages/hotsite/BrokerProperties';
 import PropertyPage from './pages/hotsite/PropertyPage';
+import BrokerAbout from './pages/hotsite/BrokerAbout';
 import PropertyCreate from './pages/PropertyCreate';
 import PropertyEdit from './pages/PropertyEdit';
 import CreateLead from './pages/Create-Leads';
@@ -67,9 +69,15 @@ export function App() {
         <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route path="/broker/:slug" element={<BrokerHotsite />} />
         <Route
+          path="/broker/:brokerSlug/imoveis"
+          element={<BrokerProperties />}
+        />
+        <Route
           path="/broker/:brokerSlug/property/:propertySlug"
           element={<PropertyPage />}
         />
+
+        <Route path="/broker/:brokerSlug/sobre" element={<BrokerAbout />} />
 
         <Route path="/properties/:id" element={<PropertyDetails />} />
         <Route path="/favorites" element={<PropertyFavorites />} />

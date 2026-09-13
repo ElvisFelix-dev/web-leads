@@ -29,6 +29,9 @@ import {
 import { getPropertyBySlug } from '../../service/propertyApi';
 import api from '../../service/api';
 
+import HotsiteNavbar from '../../components/hotsite/HotsiteNavbar';
+import HotsiteFooter from '../../components/hotsite/HotsiteFooter';
+
 /**
  * ============================================================
  * PROPERTY PAGE
@@ -66,12 +69,11 @@ import api from '../../service/api';
 
 export default function PropertyPage() {
   const params = useParams();
+  const { brokerSlug } = useParams();
 
   // ==========================================================
   // ROUTE PARAMS
   // ==========================================================
-
-  const brokerSlug = params?.brokerSlug || params?.broker || '';
 
   const routePropertySlug =
     params?.propertySlug || params?.property || params?.slug || '';
@@ -852,7 +854,7 @@ export default function PropertyPage() {
   // ==========================================================
 
   if (loading) {
-    return <PropertyLoading broker={broker} />;
+    return <PropertyLoading broker={broker} brokerSlug={brokerSlug} />;
   }
 
   // ==========================================================
@@ -863,6 +865,7 @@ export default function PropertyPage() {
     return (
       <PropertyError
         broker={broker}
+        brokerSlug={brokerSlug}
         brokerError={brokerError}
         brokerLoading={brokerLoading}
         error={error}
@@ -879,7 +882,7 @@ export default function PropertyPage() {
 
   return (
     <div className="min-h-screen bg-[#07090d] text-white">
-      <Header broker={broker} whatsappUrl={whatsappUrl} />
+      <HotsiteNavbar broker={broker} brokerSlug={brokerSlug} />
 
       <main>
         {/* ==================================================
@@ -1548,7 +1551,7 @@ export default function PropertyPage() {
         </section>
       </main>
 
-      <Footer broker={broker} socialLinks={socialLinks} />
+      <HotsiteFooter broker={broker} brokerSlug={brokerSlug} />
 
       {/* ======================================================
           TOAST
@@ -1701,103 +1704,13 @@ function Header({ broker, whatsappUrl }) {
 
 /**
  * ============================================================
- * FOOTER
- * ============================================================
- */
-
-function Footer({ broker, socialLinks = [] }) {
-  return (
-    <footer className="bg-slate-950 text-white">
-      <div className="mx-auto max-w-7xl px-5 py-12 sm:px-6 lg:px-8">
-        <div className="grid gap-10 md:grid-cols-[1fr_auto]">
-          <div>
-            <div className="flex items-center gap-3">
-              {broker?.avatar ? (
-                <img
-                  src={broker.avatar}
-                  alt={broker.name || 'Corretor'}
-                  className="h-12 w-12 rounded-full object-cover"
-                />
-              ) : (
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 font-bold">
-                  {broker?.name?.charAt(0)?.toUpperCase() || 'C'}
-                </div>
-              )}
-
-              <div>
-                <p className="font-bold">
-                  {broker?.name || 'Especialista imobiliário'}
-                </p>
-
-                <p className="mt-1 text-xs text-white/40">
-                  {broker?.position || 'Corretor de Imóveis'}
-                </p>
-              </div>
-            </div>
-
-            <p className="mt-5 max-w-lg text-sm leading-6 text-white/40">
-              Atendimento imobiliário personalizado para ajudar você a encontrar
-              as melhores oportunidades.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-4 md:items-end">
-            {socialLinks.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {socialLinks.map((social) => {
-                  const Icon = social.icon;
-
-                  return (
-                    <a
-                      key={social.key}
-                      href={social.value}
-                      target="_blank"
-                      rel="noreferrer"
-                      title={social.label}
-                      className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/60 transition hover:bg-white/10 hover:text-white"
-                    >
-                      <Icon size={17} />
-                    </a>
-                  );
-                })}
-              </div>
-            )}
-
-            {broker?.website && (
-              <a
-                href={broker.website}
-                target="_blank"
-                rel="noreferrer"
-                title="Website"
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/60 transition hover:bg-white/10 hover:text-white"
-              >
-                <ExternalLink size={17} />
-              </a>
-            )}
-
-            {broker?.email && (
-              <div className="text-xs text-white/30">{broker.email}</div>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-10 border-t border-white/10 pt-6 text-xs text-white/30">
-          © {new Date().getFullYear()} {broker?.name || 'Corretor de Imóveis'}.
-          Todos os direitos reservados.
-        </div>
-      </div>
-    </footer>
-  );
-}
-
-/**
- * ============================================================
  * PROPERTY ERROR
  * ============================================================
  */
 
 function PropertyError({
   broker,
+  brokerSlug,
   brokerError,
   brokerLoading,
   error,
@@ -1845,7 +1758,11 @@ function PropertyError({
         </div>
       </main>
 
-      <Footer broker={broker} socialLinks={socialLinks} />
+      <HotsiteFooter
+        broker={broker}
+        brokerSlug={brokerSlug}
+        socialLinks={socialLinks}
+      />
     </div>
   );
 }
@@ -1856,7 +1773,7 @@ function PropertyError({
  * ============================================================
  */
 
-function PropertyLoading({ broker }) {
+function PropertyLoading({ broker, brokerSlug }) {
   return (
     <div className="min-h-screen bg-[#07090d] text-white">
       <Header broker={broker} />
@@ -1893,7 +1810,7 @@ function PropertyLoading({ broker }) {
         </div>
       </main>
 
-      <Footer broker={broker} />
+      <HotsiteFooter broker={broker} brokerSlug={brokerSlug} />
     </div>
   );
 }

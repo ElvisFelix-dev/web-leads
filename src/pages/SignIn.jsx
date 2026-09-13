@@ -92,7 +92,7 @@ export default function SignIn() {
       if (userData.role === 'admin' || userData.isAdmin === true) {
         navigate('/dashboard');
       } else {
-        navigate(redirect || '/my-leads');
+        navigate(redirect || '/dashboard');
       }
     } catch (error) {
       console.error(error);
@@ -327,8 +327,6 @@ export default function SignIn() {
             >
               Entrar
             </button>
-
-            
           </form>
         </div>
 
