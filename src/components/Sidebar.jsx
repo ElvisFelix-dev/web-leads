@@ -668,7 +668,11 @@ export default function Sidebar({ onCollapseChange }) {
                 text-xs
               "
             >
-              LN
+              <img
+                  src={imgLogo}
+                  alt="LeadsNaMão"
+                  className="w-6 h-6 object-contain"
+                />
             </div>
           )}
 
