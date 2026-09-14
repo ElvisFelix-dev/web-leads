@@ -29,6 +29,8 @@ import {
   FaComments,
 } from 'react-icons/fa';
 
+import imgLogo from '../assets/logoImg.png';
+
 export default function Sidebar({ onCollapseChange }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -636,7 +638,11 @@ export default function Sidebar({ onCollapseChange }) {
                   text-xs
                 "
               >
-                LN
+                <img
+                  src={imgLogo}
+                  alt="LeadsNaMão"
+                  className="w-6 h-6 object-contain"
+                />
               </div>
 
               <h1 className="text-lg font-bold text-white">
