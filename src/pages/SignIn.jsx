@@ -23,7 +23,7 @@ import FormError from '../components/FormError';
 
 import api from '../service/api';
 
-import imgLogo from '../assets/logoLead.jpg';
+import imgLogo from '../assets/logoImg.png';
 
 import { UserContext } from '../context/UserContext';
 

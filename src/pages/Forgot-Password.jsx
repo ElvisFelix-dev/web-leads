@@ -1,17 +1,11 @@
-import { Link } from "react-router-dom";
-import {
-  useForm,
-} from "react-hook-form";
+import { Link } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
 
-import {
-  yupResolver,
-} from "@hookform/resolvers/yup";
+import { yupResolver } from '@hookform/resolvers/yup';
 
-import * as yup from "yup";
+import * as yup from 'yup';
 
-import {
-  toast,
-} from "react-toastify";
+import { toast } from 'react-toastify';
 
 import {
   FaEnvelope,
@@ -19,16 +13,13 @@ import {
   FaShieldAlt,
   FaKey,
   FaUserLock,
-} from "react-icons/fa";
+} from 'react-icons/fa';
 
+import FormError from '../components/FormError';
 
-import FormError from "../components/FormError";
+import api from '../service/api.jsx';
 
-import api from "../service/api.jsx";
-
-import imgLogo from "../assets/logoLead.jpg";
-
-
+import imgLogo from '../assets/logoImg.png';
 
 // ==================================
 // VALIDAÇÃO
@@ -37,87 +28,39 @@ import imgLogo from "../assets/logoLead.jpg";
 const schema = yup.object({
   email: yup
     .string()
-    .required("O email é obrigatório")
-    .email("Digite um email válido"),
+    .required('O email é obrigatório')
+    .email('Digite um email válido'),
 });
 
-
-
-
-
 export default function ForgotPassword() {
-
-
   const {
     register,
     handleSubmit,
-    formState:{
-      errors,
-      isSubmitting,
-    },
+    formState: { errors, isSubmitting },
     reset,
-
   } = useForm({
-
-    resolver:yupResolver(schema),
-
+    resolver: yupResolver(schema),
   });
-
-
-
-
-
 
   // ==================================
   // ENVIAR EMAIL
   // ==================================
 
-  async function onSubmit(data){
-
-
+  async function onSubmit(data) {
     try {
+      await api.post('/api/users/forgot-password', data);
 
-
-      await api.post(
-        "/api/users/forgot-password",
-        data
-      );
-
-
-
-      toast.success(
-        "Email de recuperação enviado!"
-      );
-
-
+      toast.success('Email de recuperação enviado!');
 
       reset();
-
-
-
-    } catch(error){
-
-
+    } catch (error) {
       toast.error(
-
-        error.response?.data?.message ||
-
-        "Erro ao enviar solicitação"
-
+        error.response?.data?.message || 'Erro ao enviar solicitação',
       );
-
-
     }
-
-
   }
 
-
-
-
-
   return (
-
     <section
       className="
       min-h-screen
@@ -128,9 +71,6 @@ export default function ForgotPassword() {
       px-6
       "
     >
-
-
-
       <div
         className="
         w-full
@@ -145,15 +85,9 @@ export default function ForgotPassword() {
         shadow-2xl
         "
       >
-
-
-
-
         {/* =================================
             LADO ESQUERDO - FORM
         ================================= */}
-
-
 
         <div
           className="
@@ -161,10 +95,6 @@ export default function ForgotPassword() {
           sm:p-12
           "
         >
-
-
-
-
           <div
             className="
             flex
@@ -172,9 +102,7 @@ export default function ForgotPassword() {
             mb-8
             "
           >
-
             <img
-
               src={imgLogo}
 
               alt="LeadsnaMão"
@@ -188,100 +116,59 @@ export default function ForgotPassword() {
               transition
               duration-300
               "
-
             />
-
           </div>
 
-
-
-
-
           <h1
-
             className="
             text-3xl
             font-bold
             text-center
             text-white
             "
-
           >
-
             Recuperar senha
-
           </h1>
 
-
-
-
           <p
-
             className="
             text-center
             text-gray-400
             mt-3
             mb-8
             "
-
           >
-
-            Informe seu email e enviaremos
-            um link para criar uma nova senha.
-
+            Informe seu email e enviaremos um link para criar uma nova senha.
           </p>
 
-
-
-
-
           <form
-
-            onSubmit={
-              handleSubmit(onSubmit)
-            }
+            onSubmit={handleSubmit(onSubmit)}
 
             className="
             space-y-6
             "
-
           >
-
-
-
             <div>
-
-
               <div
                 className="
                 relative
                 "
               >
-
-
                 <FaEnvelope
-
                   className="
                   absolute
                   left-4
                   top-4
                   text-gray-500
                   "
-
                 />
 
-
                 <input
-
-
                   type="email"
 
-
-                  {...register("email")}
-
+                  {...register('email')}
 
                   placeholder="Digite seu email"
-
 
                   className="
                   w-full
@@ -298,34 +185,14 @@ export default function ForgotPassword() {
                   focus:border-blue-500
                   transition
                   "
-
                 />
-
-
-
               </div>
 
-
-
-              <FormError
-
-                message={
-                  errors.email?.message
-                }
-
-              />
-
-
+              <FormError message={errors.email?.message} />
             </div>
 
-
-
-
-
             <button
-
               disabled={isSubmitting}
-
 
               className="
               w-full
@@ -341,39 +208,16 @@ export default function ForgotPassword() {
               transition
               disabled:opacity-50
               "
-
             >
-
-
-              {
-                isSubmitting
-
-                ?
-
-                "Enviando..."
-
-                :
-
-                "Enviar link de recuperação"
-
-              }
-
-
+              {isSubmitting ? 'Enviando...' : 'Enviar link de recuperação'}
             </button>
-
-
-
-
 
             <div
               className="
               text-center
               "
             >
-
-
               <Link
-
                 to="/"
 
                 className="
@@ -383,40 +227,19 @@ export default function ForgotPassword() {
                 text-blue-400
                 hover:text-blue-300
                 "
-
               >
-
                 <FaArrowLeft />
-
                 Voltar para login
-
-
               </Link>
-
-
             </div>
-
-
-
           </form>
-
-
-
-
         </div>
-
-
-
-
 
         {/* =================================
             LADO DIREITO - BRANDING
         ================================= */}
 
-
-
         <div
-
           className="
           hidden
           lg:flex
@@ -430,17 +253,10 @@ export default function ForgotPassword() {
           to-cyan-950
           p-12
           "
-
         >
-
-
-
-
           {/* EFEITOS DE FUNDO */}
 
-
           <div
-
             className="
             absolute
             w-72
@@ -451,12 +267,9 @@ export default function ForgotPassword() {
             -top-20
             -right-20
             "
-
           />
 
-
           <div
-
             className="
             absolute
             w-72
@@ -467,83 +280,46 @@ export default function ForgotPassword() {
             bottom-0
             left-0
             "
-
           />
 
-
-
-
-
-
           <div
-
             className="
             relative
             z-10
             "
-
           >
-
-
-
             <h2
-
               className="
               text-4xl
               font-bold
               text-white
               leading-tight
               "
-
             >
-
               Recupere seu acesso
               <br />
-
               de forma segura
-
             </h2>
 
-
-
-
-
             <p
-
               className="
               text-gray-300
               mt-5
               text-lg
               leading-relaxed
               "
-
             >
-
-              Sua conta no LeadsnaMão continua protegida.
-              Enviaremos um link exclusivo para você
-              redefinir sua senha rapidamente.
-
+              Sua conta no LeadsnaMão continua protegida. Enviaremos um link
+              exclusivo para você redefinir sua senha rapidamente.
             </p>
 
-
-
-
-
-
             <div
-
               className="
               mt-10
               space-y-5
               "
-
             >
-
-
-
-
               <div
-
                 className="
                 flex
                 items-center
@@ -555,81 +331,44 @@ export default function ForgotPassword() {
                 p-4
                 backdrop-blur
                 "
-
               >
-
-
                 <div
-
                   className="
                   bg-blue-600/20
                   p-3
                   rounded-xl
                   "
-
                 >
-
                   <FaShieldAlt
-
                     className="
                     text-blue-400
                     text-xl
                     "
-
                   />
-
-
                 </div>
 
-
-
-
                 <div>
-
-
                   <h3
-
                     className="
                     text-white
                     font-semibold
                     "
-
                   >
-
                     Segurança protegida
-
                   </h3>
 
-
-
                   <p
-
                     className="
                     text-gray-400
                     text-sm
                     "
-
                   >
-
                     Seu link possui validade limitada.
-
                   </p>
-
-
-
                 </div>
-
-
-
               </div>
 
-
-
-
-
-
               <div
-
                 className="
                 flex
                 items-center
@@ -641,84 +380,44 @@ export default function ForgotPassword() {
                 p-4
                 backdrop-blur
                 "
-
               >
-
-
-
                 <div
-
                   className="
                   bg-cyan-600/20
                   p-3
                   rounded-xl
                   "
-
                 >
-
-
                   <FaKey
-
                     className="
                     text-cyan-400
                     text-xl
                     "
-
                   />
-
-
                 </div>
 
-
-
-
-
                 <div>
-
-
                   <h3
-
                     className="
                     text-white
                     font-semibold
                     "
-
                   >
-
                     Nova senha
-
                   </h3>
 
-
-
                   <p
-
                     className="
                     text-gray-400
                     text-sm
                     "
-
                   >
-
                     Escolha uma nova senha segura.
-
                   </p>
-
-
                 </div>
-
-
-
               </div>
 
-
-
-
-
-
-
               <div
-
                 className="
                 flex
                 items-center
@@ -730,141 +429,66 @@ export default function ForgotPassword() {
                 p-4
                 backdrop-blur
                 "
-
               >
-
-
-
                 <div
-
                   className="
                   bg-purple-600/20
                   p-3
                   rounded-xl
                   "
-
                 >
-
-
                   <FaUserLock
-
                     className="
                     text-purple-400
                     text-xl
                     "
-
                   />
-
-
                 </div>
 
-
-
-
-
                 <div>
-
-
                   <h3
-
                     className="
                     text-white
                     font-semibold
                     "
-
                   >
-
                     Continue seus negócios
-
                   </h3>
 
-
-
                   <p
-
                     className="
                     text-gray-400
                     text-sm
                     "
-
                   >
-
                     Seus leads e informações continuam seguros.
-
                   </p>
-
-
                 </div>
-
-
-
               </div>
-
-
-
-
             </div>
 
-
-
-
-
-
-
             <div
-
               className="
               mt-12
               border-t
               border-white/10
               pt-6
               "
-
             >
-
-
               <p
-
                 className="
                 text-gray-400
                 text-sm
                 "
-
               >
-
                 © {new Date().getFullYear()} LeadsnaMão
                 <br />
                 Plataforma inteligente para gestão imobiliária.
-
               </p>
-
-
-
             </div>
-
-
-
-
-
           </div>
-
-
-
-
-
         </div>
-
-
-
-
-
       </div>
-
-
-
-
     </section>
-
   );
-
 }
