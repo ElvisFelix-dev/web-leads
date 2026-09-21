@@ -69,6 +69,7 @@ export default function ForgotPassword() {
       items-center
       justify-center
       px-6
+      py-10
       "
     >
       <div
@@ -77,11 +78,11 @@ export default function ForgotPassword() {
         max-w-6xl
         grid
         lg:grid-cols-2
-        overflow-hidden
+        bg-gray-900
         rounded-3xl
+        overflow-hidden
         border
         border-gray-800
-        bg-gray-900
         shadow-2xl
         "
       >
