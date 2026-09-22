@@ -218,7 +218,8 @@ export default function Dashboard() {
         <AdminStats
           stats={{
             leads,
-            leadsDistribuidos: leads - pipelineCount,
+            leadsDistribuidos,
+            leadsPendentes,
             imoveis,
             corretores,
             usuarios,
@@ -226,8 +227,6 @@ export default function Dashboard() {
             propostas,
             fechados,
             perdidos,
-            leadsDistribuidos, // ✅ ADICIONAR
-            leadsPendentes, // ✅ ADICIONAR
           }}
           loading={loading}
         />

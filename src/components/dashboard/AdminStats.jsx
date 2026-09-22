@@ -15,9 +15,9 @@ import {
 
 export default function AdminStats({ stats = {}, loading = false }) {
   // Cálculo correto de leads
-  const totalLeads = stats?.leads || 0;
+  const totalLeads = stats?.leads ?? 0;
   const leadsDistribuidos = stats?.leadsDistribuidos ?? 0;
-  const leadsPendentes = Math.max(totalLeads - leadsDistribuidos, 0);
+  const leadsPendentes = stats?.leadsPendentes ?? 0;
 
   // Taxa de distribuição
   const distribuicaoPercentual =

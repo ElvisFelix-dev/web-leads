@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useContext } from 'react';
+
 import { useNavigate } from 'react-router-dom';
 
 import {
@@ -12,12 +13,9 @@ import {
   FaTimes,
   FaCheck,
   FaComments,
-  FaUserPlus,
-  FaBuilding,
-  FaRegClock,
-  FaSmile,
   FaPaperclip,
   FaEllipsisV,
+  FaInfoCircle,
 } from 'react-icons/fa';
 
 import { useChat } from '../context/ChatContext';
@@ -25,6 +23,7 @@ import { UserContext } from '../context/UserContext';
 
 export default function ChatPage() {
   const navigate = useNavigate();
+
   const { user } = useContext(UserContext);
 
   const {
@@ -35,7 +34,6 @@ export default function ChatPage() {
     loadingConversations,
     typingUsers,
     unreadCount,
-    onlineUsers,
     loadConversations,
     sendMessage,
     searchUsers,
@@ -56,22 +54,26 @@ export default function ChatPage() {
 
   const [showNewChat, setShowNewChat] = useState(false);
   const [newChatMode, setNewChatMode] = useState('direct');
+
   const [channelName, setChannelName] = useState('');
   const [selectedUsers, setSelectedUsers] = useState([]);
 
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+
   const [isMobile, setIsMobile] = useState(false);
+
+  const [showParticipants, setShowParticipants] = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
   /*
-   * ------------------------------------------------------------
-   * RESPONSIVIDADE
-   * ------------------------------------------------------------
-   */
+  ============================================================
+  RESPONSIVIDADE
+  ============================================================
+  */
 
   useEffect(() => {
     const checkMobile = () => {
@@ -88,20 +90,20 @@ export default function ChatPage() {
   }, []);
 
   /*
-   * ------------------------------------------------------------
-   * CONVERSAS
-   * ------------------------------------------------------------
-   */
+  ============================================================
+  CONVERSAS
+  ============================================================
+  */
 
   useEffect(() => {
     loadConversations();
-  }, []);
+  }, [loadConversations]);
 
   /*
-   * ------------------------------------------------------------
-   * AUTO SCROLL
-   * ------------------------------------------------------------
-   */
+  ============================================================
+  AUTO SCROLL
+  ============================================================
+  */
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -113,10 +115,10 @@ export default function ChatPage() {
   }, [messages]);
 
   /*
-   * ------------------------------------------------------------
-   * BUSCA DE USUÁRIOS
-   * ------------------------------------------------------------
-   */
+  ============================================================
+  BUSCA DE USUÁRIOS
+  ============================================================
+  */
 
   useEffect(() => {
     const delayDebounce = setTimeout(async () => {
@@ -133,6 +135,7 @@ export default function ChatPage() {
           );
         } catch (error) {
           console.error('Erro ao buscar usuários:', error);
+
           setSearchResults([]);
         } finally {
           setSearching(false);
@@ -143,19 +146,20 @@ export default function ChatPage() {
     }, 300);
 
     return () => clearTimeout(delayDebounce);
-  }, [search, showNewChat, newChatMode, user]);
+  }, [search, showNewChat, newChatMode, user, searchUsers]);
 
   /*
-   * ------------------------------------------------------------
-   * FORMATADORES
-   * ------------------------------------------------------------
-   */
+  ============================================================
+  FORMATADORES
+  ============================================================
+  */
 
   const formatTime = (date) => {
     if (!date) return '';
 
     const d = new Date(date);
     const now = new Date();
+
     const diff = now - d;
 
     if (Number.isNaN(d.getTime())) return '';
@@ -205,6 +209,7 @@ export default function ChatPage() {
     }
 
     const yesterday = new Date(today);
+
     yesterday.setDate(yesterday.getDate() - 1);
 
     if (d.toDateString() === yesterday.toDateString()) {
@@ -219,10 +224,42 @@ export default function ChatPage() {
   };
 
   /*
-   * ------------------------------------------------------------
-   * NOVA CONVERSA
-   * ------------------------------------------------------------
-   */
+  ============================================================
+  PARTICIPANTES
+  ============================================================
+  */
+
+  const getParticipants = (conversation) => {
+    if (!conversation?.participants) {
+      return [];
+    }
+
+    if (!Array.isArray(conversation.participants)) {
+      return [];
+    }
+
+    return conversation.participants.filter(Boolean);
+  };
+
+  const getOnlineParticipants = (conversation) => {
+    const participants = getParticipants(conversation);
+
+    return participants.filter((participant) => isUserOnline(participant?._id));
+  };
+
+  const getParticipantCount = (conversation) => {
+    return getParticipants(conversation).length;
+  };
+
+  const getOnlineParticipantCount = (conversation) => {
+    return getOnlineParticipants(conversation).length;
+  };
+
+  /*
+  ============================================================
+  NOVA CONVERSA
+  ============================================================
+  */
 
   const resetNewChat = () => {
     setShowNewChat(false);
@@ -262,21 +299,22 @@ export default function ChatPage() {
   };
 
   /*
-   * ------------------------------------------------------------
-   * MENSAGENS
-   * ------------------------------------------------------------
-   */
+  ============================================================
+  MENSAGENS
+  ============================================================
+  */
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
 
-    if (!inputMessage.trim() || !currentConversation) return;
+    if (!inputMessage.trim() || !currentConversation) {
+      return;
+    }
 
     try {
       await sendMessage(currentConversation._id, inputMessage.trim());
 
       setInputMessage('');
-
       setIsTyping(false);
 
       sendTyping(currentConversation._id, false);
@@ -322,12 +360,14 @@ export default function ChatPage() {
   };
 
   /*
-   * ------------------------------------------------------------
-   * CONVERSA
-   * ------------------------------------------------------------
-   */
+  ============================================================
+  CONVERSA
+  ============================================================
+  */
 
   const handleSelectConversation = (conversation) => {
+    setShowParticipants(false);
+
     selectConversation(conversation);
 
     if (isMobile) {
@@ -339,14 +379,15 @@ export default function ChatPage() {
   };
 
   const handleBack = () => {
+    setShowParticipants(false);
     setCurrentConversation(null);
   };
 
   /*
-   * ------------------------------------------------------------
-   * HELPERS
-   * ------------------------------------------------------------
-   */
+  ============================================================
+  HELPERS
+  ============================================================
+  */
 
   const isTypingUser = currentConversation?.participants?.some(
     (participant) => {
@@ -367,6 +408,7 @@ export default function ChatPage() {
       admin: 'Administrador',
       broker: 'Corretor',
       manager: 'Gerente',
+      supervisor: 'Supervisor',
       user: 'Usuário',
     };
 
@@ -386,14 +428,30 @@ export default function ChatPage() {
   };
 
   /*
-   * ------------------------------------------------------------
-   * RENDER
-   * ------------------------------------------------------------
-   */
+  ============================================================
+  CURRENT PARTICIPANTS
+  ============================================================
+  */
+
+  const currentParticipants = getParticipants(currentConversation);
+
+  const currentParticipantCount = getParticipantCount(currentConversation);
+
+  const currentOnlineParticipantCount =
+    getOnlineParticipantCount(currentConversation);
+
+  /*
+  ============================================================
+  RENDER
+  ============================================================
+  */
 
   return (
     <div className="min-h-screen bg-[#080b11] text-white">
-      {/* Background */}
+      {/* ======================================================
+          BACKGROUND
+      ====================================================== */}
+
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-blue-600/[0.035] rounded-full blur-[120px]" />
 
@@ -401,9 +459,9 @@ export default function ChatPage() {
       </div>
 
       <div className="relative max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-5 lg:py-7">
-        {/* =====================================================
+        {/* ====================================================
             HEADER PRINCIPAL
-        ====================================================== */}
+        ===================================================== */}
 
         <header className="mb-5">
           <div className="flex items-center justify-between gap-4">
@@ -452,9 +510,9 @@ export default function ChatPage() {
           </div>
         </header>
 
-        {/* =====================================================
+        {/* ====================================================
             CHAT CONTAINER
-        ====================================================== */}
+        ===================================================== */}
 
         <div className="bg-[#0d1119] border border-gray-800/80 rounded-2xl overflow-hidden h-[calc(100vh-205px)] min-h-[520px] shadow-2xl shadow-black/20">
           <div className="flex h-full">
@@ -468,6 +526,7 @@ export default function ChatPage() {
               } w-full lg:w-[360px] xl:w-[390px] shrink-0 flex-col border-r border-gray-800/80 bg-[#0b0f16]`}
             >
               {/* Search */}
+
               <div className="p-4 border-b border-gray-800/80">
                 <div className="relative group">
                   <FaSearch
@@ -485,7 +544,8 @@ export default function ChatPage() {
                 </div>
               </div>
 
-              {/* List */}
+              {/* Conversation list */}
+
               <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800">
                 {loadingConversations ? (
                   <div className="flex flex-col items-center justify-center h-48">
@@ -535,6 +595,13 @@ export default function ChatPage() {
 
                     const name = getConversationName(conv);
 
+                    const isChannel = conv.type === 'broker_channel';
+
+                    const participantCount = getParticipantCount(conv);
+
+                    const onlineParticipantCount =
+                      getOnlineParticipantCount(conv);
+
                     return (
                       <button
                         key={conv._id}
@@ -547,12 +614,14 @@ export default function ChatPage() {
                         }`}
                       >
                         {/* Active indicator */}
+
                         {isActive && (
                           <div className="absolute left-0 top-2 bottom-2 w-0.5 rounded-r-full bg-blue-500" />
                         )}
 
                         <div className="flex items-center gap-3">
                           {/* Avatar */}
+
                           <div className="relative shrink-0">
                             <div className="w-11 h-11 rounded-xl bg-gray-800/70 border border-gray-700/70 flex items-center justify-center overflow-hidden">
                               {avatar ? (
@@ -564,7 +633,7 @@ export default function ChatPage() {
                                     e.currentTarget.style.display = 'none';
                                   }}
                                 />
-                              ) : conv.type === 'broker_channel' ? (
+                              ) : isChannel ? (
                                 <FaUsers className="text-blue-400" size={17} />
                               ) : (
                                 <span className="text-xs font-bold text-gray-500">
@@ -573,7 +642,7 @@ export default function ChatPage() {
                               )}
                             </div>
 
-                            {conv.type !== 'broker_channel' && (
+                            {!isChannel && (
                               <span
                                 className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#0b0f16] ${
                                   online ? 'bg-emerald-400' : 'bg-gray-700'
@@ -583,6 +652,7 @@ export default function ChatPage() {
                           </div>
 
                           {/* Conversation info */}
+
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
                               <p
@@ -604,14 +674,47 @@ export default function ChatPage() {
                               </span>
                             </div>
 
+                            {/* Subtitle */}
+
                             <div className="flex items-center justify-between gap-2 mt-1">
-                              <p
-                                className={`text-xs truncate ${
-                                  unread > 0 ? 'text-gray-300' : 'text-gray-600'
-                                }`}
-                              >
-                                {conv.lastMessage || 'Nenhuma mensagem ainda'}
-                              </p>
+                              <div className="min-w-0 flex items-center gap-1.5">
+                                {isChannel ? (
+                                  <>
+                                    <FaUsers
+                                      size={8}
+                                      className="shrink-0 text-gray-600"
+                                    />
+
+                                    <p className="text-[10px] text-gray-600 truncate">
+                                      {participantCount}{' '}
+                                      {participantCount === 1
+                                        ? 'participante'
+                                        : 'participantes'}
+                                    </p>
+
+                                    {onlineParticipantCount > 0 && (
+                                      <>
+                                        <span className="text-gray-800">•</span>
+
+                                        <p className="text-[10px] text-emerald-400/70 truncate">
+                                          {onlineParticipantCount} online
+                                        </p>
+                                      </>
+                                    )}
+                                  </>
+                                ) : (
+                                  <p
+                                    className={`text-xs truncate ${
+                                      unread > 0
+                                        ? 'text-gray-300'
+                                        : 'text-gray-600'
+                                    }`}
+                                  >
+                                    {conv.lastMessage ||
+                                      'Nenhuma mensagem ainda'}
+                                  </p>
+                                )}
+                              </div>
 
                               {unread > 0 && (
                                 <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">
@@ -619,6 +722,14 @@ export default function ChatPage() {
                                 </span>
                               )}
                             </div>
+
+                            {/* Channel last message */}
+
+                            {isChannel && conv.lastMessage && (
+                              <p className="mt-1 text-[10px] text-gray-700 truncate">
+                                {conv.lastMessage}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </button>
@@ -628,6 +739,7 @@ export default function ChatPage() {
               </div>
 
               {/* Sidebar footer */}
+
               <div className="px-4 py-3 border-t border-gray-800/80 bg-[#090d13]">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 min-w-0">
@@ -656,6 +768,7 @@ export default function ChatPage() {
 
                   <div className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+
                     <span className="text-[9px] text-gray-600">Conectado</span>
                   </div>
                 </div>
@@ -672,9 +785,9 @@ export default function ChatPage() {
               } flex-1 min-w-0 flex-col bg-[#0d1119]`}
             >
               {!currentConversation ? (
-                /* =============================================
+                /* =================================================
                    EMPTY CHAT
-                ============================================== */
+                ================================================== */
 
                 <div className="flex-1 flex items-center justify-center px-6">
                   <div className="text-center max-w-sm">
@@ -714,6 +827,7 @@ export default function ChatPage() {
                   <div className="h-[72px] shrink-0 px-4 lg:px-5 border-b border-gray-800/80 bg-[#10151e]/90 flex items-center justify-between">
                     <div className="flex items-center gap-3 min-w-0">
                       {/* Mobile back */}
+
                       <button
                         type="button"
                         onClick={handleBack}
@@ -724,6 +838,7 @@ export default function ChatPage() {
                       </button>
 
                       {/* Avatar */}
+
                       <div className="relative shrink-0">
                         <div className="w-11 h-11 rounded-xl bg-gray-800 border border-gray-700 flex items-center justify-center overflow-hidden">
                           {getConversationAvatar(currentConversation) ? (
@@ -758,6 +873,7 @@ export default function ChatPage() {
                       </div>
 
                       {/* Info */}
+
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-bold text-white truncate">
@@ -772,30 +888,98 @@ export default function ChatPage() {
                           )}
                         </div>
 
-                        <p className="text-[11px] text-gray-600 mt-0.5">
-                          {currentConversation.type === 'broker_channel'
-                            ? `${
-                                currentConversation.participants?.length || 0
-                              } participantes`
-                            : getOtherParticipant(currentConversation)
-                              ? isUserOnline(
+                        <div className="mt-0.5 flex items-center gap-1.5">
+                          {currentConversation.type === 'broker_channel' ? (
+                            <>
+                              <FaUsers size={8} className="text-gray-600" />
+
+                              <span className="text-[10px] text-gray-600">
+                                {currentParticipantCount}{' '}
+                                {currentParticipantCount === 1
+                                  ? 'participante'
+                                  : 'participantes'}
+                              </span>
+
+                              {currentOnlineParticipantCount > 0 && (
+                                <>
+                                  <span className="text-gray-800">•</span>
+
+                                  <span className="text-[10px] text-emerald-400/70">
+                                    {currentOnlineParticipantCount} online
+                                  </span>
+                                </>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <FaCircle
+                                size={6}
+                                className={
+                                  getOtherParticipant(currentConversation) &&
+                                  isUserOnline(
+                                    getOtherParticipant(currentConversation)
+                                      ?._id,
+                                  )
+                                    ? 'text-emerald-400'
+                                    : 'text-gray-700'
+                                }
+                              />
+
+                              <span className="text-[10px] text-gray-600">
+                                {getOtherParticipant(currentConversation) &&
+                                isUserOnline(
                                   getOtherParticipant(currentConversation)?._id,
                                 )
-                                ? 'Online agora'
-                                : 'Offline'
-                              : 'Conversa'}
-                        </p>
+                                  ? 'Online agora'
+                                  : 'Offline'}
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
 
                     {/* Actions */}
-                    <button
-                      type="button"
-                      className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-600 hover:text-white hover:bg-gray-800 transition"
-                      aria-label="Mais opções"
-                    >
-                      <FaEllipsisV size={13} />
-                    </button>
+
+                    <div className="flex items-center gap-1">
+                      {currentConversation.type === 'broker_channel' && (
+                        <button
+                          type="button"
+                          onClick={() => setShowParticipants(true)}
+                          className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-600 hover:text-white hover:bg-gray-800 transition"
+                          aria-label="Ver participantes"
+                          title="Ver participantes"
+                        >
+                          <FaUsers size={14} />
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (currentConversation.type === 'broker_channel') {
+                            setShowParticipants(true);
+                          }
+                        }}
+                        className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-600 hover:text-white hover:bg-gray-800 transition"
+                        aria-label="Informações"
+                        title={
+                          currentConversation.type === 'broker_channel'
+                            ? 'Participantes'
+                            : 'Informações'
+                        }
+                      >
+                        <FaInfoCircle size={13} />
+                      </button>
+
+                      <button
+                        type="button"
+                        className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-600 hover:text-white hover:bg-gray-800 transition"
+                        aria-label="Mais opções"
+                      >
+                        <FaEllipsisV size={13} />
+                      </button>
+                    </div>
                   </div>
 
                   {/* =========================================
@@ -827,7 +1011,9 @@ export default function ChatPage() {
                       </div>
                     ) : (
                       messages.map((msg, index) => {
-                        if (!msg || !msg._id) return null;
+                        if (!msg || !msg._id) {
+                          return null;
+                        }
 
                         const senderId = msg.sender?._id || msg.sender;
 
@@ -881,6 +1067,7 @@ export default function ChatPage() {
                                   <span>
                                     {formatMessageTime(msg.createdAt)}
                                   </span>
+
                                   {isOwn && (
                                     <FaCheck
                                       size={10}
@@ -905,15 +1092,23 @@ export default function ChatPage() {
                           <div className="flex items-center gap-1.5">
                             <span
                               className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
-                              style={{ animationDelay: '0ms' }}
+                              style={{
+                                animationDelay: '0ms',
+                              }}
                             />
+
                             <span
                               className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
-                              style={{ animationDelay: '150ms' }}
+                              style={{
+                                animationDelay: '150ms',
+                              }}
                             />
+
                             <span
                               className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
-                              style={{ animationDelay: '300ms' }}
+                              style={{
+                                animationDelay: '300ms',
+                              }}
                             />
                           </div>
                         </div>
@@ -965,14 +1160,189 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* =====================================================
+        {/* ====================================================
+            PARTICIPANTS PANEL
+        ===================================================== */}
+
+        {showParticipants && currentConversation?.type === 'broker_channel' && (
+          <div className="fixed inset-0 z-[60] flex">
+            {/* Overlay */}
+
+            <button
+              type="button"
+              aria-label="Fechar participantes"
+              onClick={() => setShowParticipants(false)}
+              className="absolute inset-0 cursor-default bg-black/60 backdrop-blur-[2px]"
+            />
+
+            {/* Panel */}
+
+            <aside className="relative ml-auto flex h-full w-[340px] max-w-[90vw] flex-col border-l border-gray-800 bg-[#0c1017] shadow-2xl">
+              {/* Header */}
+
+              <div className="flex h-[76px] shrink-0 items-center justify-between border-b border-gray-800 px-5">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-500/10 bg-blue-500/[0.06]">
+                    <FaUsers size={15} className="text-blue-400" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold text-white">
+                      Participantes
+                    </h3>
+
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <span className="text-[10px] text-gray-600">
+                        {currentParticipantCount}{' '}
+                        {currentParticipantCount === 1
+                          ? 'participante'
+                          : 'participantes'}
+                      </span>
+
+                      {currentOnlineParticipantCount > 0 && (
+                        <>
+                          <span className="text-gray-800">•</span>
+
+                          <span className="text-[10px] text-emerald-400/70">
+                            {currentOnlineParticipantCount} online
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowParticipants(false)}
+                  className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-600 hover:text-white hover:bg-gray-800 transition"
+                  aria-label="Fechar"
+                >
+                  <FaTimes size={14} />
+                </button>
+              </div>
+
+              {/* Participant list */}
+
+              <div className="flex-1 overflow-y-auto p-3 scrollbar-thin scrollbar-thumb-gray-800">
+                {currentParticipants.length === 0 ? (
+                  <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+                    <div className="w-12 h-12 rounded-xl bg-gray-800/40 border border-gray-800 flex items-center justify-center mb-3">
+                      <FaUsers size={17} className="text-gray-600" />
+                    </div>
+
+                    <p className="text-xs font-semibold text-gray-500">
+                      Nenhum participante
+                    </p>
+
+                    <p className="text-[10px] text-gray-700 mt-1">
+                      Não foi possível carregar os participantes.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {currentParticipants.map((participant) => {
+                      const participantOnline = isUserOnline(participant?._id);
+
+                      const isCurrentUser =
+                        participant?._id?.toString() === user?._id?.toString();
+
+                      const participantName = participant?.name || 'Usuário';
+
+                      return (
+                        <div
+                          key={participant?._id}
+                          className="flex items-center gap-3 rounded-xl px-3 py-3 transition hover:bg-gray-800/30"
+                        >
+                          {/* Avatar */}
+
+                          <div className="relative shrink-0">
+                            <div className="w-10 h-10 rounded-xl bg-gray-800 border border-gray-700 flex items-center justify-center overflow-hidden">
+                              {participant?.avatar ? (
+                                <img
+                                  src={participant.avatar}
+                                  alt={participantName}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-[10px] font-bold text-gray-500">
+                                  {getInitials(participantName)}
+                                </span>
+                              )}
+                            </div>
+
+                            <span
+                              className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#0c1017] ${
+                                participantOnline
+                                  ? 'bg-emerald-400'
+                                  : 'bg-gray-700'
+                              }`}
+                            />
+                          </div>
+
+                          {/* Info */}
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs font-semibold text-gray-300 truncate">
+                                {participantName}
+                              </p>
+
+                              {isCurrentUser && (
+                                <span className="shrink-0 px-1.5 py-0.5 rounded-md bg-blue-600/10 border border-blue-500/10 text-blue-400 text-[8px] font-semibold">
+                                  Você
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span
+                                className={`text-[9px] ${
+                                  participantOnline
+                                    ? 'text-emerald-400/70'
+                                    : 'text-gray-600'
+                                }`}
+                              >
+                                {participantOnline ? 'Online' : 'Offline'}
+                              </span>
+
+                              {participant?.role && (
+                                <>
+                                  <span className="text-gray-800">•</span>
+
+                                  <span className="text-[9px] text-gray-600 truncate">
+                                    {getRoleLabel(participant.role)}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {participantOnline && (
+                            <FaCircle
+                              size={5}
+                              className="shrink-0 text-emerald-400/70"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </aside>
+          </div>
+        )}
+
+        {/* ====================================================
             MODAL: NOVA CONVERSA
-        ====================================================== */}
+        ===================================================== */}
 
         {showNewChat && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
             <div className="w-full max-w-md bg-[#0d1119] border border-gray-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
               {/* Modal header */}
+
               <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
                 <h3 className="text-base font-bold text-white">
                   Nova Conversa
@@ -988,6 +1358,7 @@ export default function ChatPage() {
               </div>
 
               {/* Mode switch */}
+
               <div className="p-4 border-b border-gray-800 bg-[#090d13]">
                 <div className="grid grid-cols-2 gap-2 bg-[#080b11] p-1 rounded-xl border border-gray-800">
                   <button
@@ -1026,6 +1397,7 @@ export default function ChatPage() {
               </div>
 
               {/* Modal body */}
+
               <div className="flex-1 overflow-y-auto p-5 space-y-4">
                 {newChatMode === 'channel' ? (
                   <div className="space-y-3">
@@ -1041,7 +1413,7 @@ export default function ChatPage() {
                       className="w-full h-11 bg-[#080b11] border border-gray-800 rounded-xl px-4 text-sm text-white placeholder:text-gray-600 outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/5 transition"
                     />
 
-                    <p className="text-[11px] text-gray-600">
+                    <p className="text-[11px] text-gray-600 leading-relaxed">
                       Crie um canal de comunicação para múltiplos membros da
                       equipe discutirem negócios e clientes.
                     </p>
@@ -1108,6 +1480,7 @@ export default function ChatPage() {
                                   <p className="text-xs font-semibold truncate">
                                     {u.name}
                                   </p>
+
                                   <p className="text-[10px] text-gray-500 truncate">
                                     {getRoleLabel(u.role)}
                                   </p>
@@ -1141,6 +1514,7 @@ export default function ChatPage() {
               </div>
 
               {/* Modal footer */}
+
               <div className="px-5 py-4 border-t border-gray-800 flex items-center justify-end gap-3 bg-[#090d13]">
                 <button
                   type="button"

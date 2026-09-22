@@ -14,19 +14,35 @@ import api from '../service/api';
 import { UserContext } from './UserContext';
 
 // =========================================================
-// HELPERS DE SANITIZAÇÃO - GARANTEM RENDERIZAÇÃO SEGURA
+// HELPERS DE SANITIZAÇÃO
 // =========================================================
 
 const safeString = (value, fallback = '') => {
-  if (value === null || value === undefined) return fallback;
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean')
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
     return String(value);
+  }
 
   if (typeof value === 'object') {
-    if (typeof value.text === 'string') return value.text;
-    if (typeof value.content === 'string') return value.content;
-    if (typeof value.message === 'string') return value.message;
+    if (typeof value.text === 'string') {
+      return value.text;
+    }
+
+    if (typeof value.content === 'string') {
+      return value.content;
+    }
+
+    if (typeof value.message === 'string') {
+      return value.message;
+    }
+
     return fallback;
   }
 
@@ -34,7 +50,9 @@ const safeString = (value, fallback = '') => {
 };
 
 const sanitizeMessage = (message) => {
-  if (!message || typeof message !== 'object') return null;
+  if (!message || typeof message !== 'object') {
+    return null;
+  }
 
   return {
     ...message,
@@ -44,7 +62,9 @@ const sanitizeMessage = (message) => {
 };
 
 const sanitizeConversation = (conversation) => {
-  if (!conversation || typeof conversation !== 'object') return null;
+  if (!conversation || typeof conversation !== 'object') {
+    return null;
+  }
 
   let lastMessageText = '';
   let lastMessageObject = null;
@@ -67,17 +87,29 @@ const sanitizeConversation = (conversation) => {
 };
 
 // =========================================================
-// NOTIFICAÇÕES DO NAVEGADOR (WEB PUSH API)
+// NOTIFICAÇÕES DO NAVEGADOR
 // =========================================================
 
 const requestNotificationPermission = async () => {
-  if (typeof window === 'undefined') return false;
-  if (!('Notification' in window)) return false;
-  if (Notification.permission === 'granted') return true;
-  if (Notification.permission === 'denied') return false;
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  if (!('Notification' in window)) {
+    return false;
+  }
+
+  if (Notification.permission === 'granted') {
+    return true;
+  }
+
+  if (Notification.permission === 'denied') {
+    return false;
+  }
 
   try {
     const permission = await Notification.requestPermission();
+
     return permission === 'granted';
   } catch {
     return false;
@@ -85,12 +117,22 @@ const requestNotificationPermission = async () => {
 };
 
 const showBrowserNotification = ({ title, body, avatar, onClick }) => {
-  if (typeof window === 'undefined') return;
-  if (!('Notification' in window)) return;
-  if (Notification.permission !== 'granted') return;
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  if (!('Notification' in window)) {
+    return;
+  }
+
+  if (Notification.permission !== 'granted') {
+    return;
+  }
 
   // Não mostra se a aba estiver ativa
-  if (document.visibilityState === 'visible') return;
+  if (document.visibilityState === 'visible') {
+    return;
+  }
 
   try {
     const notification = new Notification(title, {
@@ -103,7 +145,11 @@ const showBrowserNotification = ({ title, body, avatar, onClick }) => {
 
     notification.onclick = () => {
       window.focus();
-      if (onClick) onClick();
+
+      if (onClick) {
+        onClick();
+      }
+
       notification.close();
     };
 
@@ -114,8 +160,8 @@ const showBrowserNotification = ({ title, body, avatar, onClick }) => {
         // Silencioso
       }
     }, 8000);
-  } catch (err) {
-    console.warn('Erro ao mostrar notificação do navegador:', err);
+  } catch (error) {
+    console.warn('Erro ao mostrar notificação do navegador:', error);
   }
 };
 
@@ -134,6 +180,10 @@ export const useChat = () => {
 
   return context;
 };
+
+// =========================================================
+// PROVIDER
+// =========================================================
 
 export const ChatProvider = ({ children }) => {
   const { user } = useContext(UserContext);
@@ -164,7 +214,7 @@ export const ChatProvider = ({ children }) => {
 
   const [isConnected, setIsConnected] = useState(false);
 
-  // ✅ NOVO: Estado de notificação global em tempo real
+  // Estado de notificação global em tempo real
   const [lastNotification, setLastNotification] = useState(null);
 
   // =========================================================
@@ -192,6 +242,7 @@ export const ChatProvider = ({ children }) => {
   useEffect(() => {
     const cleanupInterval = setInterval(() => {
       const now = Date.now();
+
       const fiveMinutes = 5 * 60 * 1000;
 
       processedNotificationIdsRef.current.forEach((timestamp, id) => {
@@ -217,7 +268,9 @@ export const ChatProvider = ({ children }) => {
   // =========================================================
 
   const getId = useCallback((value) => {
-    if (!value) return null;
+    if (!value) {
+      return null;
+    }
 
     if (typeof value === 'string') {
       return value;
@@ -245,7 +298,9 @@ export const ChatProvider = ({ children }) => {
       const idA = getId(a);
       const idB = getId(b);
 
-      if (!idA || !idB) return false;
+      if (!idA || !idB) {
+        return false;
+      }
 
       return idA === idB;
     },
@@ -276,11 +331,11 @@ export const ChatProvider = ({ children }) => {
 
   const loadConversations = useCallback(async () => {
     if (!user?._id) {
-      return;
+      return [];
     }
 
     if (loadingConversationsRef.current) {
-      return;
+      return [];
     }
 
     const requestRealtimeVersion = realtimeConversationVersionRef.current;
@@ -296,12 +351,15 @@ export const ChatProvider = ({ children }) => {
         ? response.data.data.map(sanitizeConversation).filter(Boolean)
         : [];
 
+      // Se chegou uma atualização em tempo real enquanto
+      // essa requisição estava acontecendo, não sobrescreve
+      // o estado mais recente.
       if (requestRealtimeVersion !== realtimeConversationVersionRef.current) {
         console.log(
           '⚡ Ignorando resposta antiga de conversas após atualização do socket.',
         );
 
-        return conversations;
+        return [];
       }
 
       setConversations(conversationsData);
@@ -313,6 +371,7 @@ export const ChatProvider = ({ children }) => {
 
       setUnreadCount(total);
 
+      // Entrar em todas as salas das conversas
       if (socketRef.current?.connected) {
         conversationsData.forEach((conversation) => {
           if (conversation?._id) {
@@ -327,14 +386,12 @@ export const ChatProvider = ({ children }) => {
 
       if (requestRealtimeVersion === realtimeConversationVersionRef.current) {
         setConversations([]);
-
         setUnreadCount(0);
       }
 
       return [];
     } finally {
       loadingConversationsRef.current = false;
-
       setLoadingConversations(false);
     }
   }, [user?._id]);
@@ -345,11 +402,15 @@ export const ChatProvider = ({ children }) => {
 
   const updateConversationFromMessage = useCallback(
     (message, conversationId, shouldIncrementUnread = false) => {
-      if (!message || !conversationId) return;
+      if (!message || !conversationId) {
+        return;
+      }
 
-      // ✅ Sanitiza a mensagem
       const sanitized = sanitizeMessage(message);
-      if (!sanitized) return;
+
+      if (!sanitized) {
+        return;
+      }
 
       realtimeConversationVersionRef.current += 1;
 
@@ -358,30 +419,39 @@ export const ChatProvider = ({ children }) => {
           isSameId(conversation?._id, conversationId),
         );
 
-        if (index === -1) return prev;
+        if (index === -1) {
+          return prev;
+        }
 
         const conversation = prev[index];
+
         const currentUnread = Number(conversation?.unreadCount || 0);
 
         const updatedConversation = {
           ...conversation,
-          // ✅ Salva a mensagem completa como objeto
+
           lastMessageObject: sanitized,
-          // ✅ E também como string para renderização
+
           lastMessage: safeString(sanitized.content, ''),
+
           lastMessageAt: sanitized.createdAt || new Date().toISOString(),
+
           updatedAt:
             sanitized.createdAt ||
             conversation?.updatedAt ||
             new Date().toISOString(),
+
           unreadCount: shouldIncrementUnread
             ? currentUnread + 1
             : currentUnread,
         };
 
         const newList = [...prev];
+
         newList[index] = updatedConversation;
+
         newList.splice(index, 1);
+
         newList.unshift(updatedConversation);
 
         return newList;
@@ -402,7 +472,6 @@ export const ChatProvider = ({ children }) => {
     async (conversationId) => {
       if (!conversationId) {
         setError('ID da conversa não informado');
-
         return;
       }
 
@@ -425,7 +494,6 @@ export const ChatProvider = ({ children }) => {
           ? response.data.data
           : [];
 
-        // ✅ CORRIGIDO: Sanitiza mensagens para garantir que content seja string
         const validMessages = messagesData
           .filter(
             (message) =>
@@ -464,7 +532,7 @@ export const ChatProvider = ({ children }) => {
   );
 
   // =========================================================
-  // HANDLER UNIFICADO DE MENSAGENS RECEBIDAS - CORRIGIDO
+  // HANDLER UNIFICADO DE MENSAGENS RECEBIDAS
   // =========================================================
 
   const handleMessageReceived = useCallback(
@@ -475,11 +543,13 @@ export const ChatProvider = ({ children }) => {
 
       if (!message || typeof message !== 'object') {
         console.warn('⚠️ Mensagem inválida recebida via socket:', message);
+
         return;
       }
 
       if (!message._id) {
         console.warn('⚠️ Mensagem sem _id recebida via socket:', message);
+
         return;
       }
 
@@ -488,14 +558,17 @@ export const ChatProvider = ({ children }) => {
           '⚠️ Mensagem sem conversation recebida via socket:',
           message,
         );
+
         return;
       }
 
       console.log('📩 Nova mensagem recebida via socket:', message);
 
       const conversationId = getId(message.conversation);
+
       if (!conversationId) {
         console.warn('⚠️ conversationId inválido na mensagem:', message);
+
         return;
       }
 
@@ -506,6 +579,7 @@ export const ChatProvider = ({ children }) => {
 
       if (alreadyProcessed) {
         console.log('🔁 Mensagem ignorada (já processada):', messageId);
+
         return;
       }
 
@@ -513,12 +587,16 @@ export const ChatProvider = ({ children }) => {
 
       if (!sanitizedMessage) {
         console.warn('⚠️ Mensagem inválida:', message);
+
         return;
       }
 
       const current = currentConversationRef.current;
+
       const currentConversationId = getId(current?._id);
+
       const isCurrentConversation = currentConversationId === conversationId;
+
       const isOwnMessage = isSameId(sanitizedMessage?.sender?._id, user?._id);
 
       // -----------------------------------------------------
@@ -527,10 +605,10 @@ export const ChatProvider = ({ children }) => {
 
       if (isCurrentConversation) {
         setMessages((prev) => {
-          // Evita duplicação
           const alreadyExists = prev.some((msg) =>
             isSameId(msg?._id, sanitizedMessage._id),
           );
+
           if (alreadyExists) {
             return prev;
           }
@@ -548,7 +626,8 @@ export const ChatProvider = ({ children }) => {
           return [...withoutOptimistic, sanitizedMessage];
         });
 
-        // Mensagem da conversa atual: marcar como lida automaticamente
+        // Mensagem da conversa atual:
+        // marcar automaticamente como lida
         api
           .post(`/api/chat/conversations/${conversationId}/read`)
           .catch(() => {});
@@ -575,33 +654,39 @@ export const ChatProvider = ({ children }) => {
       }
 
       // -----------------------------------------------------
-      // ✅ NOTIFICAÇÕES EM TEMPO REAL
+      // NOTIFICAÇÕES EM TEMPO REAL
       // -----------------------------------------------------
 
       if (shouldIncrementUnread) {
-        // 1. Dispara notificação global (toast)
         setLastNotification({
           id: `${messageId}_${Date.now()}`,
+
           messageId,
+
           conversationId,
+
           message: sanitizedMessage,
+
           senderName: sanitizedMessage.sender?.name || 'Nova mensagem',
+
           senderAvatar: sanitizedMessage.sender?.avatar || null,
+
           preview:
             safeString(sanitizedMessage.content).substring(0, 80) ||
             'Nova mensagem recebida',
+
           timestamp: Date.now(),
         });
 
-        // 2. Toca som
         playNotificationSound();
 
-        // 3. Notificação do navegador (se aba em background)
         showBrowserNotification({
           title: `💬 ${sanitizedMessage.sender?.name || 'Nova mensagem'}`,
+
           body:
             safeString(sanitizedMessage.content).substring(0, 100) ||
             'Nova mensagem recebida',
+
           avatar: sanitizedMessage.sender?.avatar,
         });
       }
@@ -630,7 +715,6 @@ export const ChatProvider = ({ children }) => {
       import.meta.env.VITE_API_URL || 'http://localhost:3333',
       {
         auth: {
-          // ✅ CORRIGIDO: Força string para evitar problemas com ObjectId
           userId: String(user._id),
         },
 
@@ -667,7 +751,6 @@ export const ChatProvider = ({ children }) => {
 
       loadConversations();
 
-      // ✅ Pede permissão de notificação do navegador
       requestNotificationPermission();
     };
 
@@ -682,7 +765,7 @@ export const ChatProvider = ({ children }) => {
     };
 
     // =======================================================
-    // EVENTOS DE MENSAGEM - UNIFICADO
+    // MENSAGENS
     // =======================================================
 
     newSocket.on('new_message', handleMessageReceived);
@@ -696,10 +779,16 @@ export const ChatProvider = ({ children }) => {
         return;
       }
 
+      const id = getId(userId);
+
+      if (!id) {
+        return;
+      }
+
       setTypingUsers((prev) => ({
         ...prev,
 
-        [getId(userId)]: Boolean(isTyping),
+        [id]: Boolean(isTyping),
       }));
     };
 
@@ -783,21 +872,23 @@ export const ChatProvider = ({ children }) => {
   }, [user?._id, getId, handleMessageReceived, loadConversations]);
 
   // =========================================================
-  // ✅ BADGE NO TÍTULO DA ABA
+  // BADGE NO TÍTULO DA ABA
   // =========================================================
 
   useEffect(() => {
     const baseTitle = 'Leads Na Mão';
 
     if (unreadCount > 0) {
-      document.title = `(${unreadCount > 99 ? '99+' : unreadCount}) ${baseTitle}`;
+      document.title = `(${
+        unreadCount > 99 ? '99+' : unreadCount
+      }) ${baseTitle}`;
     } else {
       document.title = baseTitle;
     }
   }, [unreadCount]);
 
   // =========================================================
-  // ENVIAR MENSAGEM - CORRIGIDO
+  // ENVIAR MENSAGEM
   // =========================================================
 
   const sendMessage = useCallback(
@@ -808,7 +899,7 @@ export const ChatProvider = ({ children }) => {
 
       const trimmedContent = content.trim();
 
-      // ✅ CORRIGIDO: Mensagem otimista com content como string
+      // Mensagem otimista
       const optimisticMessage = {
         _id: `temp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
 
@@ -851,7 +942,6 @@ export const ChatProvider = ({ children }) => {
 
         console.log('✅ Mensagem criada:', newMessage);
 
-        // ✅ CORRIGIDO: Sanitizar a mensagem do backend
         const sanitizedMessage = sanitizeMessage(newMessage);
 
         if (!sanitizedMessage) {
@@ -1131,6 +1221,111 @@ export const ChatProvider = ({ children }) => {
   );
 
   // =========================================================
+  // PARTICIPANTES DA CONVERSA
+  //
+  // IMPORTANTE:
+  // Esses helpers ficam DENTRO do Provider.
+  // Não mover para fora, pois utilizam hooks.
+  // =========================================================
+
+  const getConversationParticipants = useCallback((conversation) => {
+    if (!conversation?.participants) {
+      return [];
+    }
+
+    if (!Array.isArray(conversation.participants)) {
+      return [];
+    }
+
+    return conversation.participants.filter(Boolean);
+  }, []);
+
+  // =========================================================
+  // PARTICIPANTES ONLINE
+  // =========================================================
+
+  const getOnlineParticipants = useCallback(
+    (conversation) => {
+      const participants = getConversationParticipants(conversation);
+
+      return participants.filter((participant) =>
+        isUserOnline(participant?._id),
+      );
+    },
+    [getConversationParticipants, isUserOnline],
+  );
+
+  // =========================================================
+  // QUANTIDADE DE PARTICIPANTES
+  // =========================================================
+
+  const getParticipantCount = useCallback(
+    (conversation) => {
+      return getConversationParticipants(conversation).length;
+    },
+    [getConversationParticipants],
+  );
+
+  // =========================================================
+  // QUANTIDADE DE PARTICIPANTES ONLINE
+  // =========================================================
+
+  const getOnlineParticipantCount = useCallback(
+    (conversation) => {
+      return getOnlineParticipants(conversation).length;
+    },
+    [getOnlineParticipants],
+  );
+
+  // =========================================================
+  // SUBTÍTULO DA CONVERSA
+  // =========================================================
+
+  const getConversationSubtitle = useCallback(
+    (conversation) => {
+      if (!conversation) {
+        return '';
+      }
+
+      // Conversa individual
+      if (conversation.type === 'direct') {
+        const participant = getOtherParticipant(conversation);
+
+        if (!participant) {
+          return '';
+        }
+
+        return isUserOnline(participant._id) ? 'Online' : 'Offline';
+      }
+
+      // Grupo / canal
+      const participantCount = getParticipantCount(conversation);
+
+      const onlineCount = getOnlineParticipantCount(conversation);
+
+      if (participantCount === 0) {
+        return 'Nenhum participante';
+      }
+
+      if (onlineCount > 0) {
+        return `${participantCount} ${
+          participantCount === 1 ? 'participante' : 'participantes'
+        } · ${onlineCount} online`;
+      }
+
+      return `${participantCount} ${
+        participantCount === 1 ? 'participante' : 'participantes'
+      }`;
+    },
+    [
+      getOtherParticipant,
+      getParticipantCount,
+      getOnlineParticipantCount,
+      isUserOnline,
+    ],
+  );
+
+  // =========================================================
   // CARREGAR CONVERSAS QUANDO USUÁRIO ENTRA
   // =========================================================
 
@@ -1195,6 +1390,10 @@ export const ChatProvider = ({ children }) => {
   // =========================================================
 
   const value = {
+    // -------------------------------------------------------
+    // Estado
+    // -------------------------------------------------------
+
     conversations,
 
     currentConversation,
@@ -1217,10 +1416,17 @@ export const ChatProvider = ({ children }) => {
 
     socket,
 
-    // ✅ NOVO: Notificações
+    // -------------------------------------------------------
+    // Notificações
+    // -------------------------------------------------------
+
     lastNotification,
 
     clearNotification: () => setLastNotification(null),
+
+    // -------------------------------------------------------
+    // Conversas
+    // -------------------------------------------------------
 
     loadConversations,
 
@@ -1240,13 +1446,35 @@ export const ChatProvider = ({ children }) => {
 
     setCurrentConversation,
 
+    // -------------------------------------------------------
+    // Usuários
+    // -------------------------------------------------------
+
     isUserOnline,
+
+    // -------------------------------------------------------
+    // Informações da conversa
+    // -------------------------------------------------------
 
     getConversationName,
 
     getConversationAvatar,
 
     getOtherParticipant,
+
+    // -------------------------------------------------------
+    // Participantes
+    // -------------------------------------------------------
+
+    getConversationParticipants,
+
+    getOnlineParticipants,
+
+    getParticipantCount,
+
+    getOnlineParticipantCount,
+
+    getConversationSubtitle,
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
