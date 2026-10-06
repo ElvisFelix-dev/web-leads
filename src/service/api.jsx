@@ -4,23 +4,31 @@ const api = axios.create({
   baseURL: 'https://leadsnamao.onrender.com',
 });
 
-api.interceptors.request.use((config) => {
-  const userInfo = localStorage.getItem('userInfo');
+api.interceptors.request.use(
+  (config) => {
+    try {
+      const userInfo = localStorage.getItem('userInfo');
 
-  if (userInfo) {
-    const user = JSON.parse(userInfo);
+      if (userInfo) {
+        const user = JSON.parse(userInfo);
+        const token = user?.token;
 
-    const token = user.token;
-
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+        if (token) {
+          config.headers = config.headers || {};
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao recuperar autenticação:', error);
     }
-  }
 
-  return config;
-});
+    return config;
+  },
+  (error) => Promise.reject(error),
+);
 
 export default api;
 
 //  'https://leadsnamao.onrender.com',
+
 // 'http://localhost:3333',

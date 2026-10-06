@@ -55,6 +55,7 @@ import SalesAdmin from './pages/admin/SalesAdmin';
 import SaleDetailsAdmin from './pages/admin/SaleDetailsAdmin';
 import CommissionApproval from './pages/admin/CommissionApproval';
 import PropertyFavorites from './pages/PropertyFavorites';
+import WhatsAppQrCode from './pages/WhatsAppQrCode';
 
 import ChatPage from './pages/ChatPage';
 
@@ -129,6 +130,7 @@ export function App() {
           <Route path="/sales/:id" element={<SaleDetailsAdmin />} />
           <Route path="/commissions" element={<CommissionApproval />} />
           <Route path="/chat" element={<ChatPage />} />
+          <Route path="/qr" element={<WhatsAppQrCode />} />
         </Route>
       </Routes>
 

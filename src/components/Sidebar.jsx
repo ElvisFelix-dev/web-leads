@@ -27,6 +27,7 @@ import {
   FaShoppingCart,
   FaCheckCircle,
   FaComments,
+  FaWhatsapp,
 } from 'react-icons/fa';
 
 import imgLogo from '../assets/logoImg.png';
@@ -187,6 +188,12 @@ export default function Sidebar({ onCollapseChange }) {
       icon: <FaTachometerAlt />,
     },
 
+    {
+      path: '/qr',
+      label: 'WhatsApp',
+      icon: <FaWhatsapp />,
+    },
+
     // ----------------------------------------------------------
     // CHAT
     // ----------------------------------------------------------
@@ -287,6 +294,12 @@ export default function Sidebar({ onCollapseChange }) {
           path: '/broker-dashboard',
           label: 'Meu Dashboard',
           icon: <FaChartLine />,
+        },
+
+        {
+          path: '/qr',
+          label: 'WhatsApp',
+          icon: <FaWhatsapp />,
         },
 
         // ------------------------------------------------------
@@ -669,10 +682,10 @@ export default function Sidebar({ onCollapseChange }) {
               "
             >
               <img
-                  src={imgLogo}
-                  alt="LeadsNaMão"
-                  className="w-6 h-6 object-contain"
-                />
+                src={imgLogo}
+                alt="LeadsNaMão"
+                className="w-6 h-6 object-contain"
+              />
             </div>
           )}
 
