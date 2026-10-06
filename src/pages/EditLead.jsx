@@ -9,7 +9,6 @@ import {
   Mail,
   Phone,
   MapPin,
-  Star,
   Clock,
   MessageCircle,
   TrendingUp,
@@ -18,10 +17,8 @@ import {
   Archive,
   AlertCircle,
   Building2,
-  Calendar,
   FileText,
   Tag,
-  Users,
   Loader2,
 } from 'lucide-react';
 
@@ -30,7 +27,10 @@ import { toast } from 'react-toastify';
 import { getLeadById, updateLead } from '../service/leadApi';
 import api from '../service/api';
 
-// Constantes para status - ALINHADAS COM O BACKEND
+// ======================================
+// CONSTANTES — ALINHADAS COM O BACKEND
+// ======================================
+
 const LEAD_STATUS = {
   NOVO: 'novo',
   CONTATADO: 'contatado',
@@ -67,41 +67,53 @@ const STATUS_ICONS = {
   [LEAD_STATUS.ARQUIVADO]: Archive,
 };
 
-const PRIORITY_LABELS = {
-  baixa: 'Baixa',
-  media: 'Média',
-  alta: 'Alta',
-  urgente: 'Urgente',
-};
+// ======================================
+// PRIORIDADE — valores do backend
+// ======================================
 
-const PRIORITY_COLORS = {
-  baixa: 'gray',
-  media: 'yellow',
-  alta: 'orange',
-  urgente: 'red',
-};
-
-const REGIONS = [
-  'central',
-  'zona norte',
-  'zona sul',
-  'zona leste',
-  'zona oeste',
-  'abc',
+const PRIORITY_OPTIONS = [
+  { value: 'baixa', label: 'Baixa' },
+  { value: 'media', label: 'Média' },
+  { value: 'alta', label: 'Alta' },
+  { value: 'urgente', label: 'Urgente' },
 ];
 
-const SOURCES = [
-  'manual',
-  'public',
-  'meta',
-  'olx',
-  'zap',
-  'csv',
-  'site',
-  'hotsite',
-  'portal',
-  'referral',
+// ======================================
+// REGIÕES — valores EXATOS do enum do backend
+// ======================================
+
+const REGION_OPTIONS = [
+  { value: 'central', label: 'Central' },
+  { value: 'zona_norte', label: 'Zona Norte' },
+  { value: 'zona_sul', label: 'Zona Sul' },
+  { value: 'zona_leste', label: 'Zona Leste' },
+  { value: 'zona_oeste', label: 'Zona Oeste' },
+  { value: 'abc', label: 'ABC Paulista' },
+  { value: 'grande_sp', label: 'Grande SP' },
+  { value: 'interior', label: 'Interior' },
+  { value: 'litoral', label: 'Litoral' },
 ];
+
+// ======================================
+// SOURCES — valores do backend
+// ======================================
+
+const SOURCE_OPTIONS = [
+  { value: 'manual', label: 'Manual' },
+  { value: 'public', label: 'Site Público' },
+  { value: 'meta', label: 'Meta (Facebook/Instagram)' },
+  { value: 'olx', label: 'OLX' },
+  { value: 'zap', label: 'ZAP Imóveis' },
+  { value: 'csv', label: 'Importação CSV' },
+  { value: 'site', label: 'Site' },
+  { value: 'hotsite', label: 'Hotsite do Corretor' },
+  { value: 'portal', label: 'Portal' },
+  { value: 'referral', label: 'Indicação' },
+];
+
+// ======================================
+// COMPONENTE
+// ======================================
 
 export default function EditLead() {
   const navigate = useNavigate();
@@ -110,31 +122,34 @@ export default function EditLead() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [lead, setLead] = useState(null);
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     region: '',
-    status: '',
+    status: LEAD_STATUS.NOVO,
     priority: 'media',
     notes: '',
     source: 'manual',
     property: '',
   });
+
   const [validationErrors, setValidationErrors] = useState({});
   const [backendErrors, setBackendErrors] = useState([]);
   const [properties, setProperties] = useState([]);
   const [propertiesLoading, setPropertiesLoading] = useState(false);
 
-  /*
-  ======================================
-  CARREGAR LEAD
-  ======================================
-  */
+  // ======================================
+  // CARREGAR LEAD
+  // ======================================
 
   useEffect(() => {
-    loadLead();
-    loadProperties();
+    if (id) {
+      loadLead();
+      loadProperties();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const loadLead = async () => {
@@ -143,7 +158,6 @@ export default function EditLead() {
       const data = await getLeadById(id);
       setLead(data);
 
-      // Preencher formulário
       setFormData({
         name: data.name || '',
         email: data.email || '',
@@ -153,7 +167,7 @@ export default function EditLead() {
         priority: data.priority || 'media',
         notes: data.notes || '',
         source: data.source || 'manual',
-        property: data.property?._id || data.property || '',
+        property: (data.property && (data.property._id || data.property)) || '',
       });
 
       console.log('📋 Lead carregado:', data);
@@ -173,12 +187,9 @@ export default function EditLead() {
   const loadProperties = async () => {
     try {
       setPropertiesLoading(true);
+
       const response = await api.get('/api/properties', {
-        params: {
-          status: 'disponivel',
-          active: true,
-          limit: 100,
-        },
+        params: { status: 'disponivel', active: true, limit: 100 },
       });
 
       const propertiesData =
@@ -186,7 +197,8 @@ export default function EditLead() {
         response.data?.properties ||
         response.data?.data ||
         [];
-      setProperties(propertiesData);
+
+      setProperties(Array.isArray(propertiesData) ? propertiesData : []);
       console.log('🏠 Propriedades carregadas:', propertiesData.length);
     } catch (error) {
       console.error('Erro ao carregar propriedades:', error);
@@ -195,11 +207,9 @@ export default function EditLead() {
     }
   };
 
-  /*
-  ======================================
-  HANDLE CHANGE
-  ======================================
-  */
+  // ======================================
+  // HANDLE CHANGE
+  // ======================================
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -209,31 +219,28 @@ export default function EditLead() {
       [name]: type === 'checkbox' ? checked : value,
     }));
 
-    // Limpar erro do campo
     setValidationErrors((prev) => ({ ...prev, [name]: undefined }));
     setBackendErrors([]);
   };
 
-  /*
-  ======================================
-  VALIDAÇÃO
-  ======================================
-  */
+  // ======================================
+  // VALIDAÇÃO
+  // ======================================
 
   const validateForm = () => {
     const errors = {};
 
-    if (!formData.name || formData.name.trim() === '') {
+    if (!formData.name?.trim()) {
       errors.name = 'Nome é obrigatório';
     }
 
-    if (!formData.email || formData.email.trim() === '') {
+    if (!formData.email?.trim()) {
       errors.email = 'E-mail é obrigatório';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       errors.email = 'E-mail inválido';
     }
 
-    if (!formData.phone || formData.phone.trim() === '') {
+    if (!formData.phone?.trim()) {
       errors.phone = 'Telefone é obrigatório';
     }
 
@@ -245,11 +252,9 @@ export default function EditLead() {
     return Object.keys(errors).length === 0;
   };
 
-  /*
-  ======================================
-  SUBMIT
-  ======================================
-  */
+  // ======================================
+  // SUBMIT
+  // ======================================
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -266,6 +271,7 @@ export default function EditLead() {
       setSaving(true);
       setBackendErrors([]);
 
+      // Só envia o que o backend espera — nada de undefined
       const payload = {
         name: formData.name.trim(),
         email: formData.email.trim().toLowerCase(),
@@ -278,7 +284,7 @@ export default function EditLead() {
         property: formData.property || null,
       };
 
-      console.log('📤 Atualizando lead:', payload);
+      console.log('📤 Enviando payload:', payload);
 
       const updated = await updateLead(id, payload);
       console.log('✅ Lead atualizado:', updated);
@@ -287,14 +293,27 @@ export default function EditLead() {
       navigate(`/lead-detail/${id}`);
     } catch (error) {
       console.error('❌ Erro ao atualizar lead:', error);
+      console.error('📩 Resposta do backend:', error.response?.data);
 
-      if (error.response?.data?.errors) {
-        const errors = error.response.data.errors;
-        const errorMessages = Array.isArray(errors)
-          ? errors.map((e) => e.message || e.msg || JSON.stringify(e))
-          : [error.response.data.message || 'Erro ao atualizar lead'];
-        setBackendErrors(errorMessages);
-      } else if (error.response?.data?.message) {
+      // Erros em array (validation)
+      if (Array.isArray(error.response?.data?.errors)) {
+        const messages = error.response.data.errors.map(
+          (e) => e.message || e.msg || String(e),
+        );
+        setBackendErrors(messages);
+      }
+      // Erros em objeto
+      else if (
+        error.response?.data?.errors &&
+        typeof error.response.data.errors === 'object'
+      ) {
+        const messages = Object.entries(error.response.data.errors).map(
+          ([field, err]) => `${field}: ${err.message || err}`,
+        );
+        setBackendErrors(messages);
+      }
+      // Mensagem simples
+      else if (error.response?.data?.message) {
         setBackendErrors([error.response.data.message]);
       } else {
         setBackendErrors(['Erro ao atualizar lead. Tente novamente.']);
@@ -304,11 +323,9 @@ export default function EditLead() {
     }
   };
 
-  /*
-  ======================================
-  LOADING
-  ======================================
-  */
+  // ======================================
+  // LOADING
+  // ======================================
 
   if (loading) {
     return (
@@ -344,12 +361,7 @@ export default function EditLead() {
   }
 
   const StatusIcon = STATUS_ICONS[formData.status] || AlertCircle;
-
-  /*
-  ======================================
-  RENDER
-  ======================================
-  */
+  const statusColor = STATUS_COLORS[formData.status] || 'slate';
 
   return (
     <div className="min-h-screen bg-slate-950 p-4 sm:p-6 lg:p-8">
@@ -372,23 +384,16 @@ export default function EditLead() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-slate-900 px-4 py-2">
-              <span className={`inline-flex items-center gap-2 text-sm`}>
-                <StatusIcon
-                  size={16}
-                  className={`text-${STATUS_COLORS[formData.status]}-400`}
-                />
-                <span className="text-slate-300">
-                  Status:{' '}
-                  <span
-                    className={`text-${STATUS_COLORS[formData.status]}-400 font-medium`}
-                  >
-                    {STATUS_LABELS[formData.status]}
-                  </span>
+          <div className="rounded-xl bg-slate-900 px-4 py-2">
+            <span className="inline-flex items-center gap-2 text-sm">
+              <StatusIcon size={16} className={`text-${statusColor}-400`} />
+              <span className="text-slate-300">
+                Status:{' '}
+                <span className={`text-${statusColor}-400 font-medium`}>
+                  {STATUS_LABELS[formData.status] || formData.status}
                 </span>
               </span>
-            </div>
+            </span>
           </div>
         </div>
 
@@ -416,6 +421,7 @@ export default function EditLead() {
             </h2>
 
             <div className="grid gap-6 md:grid-cols-2">
+              {/* NOME */}
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">
                   Nome *
@@ -425,7 +431,11 @@ export default function EditLead() {
                   name="name"
                   value={formData.name}
                   onChange={handleChange}
-                  className={`w-full rounded-xl border ${validationErrors.name ? 'border-red-500' : 'border-slate-700'} bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-blue-500`}
+                  className={`w-full rounded-xl border ${
+                    validationErrors.name
+                      ? 'border-red-500'
+                      : 'border-slate-700'
+                  } bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-blue-500`}
                   placeholder="Nome completo"
                 />
                 {validationErrors.name && (
@@ -435,6 +445,7 @@ export default function EditLead() {
                 )}
               </div>
 
+              {/* EMAIL */}
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">
                   E-mail *
@@ -449,7 +460,11 @@ export default function EditLead() {
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
-                    className={`w-full rounded-xl border ${validationErrors.email ? 'border-red-500' : 'border-slate-700'} bg-slate-800 pl-11 pr-4 py-3 text-white outline-none transition focus:border-blue-500`}
+                    className={`w-full rounded-xl border ${
+                      validationErrors.email
+                        ? 'border-red-500'
+                        : 'border-slate-700'
+                    } bg-slate-800 pl-11 pr-4 py-3 text-white outline-none transition focus:border-blue-500`}
                     placeholder="email@exemplo.com"
                   />
                 </div>
@@ -460,6 +475,7 @@ export default function EditLead() {
                 )}
               </div>
 
+              {/* TELEFONE */}
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">
                   Telefone *
@@ -474,7 +490,11 @@ export default function EditLead() {
                     name="phone"
                     value={formData.phone}
                     onChange={handleChange}
-                    className={`w-full rounded-xl border ${validationErrors.phone ? 'border-red-500' : 'border-slate-700'} bg-slate-800 pl-11 pr-4 py-3 text-white outline-none transition focus:border-blue-500`}
+                    className={`w-full rounded-xl border ${
+                      validationErrors.phone
+                        ? 'border-red-500'
+                        : 'border-slate-700'
+                    } bg-slate-800 pl-11 pr-4 py-3 text-white outline-none transition focus:border-blue-500`}
                     placeholder="(11) 99999-9999"
                   />
                 </div>
@@ -485,6 +505,7 @@ export default function EditLead() {
                 )}
               </div>
 
+              {/* REGIÃO */}
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">
                   Região *
@@ -498,12 +519,16 @@ export default function EditLead() {
                     name="region"
                     value={formData.region}
                     onChange={handleChange}
-                    className={`w-full rounded-xl border ${validationErrors.region ? 'border-red-500' : 'border-slate-700'} bg-slate-800 pl-11 pr-4 py-3 text-white outline-none transition focus:border-blue-500`}
+                    className={`w-full rounded-xl border ${
+                      validationErrors.region
+                        ? 'border-red-500'
+                        : 'border-slate-700'
+                    } bg-slate-800 pl-11 pr-4 py-3 text-white outline-none transition focus:border-blue-500`}
                   >
                     <option value="">Selecione</option>
-                    {REGIONS.map((region) => (
-                      <option key={region} value={region}>
-                        {region.charAt(0).toUpperCase() + region.slice(1)}
+                    {REGION_OPTIONS.map((region) => (
+                      <option key={region.value} value={region.value}>
+                        {region.label}
                       </option>
                     ))}
                   </select>
@@ -525,6 +550,7 @@ export default function EditLead() {
             </h2>
 
             <div className="grid gap-6 md:grid-cols-2">
+              {/* STATUS */}
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">
                   Status
@@ -543,6 +569,7 @@ export default function EditLead() {
                 </select>
               </div>
 
+              {/* PRIORIDADE */}
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">
                   Prioridade
@@ -553,9 +580,9 @@ export default function EditLead() {
                   onChange={handleChange}
                   className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-blue-500"
                 >
-                  {Object.entries(PRIORITY_LABELS).map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
+                  {PRIORITY_OPTIONS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
                     </option>
                   ))}
                 </select>
@@ -565,17 +592,12 @@ export default function EditLead() {
             {/* STATUS BADGE */}
             <div className="mt-6 rounded-xl border border-slate-700 bg-slate-800 p-4">
               <div className="flex items-center gap-3">
-                <StatusIcon
-                  size={20}
-                  className={`text-${STATUS_COLORS[formData.status]}-400`}
-                />
+                <StatusIcon size={20} className={`text-${statusColor}-400`} />
                 <div>
                   <p className="text-sm font-medium text-white">
                     Status atual:{' '}
-                    <span
-                      className={`text-${STATUS_COLORS[formData.status]}-400`}
-                    >
-                      {STATUS_LABELS[formData.status]}
+                    <span className={`text-${statusColor}-400`}>
+                      {STATUS_LABELS[formData.status] || formData.status}
                     </span>
                   </p>
                   <p className="text-xs text-slate-400">
@@ -638,7 +660,7 @@ export default function EditLead() {
                 value={formData.notes}
                 onChange={handleChange}
                 rows={4}
-                className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-blue-500 resize-none"
+                className="w-full resize-none rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-blue-500"
                 placeholder="Adicione observações sobre este lead..."
               />
               <p className="mt-1 text-xs text-slate-400">
@@ -664,9 +686,9 @@ export default function EditLead() {
                 onChange={handleChange}
                 className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-blue-500"
               >
-                {SOURCES.map((source) => (
-                  <option key={source} value={source}>
-                    {source.charAt(0).toUpperCase() + source.slice(1)}
+                {SOURCE_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
                   </option>
                 ))}
               </select>
