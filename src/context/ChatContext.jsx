@@ -49,6 +49,32 @@ const safeString = (value, fallback = '') => {
   return fallback;
 };
 
+const getObjectId = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'object') {
+    if (value._id) {
+      return String(value._id);
+    }
+
+    if (value.id) {
+      return String(value.id);
+    }
+
+    if (value.$oid) {
+      return String(value.$oid);
+    }
+  }
+
+  return null;
+};
+
 const sanitizeMessage = (message) => {
   if (!message || typeof message !== 'object') {
     return null;
@@ -56,7 +82,18 @@ const sanitizeMessage = (message) => {
 
   return {
     ...message,
+
+    _id: getObjectId(message._id),
+
+    conversation:
+      typeof message.conversation === 'object'
+        ? message.conversation
+        : message.conversation
+          ? String(message.conversation)
+          : null,
+
     content: safeString(message.content, ''),
+
     lastMessage: safeString(message.lastMessage, ''),
   };
 };
@@ -76,12 +113,17 @@ const sanitizeConversation = (conversation) => {
     typeof conversation.lastMessage === 'object'
   ) {
     lastMessageText = safeString(conversation.lastMessage.content, '');
+
     lastMessageObject = conversation.lastMessage;
   }
 
   return {
     ...conversation,
+
+    _id: getObjectId(conversation._id),
+
     lastMessage: lastMessageText,
+
     lastMessageObject,
   };
 };
@@ -129,7 +171,6 @@ const showBrowserNotification = ({ title, body, avatar, onClick }) => {
     return;
   }
 
-  // Não mostra se a aba estiver ativa
   if (document.visibilityState === 'visible') {
     return;
   }
@@ -214,7 +255,6 @@ export const ChatProvider = ({ children }) => {
 
   const [isConnected, setIsConnected] = useState(false);
 
-  // Estado de notificação global em tempo real
   const [lastNotification, setLastNotification] = useState(null);
 
   // =========================================================
@@ -236,7 +276,7 @@ export const ChatProvider = ({ children }) => {
   const realtimeConversationVersionRef = useRef(0);
 
   // =========================================================
-  // LIMPEZA AUTOMÁTICA DO CACHE DE NOTIFICAÇÕES
+  // LIMPEZA CACHE NOTIFICAÇÕES
   // =========================================================
 
   useEffect(() => {
@@ -256,7 +296,7 @@ export const ChatProvider = ({ children }) => {
   }, []);
 
   // =========================================================
-  // MANTER CURRENT CONVERSATION ATUAL NO REF
+  // CURRENT CONVERSATION REF
   // =========================================================
 
   useEffect(() => {
@@ -264,33 +304,11 @@ export const ChatProvider = ({ children }) => {
   }, [currentConversation]);
 
   // =========================================================
-  // HELPERS ESTABILIZADOS
+  // HELPERS
   // =========================================================
 
   const getId = useCallback((value) => {
-    if (!value) {
-      return null;
-    }
-
-    if (typeof value === 'string') {
-      return value;
-    }
-
-    if (typeof value === 'object') {
-      if (value._id) {
-        return value._id.toString();
-      }
-
-      if (value.id) {
-        return value.id.toString();
-      }
-
-      if (value.toString) {
-        return value.toString();
-      }
-    }
-
-    return null;
+    return getObjectId(value);
   }, []);
 
   const isSameId = useCallback(
@@ -308,7 +326,7 @@ export const ChatProvider = ({ children }) => {
   );
 
   // =========================================================
-  // SOM DE NOTIFICAÇÃO
+  // SOM
   // =========================================================
 
   const playNotificationSound = useCallback(() => {
@@ -347,13 +365,16 @@ export const ChatProvider = ({ children }) => {
 
       const response = await api.get('/api/chat/conversations');
 
-      const conversationsData = Array.isArray(response.data?.data)
-        ? response.data.data.map(sanitizeConversation).filter(Boolean)
-        : [];
+      const rawData = response.data?.data;
 
-      // Se chegou uma atualização em tempo real enquanto
-      // essa requisição estava acontecendo, não sobrescreve
-      // o estado mais recente.
+      const conversationsData = Array.isArray(rawData)
+        ? rawData.map(sanitizeConversation).filter(Boolean)
+        : Array.isArray(rawData?.conversations)
+          ? rawData.conversations.map(sanitizeConversation).filter(Boolean)
+          : [];
+
+      console.log('💬 Conversas carregadas:', conversationsData.length);
+
       if (requestRealtimeVersion !== realtimeConversationVersionRef.current) {
         console.log(
           '⚡ Ignorando resposta antiga de conversas após atualização do socket.',
@@ -371,10 +392,15 @@ export const ChatProvider = ({ children }) => {
 
       setUnreadCount(total);
 
-      // Entrar em todas as salas das conversas
       if (socketRef.current?.connected) {
         conversationsData.forEach((conversation) => {
           if (conversation?._id) {
+            console.log(
+              '📡 FRONTEND entrando na room:',
+              conversation._id,
+              conversation.channel,
+            );
+
             socketRef.current.emit('join_conversation', conversation._id);
           }
         });
@@ -392,12 +418,13 @@ export const ChatProvider = ({ children }) => {
       return [];
     } finally {
       loadingConversationsRef.current = false;
+
       setLoadingConversations(false);
     }
   }, [user?._id]);
 
   // =========================================================
-  // ATUALIZAR CONVERSA A PARTIR DE UMA MENSAGEM
+  // ATUALIZAR CONVERSA
   // =========================================================
 
   const updateConversationFromMessage = useCallback(
@@ -420,6 +447,11 @@ export const ChatProvider = ({ children }) => {
         );
 
         if (index === -1) {
+          console.log(
+            '⚠️ Conversa não encontrada na lista para atualização:',
+            conversationId,
+          );
+
           return prev;
         }
 
@@ -472,6 +504,7 @@ export const ChatProvider = ({ children }) => {
     async (conversationId) => {
       if (!conversationId) {
         setError('ID da conversa não informado');
+
         return;
       }
 
@@ -482,28 +515,48 @@ export const ChatProvider = ({ children }) => {
 
         setError(null);
 
+        console.log('📥 Carregando mensagens:', conversationId);
+
         const response = await api.get(
           `/api/chat/conversations/${conversationId}/messages`,
         );
+
+        console.log('📥 Resposta mensagens:', response.data);
 
         if (requestId !== messagesRequestRef.current) {
           return;
         }
 
-        const messagesData = Array.isArray(response.data?.data)
-          ? response.data.data
-          : [];
+        const rawData = response.data?.data;
+
+        let messagesData = [];
+
+        if (Array.isArray(rawData)) {
+          messagesData = rawData;
+        } else if (Array.isArray(rawData?.messages)) {
+          messagesData = rawData.messages;
+        } else if (Array.isArray(response.data?.messages)) {
+          messagesData = response.data.messages;
+        }
 
         const validMessages = messagesData
           .filter(
-            (message) =>
-              message &&
-              typeof message === 'object' &&
-              message._id &&
-              message.conversation,
+            (message) => message && typeof message === 'object' && message._id,
           )
-          .map(sanitizeMessage)
+          .map((message) => {
+            const sanitized = sanitizeMessage(message);
+
+            if (sanitized && !sanitized.conversation) {
+              sanitized.conversation = conversationId;
+            }
+
+            return sanitized;
+          })
           .filter(Boolean);
+
+        console.log(
+          `📥 ${validMessages.length} mensagens carregadas para ${conversationId}`,
+        );
 
         setMessages(validMessages);
 
@@ -520,7 +573,9 @@ export const ChatProvider = ({ children }) => {
         if (requestId === messagesRequestRef.current) {
           setMessages([]);
 
-          setError('Erro ao carregar mensagens');
+          setError(
+            error?.response?.data?.message || 'Erro ao carregar mensagens',
+          );
         }
       } finally {
         if (requestId === messagesRequestRef.current) {
@@ -532,42 +587,30 @@ export const ChatProvider = ({ children }) => {
   );
 
   // =========================================================
-  // HANDLER UNIFICADO DE MENSAGENS RECEBIDAS
+  // MENSAGEM RECEBIDA VIA SOCKET
   // =========================================================
 
   const handleMessageReceived = useCallback(
     (message) => {
-      // -----------------------------------------------------
-      // VALIDAÇÃO
-      // -----------------------------------------------------
-
       if (!message || typeof message !== 'object') {
-        console.warn('⚠️ Mensagem inválida recebida via socket:', message);
+        console.warn('⚠️ Mensagem inválida via socket:', message);
 
         return;
       }
 
       if (!message._id) {
-        console.warn('⚠️ Mensagem sem _id recebida via socket:', message);
-
-        return;
-      }
-
-      if (!message.conversation) {
-        console.warn(
-          '⚠️ Mensagem sem conversation recebida via socket:',
-          message,
-        );
+        console.warn('⚠️ Mensagem sem _id via socket:', message);
 
         return;
       }
 
       console.log('📩 Nova mensagem recebida via socket:', message);
 
-      const conversationId = getId(message.conversation);
+      const conversationId =
+        getId(message.conversation) || getId(message.conversationId);
 
       if (!conversationId) {
-        console.warn('⚠️ conversationId inválido na mensagem:', message);
+        console.warn('⚠️ conversationId não encontrado:', message);
 
         return;
       }
@@ -578,7 +621,7 @@ export const ChatProvider = ({ children }) => {
         messageId && processedNotificationIdsRef.current.has(messageId);
 
       if (alreadyProcessed) {
-        console.log('🔁 Mensagem ignorada (já processada):', messageId);
+        console.log('🔁 Mensagem já processada:', messageId);
 
         return;
       }
@@ -586,9 +629,11 @@ export const ChatProvider = ({ children }) => {
       const sanitizedMessage = sanitizeMessage(message);
 
       if (!sanitizedMessage) {
-        console.warn('⚠️ Mensagem inválida:', message);
-
         return;
+      }
+
+      if (!sanitizedMessage.conversation) {
+        sanitizedMessage.conversation = conversationId;
       }
 
       const current = currentConversationRef.current;
@@ -599,8 +644,20 @@ export const ChatProvider = ({ children }) => {
 
       const isOwnMessage = isSameId(sanitizedMessage?.sender?._id, user?._id);
 
+      console.log('📊 Socket message analysis:', {
+        messageId,
+        conversationId,
+        currentConversationId,
+        isCurrentConversation,
+        isOwnMessage,
+        channel:
+          current?.channel || sanitizedMessage?.conversation?.channel || null,
+        direction: sanitizedMessage?.direction,
+        senderType: sanitizedMessage?.senderType,
+      });
+
       // -----------------------------------------------------
-      // ADICIONAR MENSAGEM AO HISTÓRICO
+      // ADICIONAR AO HISTÓRICO
       // -----------------------------------------------------
 
       if (isCurrentConversation) {
@@ -610,31 +667,36 @@ export const ChatProvider = ({ children }) => {
           );
 
           if (alreadyExists) {
+            console.log(
+              '🔁 Mensagem já existe no histórico:',
+              sanitizedMessage._id,
+            );
+
             return prev;
           }
 
-          // Remove mensagem otimista correspondente
           const withoutOptimistic = prev.filter(
             (msg) =>
               !(
-                msg?.isOptimistic &&
-                msg?.content === sanitizedMessage?.content &&
-                isSameId(msg?.conversation, sanitizedMessage?.conversation)
+                msg?.isOptimistic && msg?.content === sanitizedMessage?.content
               ),
+          );
+
+          console.log(
+            '➕ Adicionando mensagem em tempo real ao histórico:',
+            sanitizedMessage._id,
           );
 
           return [...withoutOptimistic, sanitizedMessage];
         });
 
-        // Mensagem da conversa atual:
-        // marcar automaticamente como lida
         api
           .post(`/api/chat/conversations/${conversationId}/read`)
           .catch(() => {});
       }
 
       // -----------------------------------------------------
-      // ATUALIZAR CONVERSA E BADGE
+      // CONVERSA / UNREAD
       // -----------------------------------------------------
 
       const shouldIncrementUnread = !isCurrentConversation && !isOwnMessage;
@@ -654,7 +716,7 @@ export const ChatProvider = ({ children }) => {
       }
 
       // -----------------------------------------------------
-      // NOTIFICAÇÕES EM TEMPO REAL
+      // NOTIFICAÇÃO
       // -----------------------------------------------------
 
       if (shouldIncrementUnread) {
@@ -667,7 +729,10 @@ export const ChatProvider = ({ children }) => {
 
           message: sanitizedMessage,
 
-          senderName: sanitizedMessage.sender?.name || 'Nova mensagem',
+          senderName:
+            sanitizedMessage.sender?.name ||
+            sanitizedMessage.whatsappContact?.name ||
+            'Nova mensagem',
 
           senderAvatar: sanitizedMessage.sender?.avatar || null,
 
@@ -681,7 +746,11 @@ export const ChatProvider = ({ children }) => {
         playNotificationSound();
 
         showBrowserNotification({
-          title: `💬 ${sanitizedMessage.sender?.name || 'Nova mensagem'}`,
+          title: `💬 ${
+            sanitizedMessage.sender?.name ||
+            sanitizedMessage.whatsappContact?.name ||
+            'Nova mensagem'
+          }`,
 
           body:
             safeString(sanitizedMessage.content).substring(0, 100) ||
@@ -701,6 +770,51 @@ export const ChatProvider = ({ children }) => {
   );
 
   // =========================================================
+  // NOTIFICAÇÃO DE NOVA MENSAGEM VIA SOCKET
+  // =========================================================
+
+  const handleMessageNotification = useCallback(
+    (payload) => {
+      console.log('🔔 Nova mensagem recebida via notificação socket:', payload);
+
+      if (!payload) {
+        return;
+      }
+
+      const message = payload.message;
+
+      if (!message || typeof message !== 'object') {
+        console.warn('⚠️ Payload de notificação sem mensagem:', payload);
+
+        return;
+      }
+
+      const conversationId =
+        getId(payload.conversationId) ||
+        getId(message.conversationId) ||
+        getId(message.conversation);
+
+      if (!conversationId) {
+        console.warn(
+          '⚠️ ConversationId não encontrado na notificação:',
+          payload,
+        );
+
+        return;
+      }
+
+      handleMessageReceived({
+        ...message,
+
+        conversation: message.conversation || conversationId,
+
+        conversationId,
+      });
+    },
+    [getId, handleMessageReceived],
+  );
+
+  // =========================================================
   // SOCKET.IO
   // =========================================================
 
@@ -711,28 +825,29 @@ export const ChatProvider = ({ children }) => {
 
     console.log('🔌 Inicializando Socket.IO para usuário:', user._id);
 
-    const newSocket = io(
-      import.meta.env.VITE_API_URL || 'http://localhost:3333',
-      {
-        auth: {
-          userId: String(user._id),
-        },
+    const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:3333';
 
-        transports: ['websocket', 'polling'],
+    console.log('🌐 Socket.IO URL:', socketUrl);
 
-        reconnection: true,
-
-        reconnectionAttempts: 10,
-
-        reconnectionDelay: 1000,
-
-        reconnectionDelayMax: 5000,
-
-        timeout: 20000,
-
-        forceNew: true,
+    const newSocket = io(socketUrl, {
+      auth: {
+        userId: String(user._id),
       },
-    );
+
+      transports: ['websocket', 'polling'],
+
+      reconnection: true,
+
+      reconnectionAttempts: 10,
+
+      reconnectionDelay: 1000,
+
+      reconnectionDelayMax: 5000,
+
+      timeout: 20000,
+
+      forceNew: true,
+    });
 
     socketRef.current = newSocket;
 
@@ -745,7 +860,11 @@ export const ChatProvider = ({ children }) => {
     const handleConnect = () => {
       console.log('🔌 Conectado ao chat socket:', newSocket.id);
 
+      console.log('👤 Socket conectado para usuário:', user._id);
+
       setIsConnected(true);
+
+      console.log('📡 Solicitando entrada nas conversas...');
 
       newSocket.emit('join_conversations');
 
@@ -765,10 +884,43 @@ export const ChatProvider = ({ children }) => {
     };
 
     // =======================================================
-    // MENSAGENS
+    // CONNECT ERROR
     // =======================================================
 
-    newSocket.on('new_message', handleMessageReceived);
+    const handleConnectError = (error) => {
+      console.error('❌ Erro de conexão Socket.IO:', error);
+
+      setIsConnected(false);
+    };
+
+    // =======================================================
+    // NOVA MENSAGEM
+    // =======================================================
+
+    newSocket.on('new_message', (message) => {
+      console.log('📨 NEW_MESSAGE RECEBIDO PELO FRONTEND:', message);
+
+      handleMessageReceived(message);
+    });
+
+    // =======================================================
+    // NOTIFICAÇÃO DIRECIONADA AO USUÁRIO
+    // =======================================================
+
+    newSocket.on('new_message_notification', (payload) => {
+      console.log(
+        '🔔 NEW_MESSAGE_NOTIFICATION RECEBIDO PELO FRONTEND:',
+        payload,
+      );
+
+      handleMessageNotification(payload);
+    });
+
+    // =======================================================
+    // COMPATIBILIDADE COM SOCKET LEGADO
+    // =======================================================
+
+    newSocket.on('newMessage', handleMessageReceived);
 
     // =======================================================
     // DIGITANDO
@@ -793,7 +945,7 @@ export const ChatProvider = ({ children }) => {
     };
 
     // =======================================================
-    // USUÁRIO ONLINE
+    // ONLINE
     // =======================================================
 
     const handleUserOnline = (userId) => {
@@ -813,7 +965,7 @@ export const ChatProvider = ({ children }) => {
     };
 
     // =======================================================
-    // USUÁRIO OFFLINE
+    // OFFLINE
     // =======================================================
 
     const handleUserOffline = (userId) => {
@@ -827,12 +979,14 @@ export const ChatProvider = ({ children }) => {
     };
 
     // =======================================================
-    // REGISTRAR EVENTOS
+    // EVENTOS
     // =======================================================
 
     newSocket.on('connect', handleConnect);
 
     newSocket.on('disconnect', handleDisconnect);
+
+    newSocket.on('connect_error', handleConnectError);
 
     newSocket.on('user_typing', handleUserTyping);
 
@@ -851,7 +1005,13 @@ export const ChatProvider = ({ children }) => {
 
       newSocket.off('disconnect', handleDisconnect);
 
-      newSocket.off('new_message', handleMessageReceived);
+      newSocket.off('connect_error', handleConnectError);
+
+      newSocket.off('new_message');
+
+      newSocket.off('new_message_notification');
+
+      newSocket.off('newMessage', handleMessageReceived);
 
       newSocket.off('user_typing', handleUserTyping);
 
@@ -869,10 +1029,16 @@ export const ChatProvider = ({ children }) => {
 
       setIsConnected(false);
     };
-  }, [user?._id, getId, handleMessageReceived, loadConversations]);
+  }, [
+    user?._id,
+    getId,
+    handleMessageReceived,
+    handleMessageNotification,
+    loadConversations,
+  ]);
 
   // =========================================================
-  // BADGE NO TÍTULO DA ABA
+  // TÍTULO DA ABA
   // =========================================================
 
   useEffect(() => {
@@ -899,7 +1065,6 @@ export const ChatProvider = ({ children }) => {
 
       const trimmedContent = content.trim();
 
-      // Mensagem otimista
       const optimisticMessage = {
         _id: `temp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
 
@@ -1032,7 +1197,7 @@ export const ChatProvider = ({ children }) => {
   );
 
   // =========================================================
-  // CRIAR CANAL DOS CORRETORES
+  // CANAL DOS CORRETORES
   // =========================================================
 
   const createBrokerChannel = useCallback(
@@ -1098,6 +1263,12 @@ export const ChatProvider = ({ children }) => {
         return;
       }
 
+      console.log(
+        '💬 Selecionando conversa:',
+        conversationId,
+        conversation.channel,
+      );
+
       setCurrentConversation(conversation);
 
       currentConversationRef.current = conversation;
@@ -1107,6 +1278,8 @@ export const ChatProvider = ({ children }) => {
       setMessages([]);
 
       if (socketRef.current?.connected) {
+        console.log('📡 Entrando na room:', conversationId);
+
         socketRef.current.emit('join_conversation', conversationId);
       }
 
@@ -1131,7 +1304,7 @@ export const ChatProvider = ({ children }) => {
   }, []);
 
   // =========================================================
-  // USUÁRIO ONLINE
+  // ONLINE
   // =========================================================
 
   const isUserOnline = useCallback(
@@ -1148,7 +1321,7 @@ export const ChatProvider = ({ children }) => {
   );
 
   // =========================================================
-  // NOME DA CONVERSA
+  // NOME
   // =========================================================
 
   const getConversationName = useCallback(
@@ -1159,6 +1332,14 @@ export const ChatProvider = ({ children }) => {
 
       if (conversation.name) {
         return conversation.name;
+      }
+
+      if (conversation.channel === 'whatsapp') {
+        return (
+          conversation.whatsappContact?.name ||
+          conversation.lead?.name ||
+          'WhatsApp'
+        );
       }
 
       if (conversation.type === 'direct') {
@@ -1175,7 +1356,7 @@ export const ChatProvider = ({ children }) => {
   );
 
   // =========================================================
-  // AVATAR DA CONVERSA
+  // AVATAR
   // =========================================================
 
   const getConversationAvatar = useCallback(
@@ -1186,6 +1367,10 @@ export const ChatProvider = ({ children }) => {
 
       if (conversation.avatar) {
         return conversation.avatar;
+      }
+
+      if (conversation.channel === 'whatsapp') {
+        return conversation.whatsappContact?.avatar || null;
       }
 
       if (conversation.type === 'direct') {
@@ -1221,11 +1406,7 @@ export const ChatProvider = ({ children }) => {
   );
 
   // =========================================================
-  // PARTICIPANTES DA CONVERSA
-  //
-  // IMPORTANTE:
-  // Esses helpers ficam DENTRO do Provider.
-  // Não mover para fora, pois utilizam hooks.
+  // PARTICIPANTES
   // =========================================================
 
   const getConversationParticipants = useCallback((conversation) => {
@@ -1241,7 +1422,7 @@ export const ChatProvider = ({ children }) => {
   }, []);
 
   // =========================================================
-  // PARTICIPANTES ONLINE
+  // ONLINE PARTICIPANTES
   // =========================================================
 
   const getOnlineParticipants = useCallback(
@@ -1256,7 +1437,7 @@ export const ChatProvider = ({ children }) => {
   );
 
   // =========================================================
-  // QUANTIDADE DE PARTICIPANTES
+  // CONTAGEM
   // =========================================================
 
   const getParticipantCount = useCallback(
@@ -1266,10 +1447,6 @@ export const ChatProvider = ({ children }) => {
     [getConversationParticipants],
   );
 
-  // =========================================================
-  // QUANTIDADE DE PARTICIPANTES ONLINE
-  // =========================================================
-
   const getOnlineParticipantCount = useCallback(
     (conversation) => {
       return getOnlineParticipants(conversation).length;
@@ -1278,7 +1455,7 @@ export const ChatProvider = ({ children }) => {
   );
 
   // =========================================================
-  // SUBTÍTULO DA CONVERSA
+  // SUBTÍTULO
   // =========================================================
 
   const getConversationSubtitle = useCallback(
@@ -1287,7 +1464,14 @@ export const ChatProvider = ({ children }) => {
         return '';
       }
 
-      // Conversa individual
+      if (conversation.channel === 'whatsapp') {
+        return (
+          conversation.whatsappContact?.phone ||
+          conversation.lead?.phone ||
+          'WhatsApp'
+        );
+      }
+
       if (conversation.type === 'direct') {
         const participant = getOtherParticipant(conversation);
 
@@ -1298,7 +1482,6 @@ export const ChatProvider = ({ children }) => {
         return isUserOnline(participant._id) ? 'Online' : 'Offline';
       }
 
-      // Grupo / canal
       const participantCount = getParticipantCount(conversation);
 
       const onlineCount = getOnlineParticipantCount(conversation);
@@ -1326,7 +1509,7 @@ export const ChatProvider = ({ children }) => {
   );
 
   // =========================================================
-  // CARREGAR CONVERSAS QUANDO USUÁRIO ENTRA
+  // CARREGAR CONVERSAS AO ENTRAR
   // =========================================================
 
   useEffect(() => {
@@ -1338,7 +1521,7 @@ export const ChatProvider = ({ children }) => {
   }, [user?._id, loadConversations]);
 
   // =========================================================
-  // LIMPAR ESTADO AO DESLOGAR
+  // LIMPAR AO DESLOGAR
   // =========================================================
 
   useEffect(() => {
@@ -1390,10 +1573,6 @@ export const ChatProvider = ({ children }) => {
   // =========================================================
 
   const value = {
-    // -------------------------------------------------------
-    // Estado
-    // -------------------------------------------------------
-
     conversations,
 
     currentConversation,
@@ -1416,17 +1595,9 @@ export const ChatProvider = ({ children }) => {
 
     socket,
 
-    // -------------------------------------------------------
-    // Notificações
-    // -------------------------------------------------------
-
     lastNotification,
 
     clearNotification: () => setLastNotification(null),
-
-    // -------------------------------------------------------
-    // Conversas
-    // -------------------------------------------------------
 
     loadConversations,
 
@@ -1446,25 +1617,13 @@ export const ChatProvider = ({ children }) => {
 
     setCurrentConversation,
 
-    // -------------------------------------------------------
-    // Usuários
-    // -------------------------------------------------------
-
     isUserOnline,
-
-    // -------------------------------------------------------
-    // Informações da conversa
-    // -------------------------------------------------------
 
     getConversationName,
 
     getConversationAvatar,
 
     getOtherParticipant,
-
-    // -------------------------------------------------------
-    // Participantes
-    // -------------------------------------------------------
 
     getConversationParticipants,
 
