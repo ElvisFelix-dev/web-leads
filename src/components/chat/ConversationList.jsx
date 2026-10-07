@@ -6,6 +6,7 @@ import {
   FaChevronRight,
   FaPlus,
   FaComments,
+  FaWhatsapp,
 } from 'react-icons/fa';
 
 import { useChat } from '../../context/ChatContext';
@@ -18,6 +19,7 @@ export default function ConversationList({ onSelect, onNewChat }) {
     isUserOnline,
     getConversationName,
     getConversationAvatar,
+    getConversationSubtitle,
     getOtherParticipant,
     currentConversation,
   } = useChat();
@@ -37,7 +39,19 @@ export default function ConversationList({ onSelect, onNewChat }) {
   };
 
   /**
+   * Verifica se a conversa pertence ao WhatsApp.
+   */
+  const isWhatsAppConversation = (conversation) => {
+    return conversation?.channel === 'whatsapp';
+  };
+
+  /**
    * Filtra as conversas.
+   *
+   * Para WhatsApp também permite buscar por:
+   * - nome do contato
+   * - telefone
+   * - última mensagem
    */
   const filteredConversations = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -51,11 +65,19 @@ export default function ConversationList({ onSelect, onNewChat }) {
         getConversationName?.(conversation) || '',
       ).toLowerCase();
 
+      const subtitle = String(
+        getConversationSubtitle?.(conversation) || '',
+      ).toLowerCase();
+
       const lastMessage = String(conversation?.lastMessage || '').toLowerCase();
 
-      return name.includes(term) || lastMessage.includes(term);
+      return (
+        name.includes(term) ||
+        subtitle.includes(term) ||
+        lastMessage.includes(term)
+      );
     });
-  }, [conversations, search, getConversationName]);
+  }, [conversations, search, getConversationName, getConversationSubtitle]);
 
   /**
    * Formata a data da última mensagem.
@@ -126,29 +148,45 @@ export default function ConversationList({ onSelect, onNewChat }) {
   };
 
   /**
+   * Retorna subtítulo da conversa.
+   *
+   * Para WhatsApp:
+   *   telefone do contato
+   *
+   * Para conversas internas:
+   *   nome/descrição retornado pelo ChatContext
+   */
+  const getSafeConversationSubtitle = (conversation) => {
+    return getConversationSubtitle?.(conversation) || '';
+  };
+
+  /**
    * Limita o tamanho da mensagem exibida.
    */
   const getLastMessage = (conversation) => {
-    // ✅ Tenta pegar a string diretamente
+    // String diretamente
     if (typeof conversation?.lastMessage === 'string') {
       const msg = conversation.lastMessage.trim();
+
       return msg || 'Nenhuma mensagem';
     }
 
-    // ✅ Se for objeto, tenta extrair o content
+    // Se for objeto, tenta extrair o content
     if (
       conversation?.lastMessage &&
       typeof conversation.lastMessage === 'object'
     ) {
       const content = conversation.lastMessage.content;
+
       if (typeof content === 'string') {
         return content.trim() || 'Nenhuma mensagem';
       }
     }
 
-    // ✅ Fallback para o objeto completo
+    // Fallback para lastMessageObject
     if (conversation?.lastMessageObject?.content) {
       const content = conversation.lastMessageObject.content;
+
       if (typeof content === 'string') {
         return content.trim() || 'Nenhuma mensagem';
       }
@@ -226,7 +264,7 @@ export default function ConversationList({ onSelect, onNewChat }) {
               </span>
             )}
 
-            {/* Nova conversa */}
+            {/* Nova conversa interna */}
             <button
               type="button"
               onClick={onNewChat}
@@ -270,7 +308,7 @@ export default function ConversationList({ onSelect, onNewChat }) {
             type="text"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar conversas..."
+            placeholder="Buscar nome, telefone ou mensagem..."
             aria-label="Buscar conversas"
             className="
               w-full
@@ -349,7 +387,7 @@ export default function ConversationList({ onSelect, onNewChat }) {
 
             <p className="text-xs text-gray-700 mt-1">
               {search
-                ? 'Tente buscar por outro nome ou mensagem'
+                ? 'Tente buscar por outro nome, telefone ou mensagem'
                 : 'Inicie uma nova conversa para começar'}
             </p>
 
@@ -388,23 +426,31 @@ export default function ConversationList({ onSelect, onNewChat }) {
 
               const isActive = currentConversation?._id === conversationId;
 
+              const isWhatsApp = isWhatsAppConversation(conversation);
+
+              const isChannel = conversation?.type === 'broker_channel';
+
               const otherUser = getOtherParticipant?.(conversation);
 
               const otherUserId = otherUser?._id || otherUser?.id;
 
-              const online = Boolean(
-                otherUserId && isUserOnline?.(otherUserId),
-              );
+              /**
+               * WhatsApp não é usuário do CRM.
+               * Portanto não mostramos indicador online.
+               */
+              const online =
+                !isWhatsApp &&
+                Boolean(otherUserId && isUserOnline?.(otherUserId));
 
               const name = getSafeConversationName(conversation);
 
               const avatar = getSafeConversationAvatar(conversation);
 
+              const subtitle = getSafeConversationSubtitle(conversation);
+
               const lastMessage = getLastMessage(conversation);
 
               const unread = Number(conversation?.unreadCount || 0);
-
-              const isChannel = conversation?.type === 'broker_channel';
 
               return (
                 <button
@@ -429,7 +475,7 @@ export default function ConversationList({ onSelect, onNewChat }) {
                   <div className="flex items-center gap-3">
                     {/* =================================================
                         AVATAR
-                    ================================================_ */}
+                    ================================================= */}
                     <div className="relative shrink-0">
                       <div
                         className={`
@@ -443,8 +489,12 @@ export default function ConversationList({ onSelect, onNewChat }) {
                           border
                           ${
                             isActive
-                              ? 'border-blue-500/40 bg-blue-500/10'
-                              : 'border-gray-800 bg-gray-900'
+                              ? isWhatsApp
+                                ? 'border-emerald-500/40 bg-emerald-500/10'
+                                : 'border-blue-500/40 bg-blue-500/10'
+                              : isWhatsApp
+                                ? 'border-emerald-500/20 bg-emerald-500/5'
+                                : 'border-gray-800 bg-gray-900'
                           }
                         `}
                       >
@@ -456,6 +506,8 @@ export default function ConversationList({ onSelect, onNewChat }) {
                             loading="lazy"
                             onError={() => handleAvatarError(conversationId)}
                           />
+                        ) : isWhatsApp ? (
+                          <FaWhatsapp size={20} className="text-emerald-400" />
                         ) : isChannel ? (
                           <FaUsers size={17} className="text-blue-400" />
                         ) : (
@@ -463,7 +515,7 @@ export default function ConversationList({ onSelect, onNewChat }) {
                         )}
                       </div>
 
-                      {/* Indicador online */}
+                      {/* Indicador online — somente usuários internos */}
                       {online && (
                         <span
                           className="
@@ -479,6 +531,33 @@ export default function ConversationList({ onSelect, onNewChat }) {
                           "
                           title="Online"
                         />
+                      )}
+
+                      {/* Indicador visual WhatsApp */}
+                      {isWhatsApp && !avatar && (
+                        <span
+                          className="
+                            absolute
+                            -bottom-0.5
+                            -right-0.5
+                            w-3.5
+                            h-3.5
+                            rounded-full
+                            bg-[#0d1119]
+                            flex
+                            items-center
+                            justify-center
+                          "
+                        >
+                          <span
+                            className="
+                              w-2
+                              h-2
+                              rounded-full
+                              bg-emerald-400
+                            "
+                          />
+                        </span>
                       )}
                     </div>
 
@@ -503,7 +582,34 @@ export default function ConversationList({ onSelect, onNewChat }) {
                             {name}
                           </p>
 
-                          {isChannel && (
+                          {/* Badge WhatsApp */}
+                          {isWhatsApp && (
+                            <span
+                              className="
+                                shrink-0
+                                inline-flex
+                                items-center
+                                gap-1
+                                text-[8px]
+                                uppercase
+                                tracking-wide
+                                font-semibold
+                                text-emerald-400
+                                bg-emerald-500/10
+                                border
+                                border-emerald-500/10
+                                px-1.5
+                                py-0.5
+                                rounded
+                              "
+                            >
+                              <FaWhatsapp size={8} />
+                              WhatsApp
+                            </span>
+                          )}
+
+                          {/* Badge canal interno */}
+                          {isChannel && !isWhatsApp && (
                             <span
                               className="
                                 shrink-0
@@ -527,12 +633,32 @@ export default function ConversationList({ onSelect, onNewChat }) {
                           className={`
                             shrink-0
                             text-[10px]
-                            ${unread > 0 ? 'text-blue-400' : 'text-gray-600'}
+                            ${
+                              unread > 0
+                                ? isWhatsApp
+                                  ? 'text-emerald-400'
+                                  : 'text-blue-400'
+                                : 'text-gray-600'
+                            }
                           `}
                         >
                           {formatTime(conversation?.lastMessageAt)}
                         </span>
                       </div>
+
+                      {/* Telefone / subtítulo */}
+                      {subtitle && (
+                        <p
+                          className="
+                            text-[10px]
+                            text-gray-600
+                            truncate
+                            mt-0.5
+                          "
+                        >
+                          {subtitle}
+                        </p>
+                      )}
 
                       {/* Última mensagem + contador */}
                       <div className="flex items-center justify-between gap-2 mt-1">
@@ -552,20 +678,20 @@ export default function ConversationList({ onSelect, onNewChat }) {
 
                         {unread > 0 && (
                           <span
-                            className="
+                            className={`
                               shrink-0
                               min-w-[20px]
                               h-[20px]
                               flex
                               items-center
                               justify-center
-                              bg-blue-600
                               text-white
                               text-[9px]
                               font-bold
                               px-1.5
                               rounded-full
-                            "
+                              ${isWhatsApp ? 'bg-emerald-600' : 'bg-blue-600'}
+                            `}
                           >
                             {unread > 99 ? '99+' : unread}
                           </span>
@@ -583,7 +709,9 @@ export default function ConversationList({ onSelect, onNewChat }) {
                         transition-all
                         ${
                           isActive
-                            ? 'text-blue-400 translate-x-0.5'
+                            ? isWhatsApp
+                              ? 'text-emerald-400 translate-x-0.5'
+                              : 'text-blue-400 translate-x-0.5'
                             : 'text-gray-700 group-hover:text-gray-500'
                         }
                       `}
