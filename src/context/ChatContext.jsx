@@ -12,7 +12,6 @@ import { io } from 'socket.io-client';
 import api from '../service/api';
 
 import { UserContext } from './UserContext';
-
 // =========================================================
 // HELPERS DE SANITIZAÇÃO
 // =========================================================
@@ -825,7 +824,8 @@ export const ChatProvider = ({ children }) => {
 
     console.log('🔌 Inicializando Socket.IO para usuário:', user._id);
 
-    const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:3333';
+    const socketUrl =
+      import.meta.env.VITE_API_URL || 'https://leadsnamao.onrender.com';
 
     console.log('🌐 Socket.IO URL:', socketUrl);
 
