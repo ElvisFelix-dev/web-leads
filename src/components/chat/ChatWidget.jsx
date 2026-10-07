@@ -5,6 +5,7 @@ import {
   FaChevronLeft,
   FaUsers,
   FaCircle,
+  FaWhatsapp,
 } from 'react-icons/fa';
 
 import { useChat } from '../../context/ChatContext';
@@ -23,6 +24,8 @@ export default function ChatWidget() {
     currentConversation,
     selectConversation,
     loadConversations,
+    getConversationName,
+    getConversationSubtitle,
   } = useChat();
 
   /*
@@ -121,6 +124,26 @@ export default function ChatWidget() {
 
     selectConversation(null);
   };
+
+  /*
+   * ============================================================
+   * IDENTIFICAÇÃO DO CANAL
+   * ============================================================
+   */
+
+  const isWhatsAppConversation = currentConversation?.channel === 'whatsapp';
+
+  const isInternalChannel = currentConversation?.type === 'broker_channel';
+
+  const conversationName = currentConversation
+    ? getConversationName?.(currentConversation) || 'Conversa'
+    : '';
+
+  const conversationSubtitle = currentConversation
+    ? getConversationSubtitle?.(currentConversation) || ''
+    : '';
+
+  const participantCount = currentConversation?.participants?.length || 0;
 
   /*
    * ============================================================
@@ -248,8 +271,6 @@ export default function ChatWidget() {
    * ============================================================
    */
 
-  const participantCount = currentConversation?.participants?.length || 0;
-
   return (
     <>
       {/* ========================================================
@@ -368,26 +389,32 @@ export default function ChatWidget() {
                 </button>
               )}
 
-              {/* Icon */}
+              {/* Ícone */}
               <div
-                className="
+                className={`
                   w-10
                   h-10
 
                   rounded-xl
-
-                  bg-blue-500/10
-                  border
-                  border-blue-500/10
 
                   flex
                   items-center
                   justify-center
 
                   shrink-0
-                "
+
+                  border
+
+                  ${
+                    isWhatsAppConversation
+                      ? 'bg-emerald-500/10 border-emerald-500/10'
+                      : 'bg-blue-500/10 border-blue-500/10'
+                  }
+                `}
               >
-                {currentConversation ? (
+                {isWhatsAppConversation ? (
+                  <FaWhatsapp size={18} className="text-emerald-400" />
+                ) : currentConversation ? (
                   <FaComments size={17} className="text-blue-400" />
                 ) : (
                   <FaUsers size={17} className="text-blue-400" />
@@ -396,12 +423,25 @@ export default function ChatWidget() {
 
               {/* Title */}
               <div className="ml-3 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm sm:text-[15px] font-bold text-white truncate">
-                    {currentConversation ? 'Mensagens' : 'Conversas'}
+                <div className="flex items-center gap-2 min-w-0">
+                  <h2
+                    className="
+                      text-sm
+                      sm:text-[15px]
+                      font-bold
+                      text-white
+                      truncate
+                    "
+                  >
+                    {currentConversation
+                      ? isWhatsAppConversation
+                        ? conversationName
+                        : 'Mensagens'
+                      : 'Conversas'}
                   </h2>
 
-                  {currentConversation && (
+                  {/* Badge WhatsApp */}
+                  {isWhatsAppConversation && (
                     <span
                       className="
                         hidden
@@ -424,19 +464,98 @@ export default function ChatWidget() {
                         text-emerald-400
                       "
                     >
-                      <FaCircle size={5} />
-                      Chat
+                      <FaWhatsapp size={8} />
+                      WhatsApp
                     </span>
                   )}
+
+                  {/* Badge canal interno */}
+                  {isInternalChannel && !isWhatsAppConversation && (
+                    <span
+                      className="
+                        hidden
+                        sm:inline-flex
+
+                        items-center
+                        gap-1.5
+
+                        px-2
+                        py-0.5
+
+                        rounded-full
+
+                        bg-blue-500/10
+                        border
+                        border-blue-500/10
+
+                        text-[9px]
+                        font-semibold
+                        text-blue-400
+                      "
+                    >
+                      <FaUsers size={8} />
+                      Canal
+                    </span>
+                  )}
+
+                  {/* Badge chat interno */}
+                  {currentConversation &&
+                    !isWhatsAppConversation &&
+                    !isInternalChannel && (
+                      <span
+                        className="
+                          hidden
+                          sm:inline-flex
+
+                          items-center
+                          gap-1.5
+
+                          px-2
+                          py-0.5
+
+                          rounded-full
+
+                          bg-blue-500/10
+                          border
+                          border-blue-500/10
+
+                          text-[9px]
+                          font-semibold
+                          text-blue-400
+                        "
+                      >
+                        <FaCircle size={5} />
+                        Interno
+                      </span>
+                    )}
                 </div>
 
-                <p className="text-[10px] sm:text-[11px] text-gray-500 mt-0.5">
+                {/* Subtítulo */}
+                <p
+                  className="
+                    text-[10px]
+                    sm:text-[11px]
+                    text-gray-500
+                    mt-0.5
+                    truncate
+                    max-w-[260px]
+                    sm:max-w-[400px]
+                  "
+                >
                   {currentConversation
-                    ? `${participantCount} ${
-                        participantCount === 1
-                          ? 'participante'
-                          : 'participantes'
-                      }`
+                    ? isWhatsAppConversation
+                      ? conversationSubtitle || 'WhatsApp'
+                      : isInternalChannel
+                        ? `${participantCount} ${
+                            participantCount === 1
+                              ? 'participante'
+                              : 'participantes'
+                          }`
+                        : `${participantCount} ${
+                            participantCount === 1
+                              ? 'participante'
+                              : 'participantes'
+                          }`
                     : unreadCount > 0
                       ? `${unreadCount} ${
                           unreadCount === 1
@@ -450,7 +569,7 @@ export default function ChatWidget() {
 
             {/* Right */}
             <div className="flex items-center gap-2">
-              {/* Unread indicator */}
+              {/* Indicador geral de não lidas */}
               {!currentConversation && unreadCount > 0 && (
                 <div
                   className="
@@ -486,7 +605,7 @@ export default function ChatWidget() {
                 </div>
               )}
 
-              {/* Close */}
+              {/* Fechar */}
               <button
                 type="button"
                 onClick={handleClose}
@@ -570,7 +689,7 @@ export default function ChatWidget() {
               BOTTOM DECORATIVE LINE
           ==================================================== */}
           <div
-            className="
+            className={`
               absolute
               bottom-0
               left-0
@@ -580,11 +699,15 @@ export default function ChatWidget() {
 
               bg-gradient-to-r
               from-transparent
-              via-blue-500/20
+              ${
+                isWhatsAppConversation
+                  ? 'via-emerald-500/20'
+                  : 'via-blue-500/20'
+              }
               to-transparent
 
               pointer-events-none
-            "
+            `}
           />
         </div>
       </div>
