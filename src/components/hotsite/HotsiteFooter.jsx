@@ -344,7 +344,7 @@ export default function HotsiteFooter({ broker, brokerSlug }) {
             <span className="text-slate-700">|</span>
 
             <span className="inline-flex items-center gap-1.5">
-              Desenvolvido com
+              Desenvolvido por
               <span className="text-slate-300">Leads Na Mão</span>
             </span>
           </div>
