@@ -153,6 +153,7 @@ export default function ChatPage() {
    * realmente estiverem disponíveis.
    */
   useEffect(() => {
+<<<<<<< HEAD
     const conversationId = currentConversation?._id?.toString();
 
     if (!conversationId) {
@@ -265,6 +266,24 @@ export default function ChatPage() {
 
     previousMessagesCountRef.current = currentCount;
   }, [messages.length, currentConversation?._id]);
+=======
+  if (!messagesEndRef.current || !messages.length) {
+    return;
+  }
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: 'auto',
+      block: 'end',
+    });
+  };
+
+  // Aguarda o DOM terminar de renderizar as mensagens
+  requestAnimationFrame(() => {
+    requestAnimationFrame(scrollToBottom);
+  });
+}, [messages]);
+>>>>>>> 30061b8b42f759538872f0239ca4e5be305c71f9
 
   /*
   ============================================================
