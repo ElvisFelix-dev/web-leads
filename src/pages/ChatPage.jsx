@@ -69,9 +69,32 @@ export default function ChatPage() {
 
   const [showParticipants, setShowParticipants] = useState(false);
 
+  /*
+  ============================================================
+  REFS
+  ============================================================
+  */
+
+  const messagesContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
+
   const inputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+
+  /*
+   * Guarda qual conversa já teve o scroll inicial executado.
+   *
+   * Isso evita que cada atualização das mensagens jogue
+   * novamente o usuário para o final.
+   */
+  const initialScrollConversationRef = useRef(null);
+
+  /*
+   * Quantidade anterior de mensagens.
+   *
+   * Usado para identificar quando uma nova mensagem chegou.
+   */
+  const previousMessagesCountRef = useRef(0);
 
   /*
   ============================================================
@@ -105,18 +128,143 @@ export default function ChatPage() {
 
   /*
   ============================================================
-  AUTO SCROLL
+  SCROLL DAS MENSAGENS
   ============================================================
   */
 
+  /*
+   * Volta o scroll para o final da conversa.
+   */
+  const scrollToBottom = (behavior = 'smooth') => {
+    const container = messagesContainerRef.current;
+
+    if (!container) return;
+
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior,
+    });
+  };
+
+  /*
+   * Ao trocar de conversa, resetamos os controles de scroll.
+   *
+   * O scroll inicial será executado somente quando as mensagens
+   * realmente estiverem disponíveis.
+   */
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'end',
-      });
+    const conversationId = currentConversation?._id?.toString();
+
+    if (!conversationId) {
+      initialScrollConversationRef.current = null;
+      previousMessagesCountRef.current = 0;
+      return;
     }
-  }, [messages]);
+
+    previousMessagesCountRef.current = 0;
+  }, [currentConversation?._id]);
+
+  /*
+   * Scroll inicial da conversa.
+   *
+   * Importante:
+   * usamos messages.length como dependência porque a conversa
+   * pode ser selecionada antes de as mensagens terminarem de
+   * carregar.
+   */
+  useEffect(() => {
+    const conversationId = currentConversation?._id?.toString();
+
+    if (!conversationId || messages.length === 0) {
+      return;
+    }
+
+    /*
+     * Essa conversa já foi posicionada no final.
+     */
+    if (initialScrollConversationRef.current === conversationId) {
+      return;
+    }
+
+    /*
+     * Esperamos dois frames para garantir que o DOM já tenha
+     * calculado o scrollHeight depois da renderização das mensagens.
+     */
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        /*
+         * A conversa pode ter mudado durante os frames.
+         */
+        if (currentConversation?._id?.toString() !== conversationId) {
+          return;
+        }
+
+        const container = messagesContainerRef.current;
+
+        if (!container) {
+          return;
+        }
+
+        container.scrollTop = container.scrollHeight;
+
+        initialScrollConversationRef.current = conversationId;
+
+        previousMessagesCountRef.current = messages.length;
+      });
+    });
+  }, [currentConversation?._id, messages.length]);
+
+  /*
+   * Novas mensagens.
+   *
+   * Se o usuário estiver próximo do final, acompanhamos a nova
+   * mensagem.
+   *
+   * Se estiver lendo mensagens antigas, NÃO mexemos no scroll.
+   */
+  useEffect(() => {
+    const conversationId = currentConversation?._id?.toString();
+
+    const container = messagesContainerRef.current;
+
+    if (!conversationId || !container || messages.length === 0) {
+      return;
+    }
+
+    /*
+     * Ainda estamos aguardando o scroll inicial.
+     */
+    if (initialScrollConversationRef.current !== conversationId) {
+      return;
+    }
+
+    const previousCount = previousMessagesCountRef.current;
+    const currentCount = messages.length;
+
+    /*
+     * Só fazemos alguma coisa quando uma nova mensagem entrou.
+     */
+    if (currentCount > previousCount) {
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+
+      /*
+       * Consideramos "perto do final" até 150px.
+       */
+      const isNearBottom = distanceFromBottom <= 150;
+
+      if (isNearBottom) {
+        requestAnimationFrame(() => {
+          container.scrollTo({
+            top: container.scrollHeight,
+            behavior: 'smooth',
+          });
+        });
+      }
+    }
+
+    previousMessagesCountRef.current = currentCount;
+  }, [messages.length, currentConversation?._id]);
 
   /*
   ============================================================
@@ -413,6 +561,11 @@ export default function ChatPage() {
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
+
+    /*
+     * Resetamos o controle de scroll antes de trocar de conversa.
+     */
+    previousMessagesCountRef.current = 0;
 
     selectConversation(conversation);
 
@@ -829,8 +982,6 @@ export default function ChatPage() {
                           }
                         `}
                       >
-                        {/* Active indicator */}
-
                         {isActive && (
                           <div
                             className={`
@@ -846,8 +997,6 @@ export default function ChatPage() {
                         )}
 
                         <div className="flex items-center gap-3">
-                          {/* Avatar */}
-
                           <div className="relative shrink-0">
                             <div
                               className={`
@@ -905,8 +1054,6 @@ export default function ChatPage() {
                               />
                             )}
                           </div>
-
-                          {/* Conversation info */}
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
@@ -987,15 +1134,11 @@ export default function ChatPage() {
                               </span>
                             </div>
 
-                            {/* WhatsApp subtitle */}
-
                             {isWhatsApp && subtitle && (
                               <p className="mt-0.5 text-[10px] text-gray-600 truncate">
                                 {subtitle}
                               </p>
                             )}
-
-                            {/* Internal subtitle */}
 
                             {isChannel && !isWhatsApp ? (
                               <div className="flex items-center justify-between gap-2 mt-1">
@@ -1072,8 +1215,6 @@ export default function ChatPage() {
                               </div>
                             )}
 
-                            {/* Channel last message */}
-
                             {isChannel && !isWhatsApp && conv.lastMessage && (
                               <p className="mt-1 text-[10px] text-gray-700 truncate">
                                 {getLastMessage(conv)}
@@ -1134,10 +1275,6 @@ export default function ChatPage() {
               } flex-1 min-w-0 flex-col bg-[#0d1119]`}
             >
               {!currentConversation ? (
-                /* =================================================
-                   EMPTY CHAT
-                ================================================== */
-
                 <div className="flex-1 flex items-center justify-center px-6">
                   <div className="text-center max-w-sm">
                     <div className="relative mx-auto w-20 h-20 mb-5">
@@ -1208,8 +1345,6 @@ export default function ChatPage() {
                     `}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      {/* Mobile back */}
-
                       <button
                         type="button"
                         onClick={handleBack}
@@ -1230,8 +1365,6 @@ export default function ChatPage() {
                       >
                         <FaChevronLeft size={15} />
                       </button>
-
-                      {/* Avatar */}
 
                       <div className="relative shrink-0">
                         <div
@@ -1273,8 +1406,6 @@ export default function ChatPage() {
                           )}
                         </div>
 
-                        {/* Online somente para usuário interno */}
-
                         {!isWhatsAppConversation &&
                           currentConversation.type !== 'broker_channel' &&
                           getOtherParticipant(currentConversation) && (
@@ -1300,8 +1431,6 @@ export default function ChatPage() {
                             />
                           )}
                       </div>
-
-                      {/* Info */}
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -1412,8 +1541,6 @@ export default function ChatPage() {
                       </div>
                     </div>
 
-                    {/* Actions */}
-
                     <div className="flex items-center gap-1">
                       {!isWhatsAppConversation &&
                         currentConversation.type === 'broker_channel' && (
@@ -1490,7 +1617,10 @@ export default function ChatPage() {
                       MESSAGES
                   ========================================== */}
 
-                  <div className="flex-1 overflow-y-auto px-4 lg:px-6 py-5 space-y-1 scrollbar-thin scrollbar-thumb-gray-800">
+                  <div
+                    ref={messagesContainerRef}
+                    className="relative flex-1 overflow-y-auto px-4 lg:px-6 py-5 space-y-1 scrollbar-thin scrollbar-thumb-gray-800"
+                  >
                     {loading ? (
                       <div className="flex flex-col items-center justify-center h-full">
                         <div
@@ -1617,8 +1747,6 @@ export default function ChatPage() {
                                   ${isOwn ? 'flex-row-reverse' : 'flex-row'}
                                 `}
                               >
-                                {/* Avatar inbound WhatsApp */}
-
                                 {!isOwn && isWhatsAppMessage && (
                                   <div className="w-8 h-8 shrink-0 rounded-full overflow-hidden border border-emerald-500/20 bg-emerald-500/5 flex items-center justify-center">
                                     {senderAvatar ? (
@@ -1651,8 +1779,6 @@ export default function ChatPage() {
                                     }
                                   `}
                                 >
-                                  {/* Sender name */}
-
                                   {!isOwn &&
                                     (currentConversation.type ===
                                       'broker_channel' ||
@@ -1698,8 +1824,6 @@ export default function ChatPage() {
                                       {formatMessageTime(msg.createdAt)}
                                     </span>
 
-                                    {/* Status interno */}
-
                                     {isOwn && !isWhatsAppConversation && (
                                       <FaCheck
                                         size={10}
@@ -1710,8 +1834,6 @@ export default function ChatPage() {
                                         }
                                       />
                                     )}
-
-                                    {/* Status WhatsApp */}
 
                                     {isOwn && isWhatsAppConversation && (
                                       <>
@@ -1777,6 +1899,48 @@ export default function ChatPage() {
                     )}
 
                     <div ref={messagesEndRef} />
+
+                    {/* =========================================
+                        SCROLL TO BOTTOM
+                    ========================================== */}
+
+                    <button
+                      type="button"
+                      onClick={() => scrollToBottom('smooth')}
+                      className="
+                        absolute
+                        bottom-5
+                        right-5
+                        lg:right-6
+                        z-30
+                        w-10
+                        h-10
+                        rounded-full
+                        bg-[#151c28]
+                        border
+                        border-gray-700
+                        text-gray-300
+                        shadow-xl
+                        shadow-black/30
+                        flex
+                        items-center
+                        justify-center
+                        transition-all
+                        duration-200
+                        hover:bg-gray-800
+                        hover:text-white
+                        hover:border-gray-600
+                        active:scale-95
+                        group
+                      "
+                      title="Ir para a última mensagem"
+                      aria-label="Ir para a última mensagem"
+                    >
+                      <FaChevronLeft
+                        size={13}
+                        className="rotate-[-90deg] transition-transform group-hover:translate-y-0.5"
+                      />
+                    </button>
                   </div>
 
                   {/* =========================================
@@ -1896,8 +2060,6 @@ export default function ChatPage() {
           currentConversation?.type === 'broker_channel' &&
           !isWhatsAppConversation && (
             <div className="fixed inset-0 z-[60] flex">
-              {/* Overlay */}
-
               <button
                 type="button"
                 aria-label="Fechar participantes"
@@ -1905,11 +2067,7 @@ export default function ChatPage() {
                 className="absolute inset-0 cursor-default bg-black/60 backdrop-blur-[2px]"
               />
 
-              {/* Panel */}
-
               <aside className="relative ml-auto flex h-full w-[340px] max-w-[90vw] flex-col border-l border-gray-800 bg-[#0c1017] shadow-2xl">
-                {/* Header */}
-
                 <div className="flex h-[76px] shrink-0 items-center justify-between border-b border-gray-800 px-5">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-500/10 bg-blue-500/[0.06]">
@@ -1963,8 +2121,6 @@ export default function ChatPage() {
                   </button>
                 </div>
 
-                {/* Participant list */}
-
                 <div className="flex-1 overflow-y-auto p-3 scrollbar-thin scrollbar-thumb-gray-800">
                   {currentParticipants.length === 0 ? (
                     <div className="flex h-full flex-col items-center justify-center px-6 text-center">
@@ -1997,18 +2153,16 @@ export default function ChatPage() {
                           <div
                             key={participant?._id}
                             className="
-                                flex
-                                items-center
-                                gap-3
-                                rounded-xl
-                                px-3
-                                py-3
-                                transition
-                                hover:bg-gray-800/30
-                              "
+                              flex
+                              items-center
+                              gap-3
+                              rounded-xl
+                              px-3
+                              py-3
+                              transition
+                              hover:bg-gray-800/30
+                            "
                           >
-                            {/* Avatar */}
-
                             <div className="relative shrink-0">
                               <div className="w-10 h-10 rounded-xl bg-gray-800 border border-gray-700 flex items-center justify-center overflow-hidden">
                                 {participant?.avatar ? (
@@ -2026,24 +2180,22 @@ export default function ChatPage() {
 
                               <span
                                 className={`
-                                    absolute
-                                    -bottom-0.5
-                                    -right-0.5
-                                    w-2.5
-                                    h-2.5
-                                    rounded-full
-                                    border-2
-                                    border-[#0c1017]
-                                    ${
-                                      participantOnline
-                                        ? 'bg-emerald-400'
-                                        : 'bg-gray-700'
-                                    }
-                                  `}
+                                  absolute
+                                  -bottom-0.5
+                                  -right-0.5
+                                  w-2.5
+                                  h-2.5
+                                  rounded-full
+                                  border-2
+                                  border-[#0c1017]
+                                  ${
+                                    participantOnline
+                                      ? 'bg-emerald-400'
+                                      : 'bg-gray-700'
+                                  }
+                                `}
                               />
                             </div>
-
-                            {/* Info */}
 
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5">
@@ -2061,13 +2213,13 @@ export default function ChatPage() {
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span
                                   className={`
-                                      text-[9px]
-                                      ${
-                                        participantOnline
-                                          ? 'text-emerald-400/70'
-                                          : 'text-gray-600'
-                                      }
-                                    `}
+                                    text-[9px]
+                                    ${
+                                      participantOnline
+                                        ? 'text-emerald-400/70'
+                                        : 'text-gray-600'
+                                    }
+                                  `}
                                 >
                                   {participantOnline ? 'Online' : 'Offline'}
                                 </span>
@@ -2107,8 +2259,6 @@ export default function ChatPage() {
         {showNewChat && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
             <div className="w-full max-w-md bg-[#0d1119] border border-gray-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-              {/* Modal header */}
-
               <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
                 <h3 className="text-base font-bold text-white">
                   Nova Conversa
@@ -2133,8 +2283,6 @@ export default function ChatPage() {
                   <FaTimes size={14} />
                 </button>
               </div>
-
-              {/* Mode switch */}
 
               <div className="p-4 border-b border-gray-800 bg-[#090d13]">
                 <div className="grid grid-cols-2 gap-2 bg-[#080b11] p-1 rounded-xl border border-gray-800">
@@ -2186,8 +2334,6 @@ export default function ChatPage() {
                   </button>
                 </div>
               </div>
-
-              {/* Modal body */}
 
               <div className="flex-1 overflow-y-auto p-5 space-y-4">
                 {newChatMode === 'channel' ? (
@@ -2355,8 +2501,6 @@ export default function ChatPage() {
                   </div>
                 )}
               </div>
-
-              {/* Modal footer */}
 
               <div className="px-5 py-4 border-t border-gray-800 flex items-center justify-end gap-3 bg-[#090d13]">
                 <button
