@@ -110,13 +110,22 @@ export default function ChatPage() {
   */
 
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'end',
-      });
-    }
-  }, [messages]);
+  if (!messagesEndRef.current || !messages.length) {
+    return;
+  }
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: 'auto',
+      block: 'end',
+    });
+  };
+
+  // Aguarda o DOM terminar de renderizar as mensagens
+  requestAnimationFrame(() => {
+    requestAnimationFrame(scrollToBottom);
+  });
+}, [messages]);
 
   /*
   ============================================================
