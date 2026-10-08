@@ -345,7 +345,14 @@ export default function HotsiteFooter({ broker, brokerSlug }) {
 
             <span className="inline-flex items-center gap-1.5">
               Desenvolvido por
-              <span className="text-slate-300">Leads Na Mão</span>
+              <a
+                href="https://crmleadsnamao.netlify.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-slate-300 hover:text-white transition-colors"
+              >
+                Leads Na Mão
+              </a>
             </span>
           </div>
         </div>
