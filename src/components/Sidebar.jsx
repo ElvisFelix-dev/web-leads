@@ -28,15 +28,25 @@ import {
   FaCheckCircle,
   FaComments,
   FaWhatsapp,
+  FaBell,
 } from 'react-icons/fa';
 
 import imgLogo from '../assets/logoImg.png';
+
+import {
+  subscribePush,
+  unsubscribePush,
+  isPushSubscribed,
+} from '../service/pushNotificationService';
 
 export default function Sidebar({ onCollapseChange }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [salesMenuOpen, setSalesMenuOpen] = useState(false);
+
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
 
   const dropdownRef = useRef(null);
 
@@ -83,6 +93,64 @@ export default function Sidebar({ onCollapseChange }) {
     setMobileOpen(false);
     setDropdownOpen(false);
   };
+
+  // ============================================================
+  // PUSH NOTIFICATIONS
+  // ============================================================
+
+  const handlePushToggle = async () => {
+    if (pushLoading) return;
+
+    setPushLoading(true);
+
+    try {
+      if (pushSubscribed) {
+        await unsubscribePush();
+
+        setPushSubscribed(false);
+
+        console.log('[Sidebar] Notificações push desativadas.');
+
+        return;
+      }
+
+      await subscribePush();
+
+      setPushSubscribed(true);
+
+      console.log('[Sidebar] Notificações push ativadas.');
+    } catch (error) {
+      console.error('[Sidebar] Erro ao configurar notificações push:', error);
+    } finally {
+      setPushLoading(false);
+    }
+  };
+
+  // ============================================================
+  // VERIFICA SUBSCRIPTION PUSH
+  // ============================================================
+
+  useEffect(() => {
+    let mounted = true;
+
+    const checkPushSubscription = async () => {
+      try {
+        const subscribed = await isPushSubscribed();
+
+        if (mounted) {
+          setPushSubscribed(subscribed);
+        }
+      } catch (error) {
+        console.error('[Sidebar] Erro ao verificar notificações push:', error);
+      }
+    };
+
+    checkPushSubscription();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // ============================================================
   // FECHA DROPDOWN DO USUÁRIO AO CLICAR FORA
@@ -294,12 +362,6 @@ export default function Sidebar({ onCollapseChange }) {
           path: '/broker-dashboard',
           label: 'Meu Dashboard',
           icon: <FaChartLine />,
-        },
-
-        {
-          path: '/qr',
-          label: 'WhatsApp',
-          icon: <FaWhatsapp />,
         },
 
         // ------------------------------------------------------
@@ -814,6 +876,7 @@ export default function Sidebar({ onCollapseChange }) {
                 shadow-xl
               "
             >
+              {/* PERFIL */}
               <Link
                 to={profilePath}
                 onClick={() => {
@@ -837,6 +900,45 @@ export default function Sidebar({ onCollapseChange }) {
                 <span>Perfil</span>
               </Link>
 
+              {/* NOTIFICAÇÕES */}
+              <button
+                type="button"
+                onClick={handlePushToggle}
+                disabled={pushLoading}
+                className="
+                  flex
+                  items-center
+                  gap-3
+                  w-full
+                  px-4
+                  py-3
+                  text-sm
+                  text-gray-200
+                  hover:bg-gray-700
+                  transition
+                  disabled:opacity-60
+                  disabled:cursor-wait
+                "
+              >
+                <FaBell
+                  size={14}
+                  className={pushSubscribed ? 'text-blue-400' : 'text-gray-400'}
+                />
+
+                <span className="flex-1 text-left">
+                  {pushLoading
+                    ? 'Configurando...'
+                    : pushSubscribed
+                      ? 'Notificações ativadas'
+                      : 'Ativar notificações'}
+                </span>
+
+                {pushSubscribed && !pushLoading && (
+                  <span className="w-2 h-2 rounded-full bg-blue-400" />
+                )}
+              </button>
+
+              {/* SAIR */}
               <button
                 type="button"
                 onClick={handleLogout}
