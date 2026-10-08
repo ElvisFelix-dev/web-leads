@@ -588,7 +588,7 @@ export default function ChatPage() {
   */
 
   return (
-    <div className="min-h-screen bg-[#080b11] text-white">
+    <div className="chat-scroll min-h-screen bg-[#080b11] text-white">
       {/* ======================================================
           BACKGROUND
       ====================================================== */}

@@ -665,6 +665,7 @@ export default function Sidebar({ onCollapseChange }) {
 
       <aside
         className={`
+          sidebar-scroll
           fixed
           top-0
           left-0
