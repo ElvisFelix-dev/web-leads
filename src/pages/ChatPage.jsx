@@ -26,7 +26,6 @@ import { UserContext } from '../context/UserContext';
 
 export default function ChatPage() {
   const navigate = useNavigate();
-
   const { user } = useContext(UserContext);
 
   const {
@@ -58,42 +57,21 @@ export default function ChatPage() {
 
   const [showNewChat, setShowNewChat] = useState(false);
   const [newChatMode, setNewChatMode] = useState('direct');
-
   const [channelName, setChannelName] = useState('');
   const [selectedUsers, setSelectedUsers] = useState([]);
 
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-
   const [isMobile, setIsMobile] = useState(false);
-
   const [showParticipants, setShowParticipants] = useState(false);
-
-  /*
-  ============================================================
-  REFS
-  ============================================================
-  */
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [creatingConversation, setCreatingConversation] = useState(false);
 
   const messagesContainerRef = useRef(null);
-  const messagesEndRef = useRef(null);
-
   const inputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
-
-  /*
-   * Guarda qual conversa já teve o scroll inicial executado.
-   *
-   * Isso evita que cada atualização das mensagens jogue
-   * novamente o usuário para o final.
-   */
   const initialScrollConversationRef = useRef(null);
-
-  /*
-   * Quantidade anterior de mensagens.
-   *
-   * Usado para identificar quando uma nova mensagem chegou.
-   */
   const previousMessagesCountRef = useRef(0);
 
   /*
@@ -118,12 +96,14 @@ export default function ChatPage() {
 
   /*
   ============================================================
-  CONVERSAS
+  CARREGAR CONVERSAS
   ============================================================
   */
 
   useEffect(() => {
-    loadConversations();
+    if (typeof loadConversations === 'function') {
+      loadConversations();
+    }
   }, [loadConversations]);
 
   /*
@@ -132,9 +112,6 @@ export default function ChatPage() {
   ============================================================
   */
 
-  /*
-   * Volta o scroll para o final da conversa.
-   */
   const scrollToBottom = (behavior = 'smooth') => {
     const container = messagesContainerRef.current;
 
@@ -144,97 +121,87 @@ export default function ChatPage() {
       top: container.scrollHeight,
       behavior,
     });
+
+    setShowScrollButton(false);
+  };
+
+  const handleMessagesScroll = () => {
+    const container = messagesContainerRef.current;
+
+    if (!container) return;
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+
+    setShowScrollButton(distanceFromBottom > 180);
   };
 
   /*
-   * Ao trocar de conversa, resetamos os controles de scroll.
-   *
-   * O scroll inicial será executado somente quando as mensagens
-   * realmente estiverem disponíveis.
+   * Reinicia o controle ao trocar de conversa.
    */
   useEffect(() => {
-<<<<<<< HEAD
-    const conversationId = currentConversation?._id?.toString();
-
-    if (!conversationId) {
-      initialScrollConversationRef.current = null;
-      previousMessagesCountRef.current = 0;
-      return;
-    }
-
+    initialScrollConversationRef.current = null;
     previousMessagesCountRef.current = 0;
+    setShowScrollButton(false);
+    setInputMessage('');
+    setIsTyping(false);
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
   }, [currentConversation?._id]);
 
   /*
-   * Scroll inicial da conversa.
-   *
-   * Importante:
-   * usamos messages.length como dependência porque a conversa
-   * pode ser selecionada antes de as mensagens terminarem de
-   * carregar.
+   * Posicionamento inicial depois que as mensagens carregarem.
    */
   useEffect(() => {
     const conversationId = currentConversation?._id?.toString();
 
-    if (!conversationId || messages.length === 0) {
-      return;
-    }
+    if (!conversationId || loading) return;
 
-    /*
-     * Essa conversa já foi posicionada no final.
-     */
     if (initialScrollConversationRef.current === conversationId) {
       return;
     }
 
-    /*
-     * Esperamos dois frames para garantir que o DOM já tenha
-     * calculado o scrollHeight depois da renderização das mensagens.
-     */
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        /*
-         * A conversa pode ter mudado durante os frames.
-         */
-        if (currentConversation?._id?.toString() !== conversationId) {
-          return;
-        }
+    let firstFrame;
+    let secondFrame;
 
+    firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => {
+        const currentId = currentConversation?._id?.toString();
         const container = messagesContainerRef.current;
 
-        if (!container) {
-          return;
-        }
+        if (!container || currentId !== conversationId) return;
 
         container.scrollTop = container.scrollHeight;
 
         initialScrollConversationRef.current = conversationId;
-
         previousMessagesCountRef.current = messages.length;
+
+        setShowScrollButton(false);
       });
     });
-  }, [currentConversation?._id, messages.length]);
+
+    return () => {
+      cancelAnimationFrame(firstFrame);
+
+      if (secondFrame !== undefined) {
+        cancelAnimationFrame(secondFrame);
+      }
+    };
+  }, [currentConversation?._id, messages.length, loading]);
 
   /*
-   * Novas mensagens.
-   *
-   * Se o usuário estiver próximo do final, acompanhamos a nova
-   * mensagem.
-   *
-   * Se estiver lendo mensagens antigas, NÃO mexemos no scroll.
+   * Novas mensagens: acompanha o final apenas quando o usuário
+   * já estava próximo dele.
    */
   useEffect(() => {
     const conversationId = currentConversation?._id?.toString();
-
     const container = messagesContainerRef.current;
 
-    if (!conversationId || !container || messages.length === 0) {
-      return;
-    }
+    if (!conversationId || !container || loading) return;
 
-    /*
-     * Ainda estamos aguardando o scroll inicial.
-     */
     if (initialScrollConversationRef.current !== conversationId) {
       return;
     }
@@ -242,52 +209,33 @@ export default function ChatPage() {
     const previousCount = previousMessagesCountRef.current;
     const currentCount = messages.length;
 
-    /*
-     * Só fazemos alguma coisa quando uma nova mensagem entrou.
-     */
     if (currentCount > previousCount) {
       const distanceFromBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
 
-      /*
-       * Consideramos "perto do final" até 150px.
-       */
-      const isNearBottom = distanceFromBottom <= 150;
-
-      if (isNearBottom) {
+      if (distanceFromBottom <= 180) {
         requestAnimationFrame(() => {
-          container.scrollTo({
-            top: container.scrollHeight,
-            behavior: 'smooth',
-          });
+          const currentId = currentConversation?._id?.toString();
+          const currentContainer = messagesContainerRef.current;
+
+          if (currentContainer && currentId === conversationId) {
+            currentContainer.scrollTo({
+              top: currentContainer.scrollHeight,
+              behavior: 'smooth',
+            });
+
+            setShowScrollButton(false);
+          }
         });
       }
     }
 
     previousMessagesCountRef.current = currentCount;
-  }, [messages.length, currentConversation?._id]);
-=======
-  if (!messagesEndRef.current || !messages.length) {
-    return;
-  }
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: 'auto',
-      block: 'end',
-    });
-  };
-
-  // Aguarda o DOM terminar de renderizar as mensagens
-  requestAnimationFrame(() => {
-    requestAnimationFrame(scrollToBottom);
-  });
-}, [messages]);
->>>>>>> 30061b8b42f759538872f0239ca4e5be305c71f9
+  }, [messages.length, currentConversation?._id, loading]);
 
   /*
   ============================================================
-  LIMPEZA DO TYPING
+  LIMPEZA
   ============================================================
   */
 
@@ -306,32 +254,48 @@ export default function ChatPage() {
   */
 
   useEffect(() => {
-    const delayDebounce = setTimeout(async () => {
-      if (search.length >= 2 && showNewChat && newChatMode === 'direct') {
-        setSearching(true);
+    let cancelled = false;
 
-        try {
-          const results = await searchUsers(search);
+    const term = search.trim();
 
-          const currentUserId = user?._id?.toString();
+    if (!showNewChat || newChatMode !== 'direct' || term.length < 2) {
+      setSearchResults([]);
+      setSearching(false);
+      return undefined;
+    }
 
+    const timeout = setTimeout(async () => {
+      setSearching(true);
+
+      try {
+        const results = await searchUsers(term);
+        const currentUserId = user?._id?.toString();
+
+        if (!cancelled) {
           setSearchResults(
-            results.filter((u) => u?._id?.toString() !== currentUserId),
+            (Array.isArray(results) ? results : []).filter(
+              (item) => item?._id?.toString() !== currentUserId,
+            ),
           );
-        } catch (error) {
-          console.error('Erro ao buscar usuários:', error);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar usuários:', error);
 
+        if (!cancelled) {
           setSearchResults([]);
-        } finally {
+        }
+      } finally {
+        if (!cancelled) {
           setSearching(false);
         }
-      } else {
-        setSearchResults([]);
       }
     }, 300);
 
-    return () => clearTimeout(delayDebounce);
-  }, [search, showNewChat, newChatMode, user, searchUsers]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [search, showNewChat, newChatMode, user?._id, searchUsers]);
 
   /*
   ============================================================
@@ -347,30 +311,22 @@ export default function ChatPage() {
     if (Number.isNaN(d.getTime())) return '';
 
     const now = new Date();
+    const diff = now.getTime() - d.getTime();
 
-    const diff = now - d;
+    if (diff < 60000 && diff >= 0) return 'Agora';
 
-    if (diff < 0) {
-      return d.toLocaleTimeString('pt-BR', {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    }
-
-    if (diff < 60000) return 'Agora';
-
-    if (diff < 3600000) {
+    if (diff < 3600000 && diff >= 0) {
       return `${Math.floor(diff / 60000)}min`;
     }
 
-    if (diff < 86400000) {
+    if (diff < 86400000 && diff >= 0) {
       return d.toLocaleTimeString('pt-BR', {
         hour: '2-digit',
         minute: '2-digit',
       });
     }
 
-    if (diff < 604800000) {
+    if (diff < 604800000 && diff >= 0) {
       return d.toLocaleDateString('pt-BR', {
         weekday: 'short',
       });
@@ -399,16 +355,16 @@ export default function ChatPage() {
     if (!date) return '';
 
     const d = new Date(date);
-    const today = new Date();
 
     if (Number.isNaN(d.getTime())) return '';
+
+    const today = new Date();
 
     if (d.toDateString() === today.toDateString()) {
       return 'Hoje';
     }
 
     const yesterday = new Date(today);
-
     yesterday.setDate(yesterday.getDate() - 1);
 
     if (d.toDateString() === yesterday.toDateString()) {
@@ -422,217 +378,10 @@ export default function ChatPage() {
     });
   };
 
-  /*
-  ============================================================
-  PARTICIPANTES
-  ============================================================
-  */
-
-  const getParticipants = (conversation) => {
-    if (!conversation?.participants) {
-      return [];
-    }
-
-    if (!Array.isArray(conversation.participants)) {
-      return [];
-    }
-
-    return conversation.participants.filter(Boolean);
-  };
-
-  const getOnlineParticipants = (conversation) => {
-    const participants = getParticipants(conversation);
-
-    return participants.filter((participant) => isUserOnline(participant?._id));
-  };
-
-  const getParticipantCount = (conversation) => {
-    return getParticipants(conversation).length;
-  };
-
-  const getOnlineParticipantCount = (conversation) => {
-    return getOnlineParticipants(conversation).length;
-  };
-
-  /*
-  ============================================================
-  NOVA CONVERSA
-  ============================================================
-  */
-
-  const resetNewChat = () => {
-    setShowNewChat(false);
-    setSearch('');
-    setSearchResults([]);
-    setSelectedUsers([]);
-    setChannelName('');
-    setNewChatMode('direct');
-  };
-
-  const toggleUser = (userId) => {
-    const normalizedId = userId?.toString();
-
-    setSelectedUsers((prev) =>
-      prev.some((id) => id?.toString() === normalizedId)
-        ? prev.filter((id) => id?.toString() !== normalizedId)
-        : [...prev, userId],
-    );
-  };
-
-  const handleCreateConversation = async () => {
-    try {
-      if (newChatMode === 'channel') {
-        if (!channelName.trim()) return;
-
-        await createBrokerChannel(channelName.trim());
-      } else {
-        if (selectedUsers.length === 0) return;
-
-        await createConversation(selectedUsers);
-      }
-
-      resetNewChat();
-    } catch (error) {
-      console.error('Erro ao criar conversa:', error);
-    }
-  };
-
-  /*
-  ============================================================
-  MENSAGENS
-  ============================================================
-  */
-
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-
-    if (!inputMessage.trim() || !currentConversation) {
-      return;
-    }
-
-    try {
-      await sendMessage(currentConversation._id, inputMessage.trim());
-
-      setInputMessage('');
-      setIsTyping(false);
-
-      if (currentConversation.channel !== 'whatsapp') {
-        sendTyping(currentConversation._id, false);
-      }
-
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 50);
-    } catch (error) {
-      console.error('Erro ao enviar mensagem:', error);
-    }
-  };
-
-  const handleTyping = (e) => {
-    const value = e.target.value;
-
-    setInputMessage(value);
-
-    if (!currentConversation) return;
-
-    /*
-     * WhatsApp não utiliza o typing interno do Socket.IO.
-     */
-    if (currentConversation.channel === 'whatsapp') {
-      return;
-    }
-
-    if (value.length > 0 && !isTyping) {
-      setIsTyping(true);
-
-      sendTyping(currentConversation._id, true);
-    }
-
-    if (value.length === 0 && isTyping) {
-      setIsTyping(false);
-
-      sendTyping(currentConversation._id, false);
-    }
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    typingTimeoutRef.current = setTimeout(() => {
-      setIsTyping(false);
-
-      if (currentConversation) {
-        sendTyping(currentConversation._id, false);
-      }
-    }, 2000);
-  };
-
-  /*
-  ============================================================
-  CONVERSA
-  ============================================================
-  */
-
-  const handleSelectConversation = (conversation) => {
-    setShowParticipants(false);
-    setIsTyping(false);
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    /*
-     * Resetamos o controle de scroll antes de trocar de conversa.
-     */
-    previousMessagesCountRef.current = 0;
-
-    selectConversation(conversation);
-
-    if (isMobile) {
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth',
-      });
-    }
-  };
-
-  const handleBack = () => {
-    setShowParticipants(false);
-    setIsTyping(false);
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    setCurrentConversation(null);
-  };
-
-  /*
-  ============================================================
-  HELPERS
-  ============================================================
-  */
-
-  const isWhatsAppConversation = currentConversation?.channel === 'whatsapp';
-
-  const isCurrentChannel = currentConversation?.type === 'broker_channel';
-
-  const getConversationIsWhatsApp = (conversation) => {
-    return conversation?.channel === 'whatsapp';
-  };
-
-  const getSafeConversationName = (conversation) => {
-    return getConversationName?.(conversation) || 'Conversa';
-  };
-
-  const getSafeConversationSubtitle = (conversation) => {
-    return getConversationSubtitle?.(conversation) || '';
-  };
-
   const getInitials = (name = '') => {
-    const parts = name.trim().split(/\s+/).filter(Boolean);
+    const parts = String(name).trim().split(/\s+/).filter(Boolean);
 
-    if (parts.length === 0) return 'U';
+    if (!parts.length) return 'U';
 
     if (parts.length === 1) {
       return parts[0].slice(0, 2).toUpperCase();
@@ -641,36 +390,78 @@ export default function ChatPage() {
     return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
   };
 
+  const getRoleLabel = (role) => {
+    const roles = {
+      admin: 'Administrador',
+      broker: 'Corretor',
+      manager: 'Gerente',
+      supervisor: 'Supervisor',
+      user: 'Usuário',
+    };
+
+    return roles[role] || role || 'Usuário';
+  };
+
+  const getSafeConversationName = (conversation) =>
+    getConversationName?.(conversation) || 'Conversa';
+
+  const getSafeConversationSubtitle = (conversation) =>
+    getConversationSubtitle?.(conversation) || '';
+
+  const getConversationIsWhatsApp = (conversation) =>
+    conversation?.channel === 'whatsapp';
+
   const getLastMessage = (conversation) => {
-    if (typeof conversation?.lastMessage === 'string') {
-      return conversation.lastMessage.trim() || 'Nenhuma mensagem';
+    const lastMessage = conversation?.lastMessage;
+
+    if (typeof lastMessage === 'string') {
+      return lastMessage.trim() || 'Nenhuma mensagem';
     }
 
-    if (
-      conversation?.lastMessage &&
-      typeof conversation.lastMessage === 'object'
-    ) {
-      const content = conversation.lastMessage.content;
-
-      if (typeof content === 'string') {
-        return content.trim() || 'Nenhuma mensagem';
+    if (lastMessage && typeof lastMessage === 'object') {
+      if (typeof lastMessage.content === 'string') {
+        return lastMessage.content.trim() || 'Nenhuma mensagem';
       }
     }
 
-    if (conversation?.lastMessageObject?.content) {
+    if (typeof conversation?.lastMessageObject?.content === 'string') {
       return conversation.lastMessageObject.content;
     }
 
     return 'Nenhuma mensagem';
   };
 
-  const getMessageContent = (message) => {
-    if (typeof message?.content === 'string') {
-      return message.content;
-    }
+  const getMessageContent = (message) =>
+    typeof message?.content === 'string' ? message.content : '';
 
-    return '';
-  };
+  /*
+  ============================================================
+  PARTICIPANTES
+  ============================================================
+  */
+
+  const getParticipants = (conversation) =>
+    Array.isArray(conversation?.participants)
+      ? conversation.participants.filter(Boolean)
+      : [];
+
+  const getOnlineParticipants = (conversation) =>
+    getParticipants(conversation).filter((participant) =>
+      isUserOnline(participant?._id),
+    );
+
+  const getParticipantCount = (conversation) =>
+    getParticipants(conversation).length;
+
+  const getOnlineParticipantCount = (conversation) =>
+    getOnlineParticipants(conversation).length;
+
+  const currentParticipants = getParticipants(currentConversation);
+
+  const currentParticipantCount = getParticipantCount(currentConversation);
+
+  const currentOnlineParticipantCount =
+    getOnlineParticipantCount(currentConversation);
 
   /*
   ============================================================
@@ -681,9 +472,7 @@ export default function ChatPage() {
   const filteredConversations = useMemo(() => {
     const term = search.trim().toLowerCase();
 
-    if (!term) {
-      return conversations;
-    }
+    if (!term || showNewChat) return conversations;
 
     return conversations.filter((conversation) => {
       const name = String(getSafeConversationName(conversation)).toLowerCase();
@@ -700,20 +489,65 @@ export default function ChatPage() {
         lastMessage.includes(term)
       );
     });
-  }, [conversations, search, getConversationName, getConversationSubtitle]);
+  }, [
+    conversations,
+    search,
+    showNewChat,
+    getConversationName,
+    getConversationSubtitle,
+  ]);
 
   /*
   ============================================================
-  CURRENT PARTICIPANTS
+  NOVA CONVERSA
   ============================================================
   */
 
-  const currentParticipants = getParticipants(currentConversation);
+  const resetNewChat = () => {
+    setShowNewChat(false);
+    setSearch('');
+    setSearchResults([]);
+    setSelectedUsers([]);
+    setChannelName('');
+    setNewChatMode('direct');
+    setCreatingConversation(false);
+  };
 
-  const currentParticipantCount = getParticipantCount(currentConversation);
+  const toggleUser = (userId) => {
+    const normalizedId = userId?.toString();
 
-  const currentOnlineParticipantCount =
-    getOnlineParticipantCount(currentConversation);
+    setSelectedUsers((previous) =>
+      previous.some((id) => id?.toString() === normalizedId)
+        ? previous.filter((id) => id?.toString() !== normalizedId)
+        : [...previous, userId],
+    );
+  };
+
+  const handleCreateConversation = async () => {
+    if (creatingConversation) return;
+
+    if (newChatMode === 'channel' && !channelName.trim()) return;
+
+    if (newChatMode === 'direct' && selectedUsers.length === 0) {
+      return;
+    }
+
+    setCreatingConversation(true);
+
+    try {
+      if (newChatMode === 'channel') {
+        await createBrokerChannel(channelName.trim());
+      } else {
+        await createConversation(selectedUsers);
+      }
+
+      resetNewChat();
+    } catch (error) {
+      console.error('Erro ao criar conversa:', error);
+    } finally {
+      setCreatingConversation(false);
+    }
+  };
 
   /*
   ============================================================
@@ -721,37 +555,145 @@ export default function ChatPage() {
   ============================================================
   */
 
+  const handleTyping = (event) => {
+    const value = event.target.value;
+
+    setInputMessage(value);
+
+    if (!currentConversation) return;
+
+    if (currentConversation.channel === 'whatsapp') return;
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    if (value.trim() && !isTyping) {
+      setIsTyping(true);
+      sendTyping(currentConversation._id, true);
+    }
+
+    if (!value.trim() && isTyping) {
+      setIsTyping(false);
+      sendTyping(currentConversation._id, false);
+    }
+
+    if (value.trim()) {
+      const conversationId = currentConversation._id;
+
+      typingTimeoutRef.current = setTimeout(() => {
+        setIsTyping(false);
+        sendTyping(conversationId, false);
+      }, 2000);
+    }
+  };
+
+  /*
+  ============================================================
+  ENVIAR MENSAGEM
+  ============================================================
+  */
+
+  const handleSendMessage = async (event) => {
+    event.preventDefault();
+
+    const content = inputMessage.trim();
+
+    if (!content || !currentConversation || sending) return;
+
+    const conversationId = currentConversation._id;
+    const isWhatsApp = currentConversation.channel === 'whatsapp';
+
+    setSending(true);
+
+    try {
+      await sendMessage(conversationId, content);
+
+      setInputMessage('');
+      setIsTyping(false);
+
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+
+      if (!isWhatsApp) {
+        sendTyping(conversationId, false);
+      }
+
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
+    } catch (error) {
+      console.error('Erro ao enviar mensagem:', error);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  /*
+  ============================================================
+  SELEÇÃO DE CONVERSA
+  ============================================================
+  */
+
+  const handleSelectConversation = (conversation) => {
+    setShowParticipants(false);
+    setIsTyping(false);
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+
+    initialScrollConversationRef.current = null;
+    previousMessagesCountRef.current = 0;
+
+    selectConversation(conversation);
+
+    if (isMobile) {
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth',
+      });
+    }
+  };
+
+  const handleBack = () => {
+    setShowParticipants(false);
+    setIsTyping(false);
+    setInputMessage('');
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+
+    setCurrentConversation(null);
+  };
+
+  /*
+  ============================================================
+  ESTADO DA CONVERSA ATUAL
+  ============================================================
+  */
+
+  const isWhatsAppConversation = currentConversation?.channel === 'whatsapp';
+
+  const isCurrentChannel = currentConversation?.type === 'broker_channel';
+
   const isTypingUser =
     !isWhatsAppConversation &&
-    currentConversation?.participants?.some((participant) => {
+    currentParticipants.some((participant) => {
       const participantId = participant?._id?.toString();
-
       const currentUserId = user?._id?.toString();
 
       return (
         participantId &&
         participantId !== currentUserId &&
-        typingUsers?.[participantId]
+        Boolean(typingUsers?.[participantId])
       );
     });
-
-  /*
-  ============================================================
-  ROLE
-  ============================================================
-  */
-
-  const getRoleLabel = (role) => {
-    const roles = {
-      admin: 'Administrador',
-      broker: 'Corretor',
-      manager: 'Gerente',
-      supervisor: 'Supervisor',
-      user: 'Usuário',
-    };
-
-    return roles[role] || role || 'Usuário';
-  };
 
   /*
   ============================================================
@@ -761,170 +703,97 @@ export default function ChatPage() {
 
   return (
     <div className="chat-scroll min-h-screen bg-[#080b11] text-white">
-      {/* ======================================================
-          BACKGROUND
-      ====================================================== */}
-
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-blue-600/[0.035] rounded-full blur-[120px]" />
-
-        <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-emerald-600/[0.025] rounded-full blur-[120px]" />
+        <div className="absolute top-0 left-1/4 h-[500px] w-[500px] rounded-full bg-blue-600/[0.035] blur-[120px]" />
+        <div className="absolute bottom-0 right-1/4 h-[500px] w-[500px] rounded-full bg-emerald-600/[0.025] blur-[120px]" />
       </div>
 
-      <div className="relative max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-5 lg:py-7">
-        {/* ====================================================
-            HEADER PRINCIPAL
-        ===================================================== */}
+      <div className="relative mx-auto max-w-[1500px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+        {/* HEADER */}
 
-        <header className="mb-5">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <button
-                type="button"
-                onClick={() => navigate(-1)}
-                className="
-                  w-10
-                  h-10
-                  shrink-0
-                  rounded-xl
-                  border
-                  border-gray-800
-                  bg-[#0d1119]
-                  flex
-                  items-center
-                  justify-center
-                  text-gray-500
-                  hover:text-white
-                  hover:bg-gray-800
-                  transition
-                "
-                aria-label="Voltar"
-              >
-                <FaChevronLeft size={15} />
-              </button>
-
-              <div className="w-10 h-10 shrink-0 rounded-xl bg-blue-600/10 border border-blue-500/10 flex items-center justify-center">
-                <FaComments className="text-blue-400" size={17} />
-              </div>
-
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h1 className="text-xl lg:text-2xl font-bold text-white truncate">
-                    Mensagens
-                  </h1>
-
-                  {unreadCount > 0 && (
-                    <span className="shrink-0 px-2 py-0.5 rounded-full bg-blue-600/15 border border-blue-500/20 text-blue-400 text-[10px] font-bold">
-                      {unreadCount} novas
-                    </span>
-                  )}
-                </div>
-
-                <p className="text-xs lg:text-sm text-gray-500 mt-0.5">
-                  Comunicação interna e WhatsApp da equipe
-                </p>
-              </div>
-            </div>
-
+        <header className="mb-5 flex items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
-              onClick={() => setShowNewChat(true)}
-              className="
-                shrink-0
-                h-10
-                lg:h-11
-                px-3
-                lg:px-4
-                rounded-xl
-                bg-blue-600
-                hover:bg-blue-500
-                active:bg-blue-700
-                text-white
-                text-xs
-                lg:text-sm
-                font-semibold
-                transition
-                flex
-                items-center
-                gap-2
-                shadow-lg
-                shadow-blue-600/10
-              "
+              onClick={() => navigate(-1)}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-800 bg-[#0d1119] text-gray-500 transition hover:bg-gray-800 hover:text-white"
+              aria-label="Voltar"
             >
-              <FaPlus size={12} />
-
-              <span className="hidden sm:inline">Nova conversa</span>
+              <FaChevronLeft size={15} />
             </button>
+
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-500/10 bg-blue-600/10">
+              <FaComments className="text-blue-400" size={17} />
+            </div>
+
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="truncate text-xl font-bold lg:text-2xl">
+                  Mensagens
+                </h1>
+
+                {unreadCount > 0 && (
+                  <span className="shrink-0 rounded-full border border-blue-500/20 bg-blue-600/15 px-2 py-0.5 text-[10px] font-bold text-blue-400">
+                    {unreadCount} novas
+                  </span>
+                )}
+              </div>
+
+              <p className="mt-0.5 text-xs text-gray-500 lg:text-sm">
+                Comunicação interna e WhatsApp da equipe
+              </p>
+            </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowNewChat(true)}
+            className="flex h-10 shrink-0 items-center gap-2 rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white shadow-lg shadow-blue-600/10 transition hover:bg-blue-500 lg:h-11 lg:px-4 lg:text-sm"
+          >
+            <FaPlus size={12} />
+            <span className="hidden sm:inline">Nova conversa</span>
+          </button>
         </header>
 
-        {/* ====================================================
-            CHAT CONTAINER
-        ===================================================== */}
+        {/* CHAT PRINCIPAL */}
 
-        <div className="bg-[#0d1119] border border-gray-800/80 rounded-2xl overflow-hidden h-[calc(100vh-205px)] min-h-[520px] shadow-2xl shadow-black/20">
-          <div className="flex h-full">
-            {/* =================================================
-                SIDEBAR
-            ================================================== */}
+        <div className="flex h-[calc(100dvh-205px)] min-h-[520px] overflow-hidden rounded-2xl border border-gray-800/80 bg-[#0d1119] shadow-2xl shadow-black/20">
+          <div className="flex h-full w-full">
+            {/* SIDEBAR */}
 
-            <div
+            <aside
               className={`${
                 currentConversation && isMobile ? 'hidden' : 'flex'
-              } w-full lg:w-[360px] xl:w-[390px] shrink-0 flex-col border-r border-gray-800/80 bg-[#0b0f16]`}
+              } w-full shrink-0 flex-col border-r border-gray-800/80 bg-[#0b0f16] lg:flex lg:w-[360px] xl:w-[390px]`}
             >
-              {/* Search */}
-
-              <div className="p-4 border-b border-gray-800/80">
-                <div className="relative group">
+              <div className="border-b border-gray-800/80 p-4">
+                <div className="group relative">
                   <FaSearch
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-blue-400 transition"
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-600 transition group-focus-within:text-blue-400"
                     size={12}
                   />
 
                   <input
                     type="text"
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Buscar nome, telefone ou mensagem..."
-                    className="
-                      w-full
-                      h-10
-                      bg-[#080b11]
-                      border
-                      border-gray-800
-                      rounded-xl
-                      pl-10
-                      pr-4
-                      text-sm
-                      text-white
-                      placeholder:text-gray-600
-                      outline-none
-                      focus:border-blue-500/50
-                      focus:ring-2
-                      focus:ring-blue-500/5
-                      transition
-                    "
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Buscar conversa..."
+                    className="h-10 w-full rounded-xl border border-gray-800 bg-[#080b11] pl-10 pr-4 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/5"
                   />
                 </div>
               </div>
 
-              {/* Conversation list */}
-
-              <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800">
+              <div className="scrollbar-thin scrollbar-thumb-gray-800 flex-1 overflow-y-auto">
                 {loadingConversations ? (
-                  <div className="flex flex-col items-center justify-center h-48">
-                    <div className="w-7 h-7 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
-
-                    <span className="text-xs text-gray-600 mt-3">
+                  <div className="flex h-48 flex-col items-center justify-center">
+                    <div className="h-7 w-7 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+                    <span className="mt-3 text-xs text-gray-600">
                       Carregando conversas...
                     </span>
                   </div>
                 ) : filteredConversations.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full px-8 text-center">
-                    <div className="w-14 h-14 rounded-2xl bg-gray-800/40 border border-gray-800 flex items-center justify-center mb-4">
-                      <FaComments size={22} className="text-gray-600" />
-                    </div>
+                  <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+                    <FaComments className="mb-4 text-gray-600" size={28} />
 
                     <p className="text-sm font-semibold text-gray-400">
                       {search
@@ -932,115 +801,89 @@ export default function ChatPage() {
                         : 'Nenhuma conversa'}
                     </p>
 
-                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                    <p className="mt-1.5 text-xs leading-relaxed text-gray-600">
                       {search
-                        ? 'Tente outro nome, telefone ou mensagem.'
-                        : 'Comece uma nova conversa com alguém da sua equipe.'}
+                        ? 'Tente buscar outro nome ou mensagem.'
+                        : 'Comece uma nova conversa com sua equipe.'}
                     </p>
 
-                    {!search && (
-                      <button
-                        type="button"
-                        onClick={() => setShowNewChat(true)}
-                        className="mt-5 px-3.5 py-2 rounded-lg bg-blue-600/10 border border-blue-500/20 text-blue-400 text-xs font-semibold hover:bg-blue-600/15 transition"
-                      >
-                        Iniciar conversa
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShowNewChat(true)}
+                      className="mt-5 rounded-lg border border-blue-500/20 bg-blue-600/10 px-3.5 py-2 text-xs font-semibold text-blue-400 transition hover:bg-blue-600/15"
+                    >
+                      Iniciar conversa
+                    </button>
                   </div>
                 ) : (
-                  filteredConversations.map((conv) => {
+                  filteredConversations.map((conversation) => {
+                    const conversationId = conversation?._id?.toString();
+
                     const isActive =
-                      currentConversation?._id?.toString() ===
-                      conv?._id?.toString();
+                      currentConversation?._id?.toString() === conversationId;
 
-                    const isWhatsApp = getConversationIsWhatsApp(conv);
+                    const isWhatsApp = getConversationIsWhatsApp(conversation);
 
-                    const otherUser = !isWhatsApp && getOtherParticipant(conv);
+                    const isChannel = conversation?.type === 'broker_channel';
 
-                    const online =
-                      !isWhatsApp && otherUser
-                        ? isUserOnline(otherUser._id)
-                        : false;
+                    const otherUser =
+                      !isWhatsApp && !isChannel
+                        ? getOtherParticipant(conversation)
+                        : null;
 
-                    const unread = Number(conv.unreadCount || 0);
+                    const online = otherUser
+                      ? isUserOnline(otherUser._id)
+                      : false;
 
-                    const avatar = getConversationAvatar(conv);
+                    const unread = Number(conversation?.unreadCount || 0);
 
-                    const name = getSafeConversationName(conv);
+                    const avatar = getConversationAvatar(conversation);
 
-                    const subtitle = getSafeConversationSubtitle(conv);
+                    const name = getSafeConversationName(conversation);
 
-                    const isChannel = conv.type === 'broker_channel';
+                    const subtitle = getSafeConversationSubtitle(conversation);
 
-                    const participantCount = getParticipantCount(conv);
+                    const participantCount = getParticipantCount(conversation);
 
-                    const onlineParticipantCount =
-                      getOnlineParticipantCount(conv);
+                    const onlineCount = getOnlineParticipantCount(conversation);
 
                     return (
                       <button
-                        key={conv._id}
+                        key={conversationId}
                         type="button"
-                        onClick={() => handleSelectConversation(conv)}
-                        className={`
-                          relative
-                          w-full
-                          p-3.5
-                          text-left
-                          border-b
-                          border-gray-800/50
-                          transition
-                          group
-                          ${
-                            isActive
-                              ? isWhatsApp
-                                ? 'bg-emerald-600/[0.06]'
-                                : 'bg-blue-600/[0.07]'
-                              : 'hover:bg-gray-800/25'
-                          }
-                        `}
+                        onClick={() => handleSelectConversation(conversation)}
+                        className={`group relative w-full border-b border-gray-800/50 p-3.5 text-left transition ${
+                          isActive
+                            ? isWhatsApp
+                              ? 'bg-emerald-600/[0.06]'
+                              : 'bg-blue-600/[0.07]'
+                            : 'hover:bg-gray-800/25'
+                        }`}
                       >
                         {isActive && (
-                          <div
-                            className={`
-                              absolute
-                              left-0
-                              top-2
-                              bottom-2
-                              w-0.5
-                              rounded-r-full
-                              ${isWhatsApp ? 'bg-emerald-500' : 'bg-blue-500'}
-                            `}
+                          <span
+                            className={`absolute bottom-2 left-0 top-2 w-0.5 rounded-r-full ${
+                              isWhatsApp ? 'bg-emerald-500' : 'bg-blue-500'
+                            }`}
                           />
                         )}
 
                         <div className="flex items-center gap-3">
                           <div className="relative shrink-0">
                             <div
-                              className={`
-                                w-11
-                                h-11
-                                rounded-xl
-                                border
-                                flex
-                                items-center
-                                justify-center
-                                overflow-hidden
-                                ${
-                                  isWhatsApp
-                                    ? 'bg-emerald-500/5 border-emerald-500/20'
-                                    : 'bg-gray-800/70 border-gray-700/70'
-                                }
-                              `}
+                              className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl border ${
+                                isWhatsApp
+                                  ? 'border-emerald-500/20 bg-emerald-500/5'
+                                  : 'border-gray-700/70 bg-gray-800/70'
+                              }`}
                             >
                               {avatar ? (
                                 <img
                                   src={avatar}
                                   alt={name}
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
+                                  className="h-full w-full object-cover"
+                                  onError={(event) => {
+                                    event.currentTarget.style.display = 'none';
                                   }}
                                 />
                               ) : isWhatsApp ? (
@@ -1059,186 +902,82 @@ export default function ChatPage() {
 
                             {!isWhatsApp && !isChannel && (
                               <span
-                                className={`
-                                  absolute
-                                  -bottom-0.5
-                                  -right-0.5
-                                  w-3
-                                  h-3
-                                  rounded-full
-                                  border-2
-                                  border-[#0b0f16]
-                                  ${online ? 'bg-emerald-400' : 'bg-gray-700'}
-                                `}
+                                className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#0b0f16] ${
+                                  online ? 'bg-emerald-400' : 'bg-gray-700'
+                                }`}
                               />
                             )}
                           </div>
 
-                          <div className="flex-1 min-w-0">
+                          <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-1.5 min-w-0">
+                              <div className="flex min-w-0 items-center gap-1.5">
                                 <p
-                                  className={`
-                                    text-sm
-                                    truncate
-                                    ${
-                                      unread > 0
-                                        ? 'font-bold text-white'
-                                        : 'font-semibold text-gray-200'
-                                    }
-                                  `}
+                                  className={`truncate text-sm ${
+                                    unread > 0
+                                      ? 'font-bold text-white'
+                                      : 'font-semibold text-gray-200'
+                                  }`}
                                 >
                                   {name}
                                 </p>
 
                                 {isWhatsApp && (
-                                  <span
-                                    className="
-                                      shrink-0
-                                      inline-flex
-                                      items-center
-                                      gap-1
-                                      px-1.5
-                                      py-0.5
-                                      rounded
-                                      bg-emerald-500/10
-                                      border
-                                      border-emerald-500/10
-                                      text-emerald-400
-                                      text-[8px]
-                                      font-semibold
-                                      uppercase
-                                    "
-                                  >
+                                  <span className="inline-flex shrink-0 items-center gap-1 rounded border border-emerald-500/10 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-semibold uppercase text-emerald-400">
                                     <FaWhatsapp size={8} />
                                     WA
                                   </span>
                                 )}
 
-                                {isChannel && !isWhatsApp && (
-                                  <span
-                                    className="
-                                      shrink-0
-                                      px-1.5
-                                      py-0.5
-                                      rounded
-                                      bg-blue-600/10
-                                      border
-                                      border-blue-500/10
-                                      text-blue-400
-                                      text-[8px]
-                                      font-semibold
-                                      uppercase
-                                    "
-                                  >
+                                {isChannel && (
+                                  <span className="shrink-0 rounded border border-blue-500/10 bg-blue-600/10 px-1.5 py-0.5 text-[8px] font-semibold uppercase text-blue-400">
                                     Canal
                                   </span>
                                 )}
                               </div>
 
                               <span
-                                className={`
-                                  shrink-0
-                                  text-[10px]
-                                  ${
-                                    unread > 0
-                                      ? isWhatsApp
-                                        ? 'text-emerald-400'
-                                        : 'text-blue-400'
-                                      : 'text-gray-600'
-                                  }
-                                `}
+                                className={`shrink-0 text-[10px] ${
+                                  unread > 0
+                                    ? isWhatsApp
+                                      ? 'text-emerald-400'
+                                      : 'text-blue-400'
+                                    : 'text-gray-600'
+                                }`}
                               >
-                                {formatTime(conv.lastMessageAt)}
+                                {formatTime(conversation.lastMessageAt)}
                               </span>
                             </div>
 
                             {isWhatsApp && subtitle && (
-                              <p className="mt-0.5 text-[10px] text-gray-600 truncate">
+                              <p className="mt-0.5 truncate text-[10px] text-gray-600">
                                 {subtitle}
                               </p>
                             )}
 
-                            {isChannel && !isWhatsApp ? (
-                              <div className="flex items-center justify-between gap-2 mt-1">
-                                <div className="min-w-0 flex items-center gap-1.5">
-                                  <FaUsers
-                                    size={8}
-                                    className="shrink-0 text-gray-600"
-                                  />
-
-                                  <p className="text-[10px] text-gray-600 truncate">
-                                    {participantCount}{' '}
-                                    {participantCount === 1
-                                      ? 'participante'
-                                      : 'participantes'}
-                                  </p>
-
-                                  {onlineParticipantCount > 0 && (
-                                    <>
-                                      <span className="text-gray-800">•</span>
-
-                                      <p className="text-[10px] text-emerald-400/70 truncate">
-                                        {onlineParticipantCount} online
-                                      </p>
-                                    </>
-                                  )}
-                                </div>
-
-                                {unread > 0 && (
-                                  <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">
-                                    {unread > 99 ? '99+' : unread}
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-between gap-2 mt-1">
-                                <p
-                                  className={`
-                                    text-xs
-                                    truncate
-                                    ${
-                                      unread > 0
-                                        ? 'text-gray-300'
-                                        : 'text-gray-600'
-                                    }
-                                  `}
-                                >
-                                  {getLastMessage(conv)}
-                                </p>
-
-                                {unread > 0 && (
-                                  <span
-                                    className={`
-                                      shrink-0
-                                      min-w-[20px]
-                                      h-5
-                                      px-1.5
-                                      rounded-full
-                                      text-white
-                                      text-[10px]
-                                      font-bold
-                                      flex
-                                      items-center
-                                      justify-center
-                                      ${
-                                        isWhatsApp
-                                          ? 'bg-emerald-600'
-                                          : 'bg-blue-600'
-                                      }
-                                    `}
-                                  >
-                                    {unread > 99 ? '99+' : unread}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-
-                            {isChannel && !isWhatsApp && conv.lastMessage && (
-                              <p className="mt-1 text-[10px] text-gray-700 truncate">
-                                {getLastMessage(conv)}
+                            <div className="mt-1 flex items-center justify-between gap-2">
+                              <p
+                                className={`truncate text-xs ${
+                                  unread > 0 ? 'text-gray-300' : 'text-gray-600'
+                                }`}
+                              >
+                                {isChannel
+                                  ? `${participantCount} participantes${onlineCount ? ` · ${onlineCount} online` : ''}`
+                                  : getLastMessage(conversation)}
                               </p>
-                            )}
+
+                              {unread > 0 && (
+                                <span
+                                  className={`flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white ${
+                                    isWhatsApp
+                                      ? 'bg-emerald-600'
+                                      : 'bg-blue-600'
+                                  }`}
+                                >
+                                  {unread > 99 ? '99+' : unread}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </button>
@@ -1247,17 +986,17 @@ export default function ChatPage() {
                 )}
               </div>
 
-              {/* Sidebar footer */}
+              {/* USUÁRIO LOGADO */}
 
-              <div className="px-4 py-3 border-t border-gray-800/80 bg-[#090d13]">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-7 h-7 rounded-lg bg-gray-800 flex items-center justify-center overflow-hidden">
+              <div className="border-t border-gray-800/80 bg-[#090d13] px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-800">
                       {user?.avatar ? (
                         <img
                           src={user.avatar}
                           alt={user.name}
-                          className="w-full h-full object-cover"
+                          className="h-full w-full object-cover"
                         />
                       ) : (
                         <FaUser size={11} className="text-gray-500" />
@@ -1265,7 +1004,7 @@ export default function ChatPage() {
                     </div>
 
                     <div className="min-w-0">
-                      <p className="text-[11px] font-semibold text-gray-300 truncate">
+                      <p className="truncate text-[11px] font-semibold text-gray-300">
                         {user?.name || 'Usuário'}
                       </p>
 
@@ -1275,64 +1014,41 @@ export default function ChatPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                     <span className="text-[9px] text-gray-600">Conectado</span>
                   </div>
                 </div>
               </div>
-            </div>
+            </aside>
 
-            {/* =================================================
-                CHAT AREA
-            ================================================== */}
+            {/* ÁREA DO CHAT */}
 
-            <div
+            <main
               className={`${
                 !currentConversation && isMobile ? 'hidden' : 'flex'
-              } flex-1 min-w-0 flex-col bg-[#0d1119]`}
+              } min-w-0 flex-1 flex-col bg-[#0d1119]`}
             >
               {!currentConversation ? (
-                <div className="flex-1 flex items-center justify-center px-6">
-                  <div className="text-center max-w-sm">
-                    <div className="relative mx-auto w-20 h-20 mb-5">
-                      <div className="absolute inset-0 rounded-3xl bg-blue-600/5 blur-xl" />
-
-                      <div className="relative w-20 h-20 rounded-3xl bg-[#111722] border border-gray-800 flex items-center justify-center">
-                        <FaComments size={30} className="text-gray-600" />
-                      </div>
+                <div className="flex flex-1 items-center justify-center px-6">
+                  <div className="max-w-sm text-center">
+                    <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl border border-gray-800 bg-[#111722]">
+                      <FaComments size={30} className="text-gray-600" />
                     </div>
 
                     <h2 className="text-lg font-semibold text-gray-300">
                       Suas mensagens
                     </h2>
 
-                    <p className="text-sm text-gray-600 mt-2 leading-relaxed">
+                    <p className="mt-2 text-sm leading-relaxed text-gray-600">
                       Selecione uma conversa para visualizar as mensagens
-                      internas ou WhatsApp.
+                      internas ou do WhatsApp.
                     </p>
 
                     <button
                       type="button"
                       onClick={() => setShowNewChat(true)}
-                      className="
-                        mt-6
-                        inline-flex
-                        items-center
-                        gap-2
-                        px-4
-                        py-2.5
-                        rounded-xl
-                        bg-blue-600
-                        hover:bg-blue-500
-                        text-white
-                        text-xs
-                        font-semibold
-                        transition
-                        shadow-lg
-                        shadow-blue-600/10
-                      "
+                      className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-blue-500"
                     >
                       <FaPlus size={11} />
                       Nova conversa
@@ -1341,45 +1057,20 @@ export default function ChatPage() {
                 </div>
               ) : (
                 <>
-                  {/* =========================================
-                      CHAT HEADER
-                  ========================================== */}
+                  {/* CABEÇALHO DA CONVERSA */}
 
                   <div
-                    className={`
-                      h-[72px]
-                      shrink-0
-                      px-4
-                      lg:px-5
-                      border-b
-                      border-gray-800/80
-                      flex
-                      items-center
-                      justify-between
-                      ${
-                        isWhatsAppConversation
-                          ? 'bg-[#101a18]/90'
-                          : 'bg-[#10151e]/90'
-                      }
-                    `}
+                    className={`flex h-[72px] shrink-0 items-center justify-between gap-3 border-b border-gray-800/80 px-3 sm:px-5 ${
+                      isWhatsAppConversation
+                        ? 'bg-[#101a18]/90'
+                        : 'bg-[#10151e]/90'
+                    }`}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex min-w-0 items-center gap-3">
                       <button
                         type="button"
                         onClick={handleBack}
-                        className="
-                          lg:hidden
-                          w-9
-                          h-9
-                          rounded-lg
-                          flex
-                          items-center
-                          justify-center
-                          text-gray-500
-                          hover:text-white
-                          hover:bg-gray-800
-                          transition
-                        "
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-800 hover:text-white lg:hidden"
                         aria-label="Voltar para conversas"
                       >
                         <FaChevronLeft size={15} />
@@ -1387,148 +1078,94 @@ export default function ChatPage() {
 
                       <div className="relative shrink-0">
                         <div
-                          className={`
-                            w-11
-                            h-11
-                            rounded-xl
-                            border
-                            flex
-                            items-center
-                            justify-center
-                            overflow-hidden
-                            ${
-                              isWhatsAppConversation
-                                ? 'bg-emerald-500/5 border-emerald-500/20'
-                                : 'bg-gray-800 border-gray-700'
-                            }
-                          `}
+                          className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl border ${
+                            isWhatsAppConversation
+                              ? 'border-emerald-500/20 bg-emerald-500/5'
+                              : 'border-gray-700 bg-gray-800'
+                          }`}
                         >
                           {getConversationAvatar(currentConversation) ? (
                             <img
                               src={getConversationAvatar(currentConversation)}
-                              alt={getConversationName(currentConversation)}
-                              className="w-full h-full object-cover"
+                              alt={getSafeConversationName(currentConversation)}
+                              className="h-full w-full object-cover"
                             />
                           ) : isWhatsAppConversation ? (
                             <FaWhatsapp
                               className="text-emerald-400"
                               size={20}
                             />
-                          ) : currentConversation.type === 'broker_channel' ? (
+                          ) : isCurrentChannel ? (
                             <FaUsers className="text-blue-400" size={18} />
                           ) : (
                             <span className="text-xs font-bold text-gray-500">
                               {getInitials(
-                                getConversationName(currentConversation),
+                                getSafeConversationName(currentConversation),
                               )}
                             </span>
                           )}
                         </div>
 
                         {!isWhatsAppConversation &&
-                          currentConversation.type !== 'broker_channel' &&
+                          !isCurrentChannel &&
                           getOtherParticipant(currentConversation) && (
                             <span
-                              className={`
-                                absolute
-                                -bottom-0.5
-                                -right-0.5
-                                w-3
-                                h-3
-                                rounded-full
-                                border-2
-                                border-[#10151e]
-                                ${
-                                  isUserOnline(
-                                    getOtherParticipant(currentConversation)
-                                      ?._id,
-                                  )
-                                    ? 'bg-emerald-400'
-                                    : 'bg-gray-700'
-                                }
-                              `}
+                              className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#10151e] ${
+                                isUserOnline(
+                                  getOtherParticipant(currentConversation)?._id,
+                                )
+                                  ? 'bg-emerald-400'
+                                  : 'bg-gray-700'
+                              }`}
                             />
                           )}
                       </div>
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-bold text-white truncate">
-                            {getConversationName(currentConversation)}
+                          <p className="truncate text-sm font-bold text-white">
+                            {getSafeConversationName(currentConversation)}
                           </p>
 
                           {isWhatsAppConversation && (
-                            <span
-                              className="
-                                hidden
-                                sm:inline-flex
-                                items-center
-                                gap-1
-                                px-1.5
-                                py-0.5
-                                rounded-md
-                                bg-emerald-500/10
-                                border
-                                border-emerald-500/10
-                                text-emerald-400
-                                text-[9px]
-                                font-semibold
-                              "
-                            >
+                            <span className="hidden shrink-0 items-center gap-1 rounded-md border border-emerald-500/10 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400 sm:inline-flex">
                               <FaWhatsapp size={8} />
                               WHATSAPP
                             </span>
                           )}
 
-                          {!isWhatsAppConversation &&
-                            currentConversation.type === 'broker_channel' && (
-                              <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-600/10 border border-blue-500/10 text-blue-400 text-[9px] font-semibold">
-                                <FaUsers size={8} />
-                                EQUIPE
-                              </span>
-                            )}
-
-                          {!isWhatsAppConversation &&
-                            currentConversation.type !== 'broker_channel' && (
-                              <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-600/10 border border-blue-500/10 text-blue-400 text-[9px] font-semibold">
-                                <FaCircle size={5} />
-                                INTERNO
-                              </span>
-                            )}
+                          {isCurrentChannel && (
+                            <span className="hidden shrink-0 items-center gap-1 rounded-md border border-blue-500/10 bg-blue-600/10 px-1.5 py-0.5 text-[9px] font-semibold text-blue-400 sm:inline-flex">
+                              <FaUsers size={8} />
+                              EQUIPE
+                            </span>
+                          )}
                         </div>
 
-                        <div className="mt-0.5 flex items-center gap-1.5 min-w-0">
+                        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
                           {isWhatsAppConversation ? (
                             <>
                               <FaWhatsapp
                                 size={8}
-                                className="text-emerald-400 shrink-0"
+                                className="shrink-0 text-emerald-400"
                               />
-
-                              <span className="text-[10px] text-gray-500 truncate">
-                                {getConversationSubtitle(currentConversation) ||
-                                  'WhatsApp'}
+                              <span className="truncate text-[10px] text-gray-500">
+                                {getSafeConversationSubtitle(
+                                  currentConversation,
+                                ) || 'WhatsApp'}
                               </span>
                             </>
-                          ) : currentConversation.type === 'broker_channel' ? (
+                          ) : isCurrentChannel ? (
                             <>
                               <FaUsers size={8} className="text-gray-600" />
-
                               <span className="text-[10px] text-gray-600">
-                                {currentParticipantCount}{' '}
-                                {currentParticipantCount === 1
-                                  ? 'participante'
-                                  : 'participantes'}
+                                {currentParticipantCount} participantes
                               </span>
 
                               {currentOnlineParticipantCount > 0 && (
-                                <>
-                                  <span className="text-gray-800">•</span>
-
-                                  <span className="text-[10px] text-emerald-400/70">
-                                    {currentOnlineParticipantCount} online
-                                  </span>
-                                </>
+                                <span className="text-[10px] text-emerald-400/70">
+                                  · {currentOnlineParticipantCount} online
+                                </span>
                               )}
                             </>
                           ) : (
@@ -1560,71 +1197,25 @@ export default function ChatPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1">
-                      {!isWhatsAppConversation &&
-                        currentConversation.type === 'broker_channel' && (
-                          <button
-                            type="button"
-                            onClick={() => setShowParticipants(true)}
-                            className="
-                              w-9
-                              h-9
-                              rounded-lg
-                              flex
-                              items-center
-                              justify-center
-                              text-gray-600
-                              hover:text-white
-                              hover:bg-gray-800
-                              transition
-                            "
-                            aria-label="Ver participantes"
-                            title="Ver participantes"
-                          >
-                            <FaUsers size={14} />
-                          </button>
-                        )}
-
-                      {!isWhatsAppConversation &&
-                        currentConversation.type === 'broker_channel' && (
-                          <button
-                            type="button"
-                            onClick={() => setShowParticipants(true)}
-                            className="
-                              w-9
-                              h-9
-                              rounded-lg
-                              flex
-                              items-center
-                              justify-center
-                              text-gray-600
-                              hover:text-white
-                              hover:bg-gray-800
-                              transition
-                            "
-                            aria-label="Informações"
-                            title="Participantes"
-                          >
-                            <FaInfoCircle size={13} />
-                          </button>
-                        )}
+                    <div className="flex shrink-0 items-center gap-1">
+                      {isCurrentChannel && !isWhatsAppConversation && (
+                        <button
+                          type="button"
+                          onClick={() => setShowParticipants(true)}
+                          className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-800 hover:text-white"
+                          aria-label="Ver participantes"
+                          title="Participantes"
+                        >
+                          <FaUsers size={14} />
+                        </button>
+                      )}
 
                       {!isWhatsAppConversation && (
                         <button
                           type="button"
-                          className="
-                            w-9
-                            h-9
-                            rounded-lg
-                            flex
-                            items-center
-                            justify-center
-                            text-gray-600
-                            hover:text-white
-                            hover:bg-gray-800
-                            transition
-                          "
+                          className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-800 hover:text-white"
                           aria-label="Mais opções"
+                          title="Mais opções"
                         >
                           <FaEllipsisV size={13} />
                         </button>
@@ -1632,54 +1223,35 @@ export default function ChatPage() {
                     </div>
                   </div>
 
-                  {/* =========================================
-                      MESSAGES
-                  ========================================== */}
+                  {/* MENSAGENS */}
 
                   <div
                     ref={messagesContainerRef}
-                    className="relative flex-1 overflow-y-auto px-4 lg:px-6 py-5 space-y-1 scrollbar-thin scrollbar-thumb-gray-800"
+                    onScroll={handleMessagesScroll}
+                    className="relative flex-1 space-y-1 overflow-y-auto px-3 py-5 scrollbar-thin scrollbar-thumb-gray-800 sm:px-5 lg:px-6"
                   >
                     {loading ? (
-                      <div className="flex flex-col items-center justify-center h-full">
+                      <div className="flex h-full flex-col items-center justify-center">
                         <div
-                          className={`
-                            w-7
-                            h-7
-                            rounded-full
-                            border-2
-                            border-t-transparent
-                            animate-spin
-                            ${
-                              isWhatsAppConversation
-                                ? 'border-emerald-500'
-                                : 'border-blue-500'
-                            }
-                          `}
+                          className={`h-7 w-7 animate-spin rounded-full border-2 border-t-transparent ${
+                            isWhatsAppConversation
+                              ? 'border-emerald-500'
+                              : 'border-blue-500'
+                          }`}
                         />
 
-                        <span className="text-xs text-gray-600 mt-3">
+                        <span className="mt-3 text-xs text-gray-600">
                           Carregando mensagens...
                         </span>
                       </div>
                     ) : messages.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-full text-center">
+                      <div className="flex h-full flex-col items-center justify-center text-center">
                         <div
-                          className={`
-                            w-14
-                            h-14
-                            rounded-2xl
-                            border
-                            flex
-                            items-center
-                            justify-center
-                            mb-4
-                            ${
-                              isWhatsAppConversation
-                                ? 'bg-emerald-500/5 border-emerald-500/10'
-                                : 'bg-gray-800/40 border-gray-800'
-                            }
-                          `}
+                          className={`mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border ${
+                            isWhatsAppConversation
+                              ? 'border-emerald-500/10 bg-emerald-500/5'
+                              : 'border-gray-800 bg-gray-800/40'
+                          }`}
                         >
                           {isWhatsAppConversation ? (
                             <FaWhatsapp
@@ -1697,82 +1269,77 @@ export default function ChatPage() {
                             : 'Início da conversa'}
                         </p>
 
-                        <p className="text-xs text-gray-600 mt-1">
-                          {isWhatsAppConversation
-                            ? 'Envie uma mensagem para continuar o atendimento.'
-                            : 'Envie uma mensagem para começar.'}
+                        <p className="mt-1 text-xs text-gray-600">
+                          Envie uma mensagem para começar.
                         </p>
                       </div>
                     ) : (
-                      messages.map((msg, index) => {
-                        if (!msg || !msg._id) {
-                          return null;
-                        }
+                      messages.map((message, index) => {
+                        if (!message?._id) return null;
 
                         const isWhatsAppMessage =
                           isWhatsAppConversation &&
-                          msg.senderType === 'whatsapp_contact';
+                          message.senderType === 'whatsapp_contact';
+
+                        const senderId = (
+                          message.sender?._id || message.sender
+                        )?.toString();
 
                         const isOwn = isWhatsAppConversation
-                          ? msg.direction === 'outbound' ||
-                            (msg.senderType === 'user' &&
-                              (msg.sender?._id || msg.sender)?.toString() ===
-                                user?._id?.toString())
-                          : (msg.sender?._id || msg.sender)?.toString() ===
-                            user?._id?.toString();
+                          ? message.direction === 'outbound' ||
+                            (message.senderType === 'user' &&
+                              senderId === user?._id?.toString())
+                          : senderId === user?._id?.toString();
+
+                        const previousMessage = messages[index - 1];
 
                         const showDateHeader =
                           index === 0 ||
-                          formatDate(messages[index - 1]?.createdAt) !==
-                            formatDate(msg.createdAt);
+                          formatDate(previousMessage?.createdAt) !==
+                            formatDate(message.createdAt);
 
-                        const messageContact =
-                          msg.whatsappContact ||
+                        const contact =
+                          message.whatsappContact ||
                           currentConversation?.whatsappContact ||
                           {};
 
                         const senderName = isWhatsAppMessage
-                          ? messageContact?.name ||
-                            getConversationName(currentConversation) ||
+                          ? contact.name ||
+                            getSafeConversationName(currentConversation) ||
                             'Contato WhatsApp'
-                          : msg.sender?.name || 'Membro';
+                          : message.sender?.name || 'Membro';
 
                         const senderAvatar = isWhatsAppMessage
-                          ? messageContact?.avatar || null
-                          : msg.sender?.avatar || null;
+                          ? contact.avatar || null
+                          : message.sender?.avatar || null;
 
                         return (
-                          <div key={msg._id}>
+                          <div key={message._id}>
                             {showDateHeader && (
-                              <div className="flex items-center justify-center my-4">
-                                <span className="px-3 py-1 rounded-full bg-gray-800/50 border border-gray-800 text-[10px] text-gray-500 font-medium">
-                                  {formatDate(msg.createdAt)}
+                              <div className="my-4 flex items-center justify-center">
+                                <span className="rounded-full border border-gray-800 bg-gray-800/50 px-3 py-1 text-[10px] font-medium text-gray-500">
+                                  {formatDate(message.createdAt)}
                                 </span>
                               </div>
                             )}
 
                             <div
-                              className={`flex ${
+                              className={`mb-3 flex ${
                                 isOwn ? 'justify-end' : 'justify-start'
-                              } mb-3`}
+                              }`}
                             >
                               <div
-                                className={`
-                                  flex
-                                  items-end
-                                  gap-2
-                                  max-w-[75%]
-                                  sm:max-w-[65%]
-                                  ${isOwn ? 'flex-row-reverse' : 'flex-row'}
-                                `}
+                                className={`flex max-w-[90%] items-end gap-2 sm:max-w-[75%] ${
+                                  isOwn ? 'flex-row-reverse' : 'flex-row'
+                                }`}
                               >
                                 {!isOwn && isWhatsAppMessage && (
-                                  <div className="w-8 h-8 shrink-0 rounded-full overflow-hidden border border-emerald-500/20 bg-emerald-500/5 flex items-center justify-center">
+                                  <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-emerald-500/20 bg-emerald-500/5">
                                     {senderAvatar ? (
                                       <img
                                         src={senderAvatar}
                                         alt={senderName}
-                                        className="w-full h-full object-cover"
+                                        className="h-full w-full object-cover"
                                       />
                                     ) : (
                                       <FaWhatsapp
@@ -1784,70 +1351,49 @@ export default function ChatPage() {
                                 )}
 
                                 <div
-                                  className={`
-                                    rounded-2xl
-                                    px-4
-                                    py-3
-                                    shadow-md
-                                    ${
-                                      isOwn
-                                        ? isWhatsAppConversation
-                                          ? 'bg-emerald-600 text-white rounded-br-sm'
-                                          : 'bg-blue-600 text-white rounded-br-sm'
-                                        : 'bg-[#141a25] text-gray-100 border border-gray-800 rounded-bl-sm'
-                                    }
-                                  `}
+                                  className={`rounded-2xl px-4 py-3 shadow-md ${
+                                    isOwn
+                                      ? isWhatsAppConversation
+                                        ? 'rounded-br-sm bg-emerald-600 text-white'
+                                        : 'rounded-br-sm bg-blue-600 text-white'
+                                      : 'rounded-bl-sm border border-gray-800 bg-[#141a25] text-gray-100'
+                                  }`}
                                 >
                                   {!isOwn &&
-                                    (currentConversation.type ===
-                                      'broker_channel' ||
-                                      isWhatsAppMessage) && (
+                                    (isCurrentChannel || isWhatsAppMessage) && (
                                       <p
-                                        className={`
-                                          text-[11px]
-                                          font-semibold
-                                          mb-1
-                                          ${
-                                            isWhatsAppMessage
-                                              ? 'text-emerald-400'
-                                              : 'text-blue-400'
-                                          }
-                                        `}
+                                        className={`mb-1 text-[11px] font-semibold ${
+                                          isWhatsAppMessage
+                                            ? 'text-emerald-400'
+                                            : 'text-blue-400'
+                                        }`}
                                       >
                                         {senderName}
                                       </p>
                                     )}
 
-                                  <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
-                                    {getMessageContent(msg)}
+                                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+                                    {getMessageContent(message)}
                                   </p>
 
                                   <div
-                                    className={`
-                                      flex
-                                      items-center
-                                      justify-end
-                                      gap-1.5
-                                      mt-1
-                                      text-[10px]
-                                      ${
-                                        isOwn
-                                          ? isWhatsAppConversation
-                                            ? 'text-emerald-100'
-                                            : 'text-blue-200'
-                                          : 'text-gray-500'
-                                      }
-                                    `}
+                                    className={`mt-1 flex items-center justify-end gap-1.5 text-[10px] ${
+                                      isOwn
+                                        ? isWhatsAppConversation
+                                          ? 'text-emerald-100'
+                                          : 'text-blue-200'
+                                        : 'text-gray-500'
+                                    }`}
                                   >
                                     <span>
-                                      {formatMessageTime(msg.createdAt)}
+                                      {formatMessageTime(message.createdAt)}
                                     </span>
 
                                     {isOwn && !isWhatsAppConversation && (
                                       <FaCheck
                                         size={10}
                                         className={
-                                          msg.read
+                                          message.read
                                             ? 'text-blue-200'
                                             : 'text-blue-300/60'
                                         }
@@ -1856,17 +1402,17 @@ export default function ChatPage() {
 
                                     {isOwn && isWhatsAppConversation && (
                                       <>
-                                        {msg.status === 'read' ? (
+                                        {message.status === 'read' ? (
                                           <FaCheckDouble
                                             size={11}
                                             className="text-blue-300"
                                           />
-                                        ) : msg.status === 'delivered' ? (
+                                        ) : message.status === 'delivered' ? (
                                           <FaCheckDouble
                                             size={11}
                                             className="text-emerald-100"
                                           />
-                                        ) : msg.status === 'sent' ? (
+                                        ) : message.status === 'sent' ? (
                                           <FaCheck
                                             size={10}
                                             className="text-emerald-100"
@@ -1889,124 +1435,55 @@ export default function ChatPage() {
                     )}
 
                     {isTypingUser && (
-                      <div className="flex justify-start mb-3">
-                        <div className="bg-[#141a25] border border-gray-800 rounded-2xl rounded-bl-sm px-4 py-3">
+                      <div className="mb-3 flex justify-start">
+                        <div className="rounded-2xl rounded-bl-sm border border-gray-800 bg-[#141a25] px-4 py-3">
                           <div className="flex items-center gap-1.5">
-                            <span
-                              className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
-                              style={{
-                                animationDelay: '0ms',
-                              }}
-                            />
-
-                            <span
-                              className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
-                              style={{
-                                animationDelay: '150ms',
-                              }}
-                            />
-
-                            <span
-                              className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
-                              style={{
-                                animationDelay: '300ms',
-                              }}
-                            />
+                            {[0, 150, 300].map((delay) => (
+                              <span
+                                key={delay}
+                                className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400"
+                                style={{ animationDelay: `${delay}ms` }}
+                              />
+                            ))}
                           </div>
                         </div>
                       </div>
                     )}
 
-                    <div ref={messagesEndRef} />
-
-                    {/* =========================================
-                        SCROLL TO BOTTOM
-                    ========================================== */}
-
-                    <button
-                      type="button"
-                      onClick={() => scrollToBottom('smooth')}
-                      className="
-                        absolute
-                        bottom-5
-                        right-5
-                        lg:right-6
-                        z-30
-                        w-10
-                        h-10
-                        rounded-full
-                        bg-[#151c28]
-                        border
-                        border-gray-700
-                        text-gray-300
-                        shadow-xl
-                        shadow-black/30
-                        flex
-                        items-center
-                        justify-center
-                        transition-all
-                        duration-200
-                        hover:bg-gray-800
-                        hover:text-white
-                        hover:border-gray-600
-                        active:scale-95
-                        group
-                      "
-                      title="Ir para a última mensagem"
-                      aria-label="Ir para a última mensagem"
-                    >
-                      <FaChevronLeft
-                        size={13}
-                        className="rotate-[-90deg] transition-transform group-hover:translate-y-0.5"
-                      />
-                    </button>
+                    {showScrollButton && (
+                      <button
+                        type="button"
+                        onClick={() => scrollToBottom('smooth')}
+                        className="absolute bottom-5 right-4 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-gray-700 bg-[#151c28] text-gray-300 shadow-xl transition hover:bg-gray-800 hover:text-white sm:right-6"
+                        title="Ir para a última mensagem"
+                        aria-label="Ir para a última mensagem"
+                      >
+                        <FaChevronLeft size={13} className="-rotate-90" />
+                      </button>
+                    )}
                   </div>
 
-                  {/* =========================================
-                      CHAT INPUT
-                  ========================================== */}
+                  {/* CAMPO DE ENVIO */}
 
                   <form
                     onSubmit={handleSendMessage}
-                    className={`
-                      p-4
-                      border-t
-                      border-gray-800/80
-                      flex
-                      items-center
-                      gap-3
-                      ${
-                        isWhatsAppConversation
-                          ? 'bg-[#101a18]/90'
-                          : 'bg-[#10151e]/90'
-                      }
-                    `}
+                    className={`flex shrink-0 items-center gap-2 border-t border-gray-800/80 p-3 sm:gap-3 sm:p-4 ${
+                      isWhatsAppConversation
+                        ? 'bg-[#101a18]/90'
+                        : 'bg-[#10151e]/90'
+                    }`}
                   >
                     <button
                       type="button"
                       disabled
-                      className="
-                        w-10
-                        h-10
-                        shrink-0
-                        rounded-xl
-                        bg-gray-800/50
-                        border
-                        border-gray-800
-                        flex
-                        items-center
-                        justify-center
-                        text-gray-600
-                        opacity-60
-                        cursor-not-allowed
-                      "
+                      className="flex h-10 w-10 shrink-0 cursor-not-allowed items-center justify-center rounded-xl border border-gray-800 bg-gray-800/50 text-gray-600 opacity-60"
                       aria-label="Anexos em breve"
                       title="Anexos em breve"
                     >
                       <FaPaperclip size={14} />
                     </button>
 
-                    <div className="flex-1 relative">
+                    <div className="min-w-0 flex-1">
                       <input
                         ref={inputRef}
                         type="text"
@@ -2017,294 +1494,170 @@ export default function ChatPage() {
                             ? 'Digite uma mensagem para o WhatsApp...'
                             : 'Digite sua mensagem...'
                         }
-                        className={`
-                          w-full
-                          h-11
-                          bg-[#080b11]
-                          border
-                          border-gray-800
-                          rounded-xl
-                          px-4
-                          text-sm
-                          text-white
-                          placeholder:text-gray-600
-                          outline-none
-                          transition
-                          ${
-                            isWhatsAppConversation
-                              ? 'focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/5'
-                              : 'focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/5'
-                          }
-                        `}
+                        className={`h-11 w-full rounded-xl border border-gray-800 bg-[#080b11] px-4 text-sm text-white outline-none transition placeholder:text-gray-600 ${
+                          isWhatsAppConversation
+                            ? 'focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/5'
+                            : 'focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/5'
+                        }`}
                       />
                     </div>
 
                     <button
                       type="submit"
-                      disabled={!inputMessage.trim()}
-                      className={`
-                        w-11
-                        h-11
-                        shrink-0
-                        rounded-xl
-                        text-white
-                        flex
-                        items-center
-                        justify-center
-                        transition
-                        shadow-lg
-                        disabled:opacity-40
-                        ${
-                          isWhatsAppConversation
-                            ? 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 shadow-emerald-600/10 disabled:hover:bg-emerald-600'
-                            : 'bg-blue-600 hover:bg-blue-500 active:bg-blue-700 shadow-blue-600/10 disabled:hover:bg-blue-600'
-                        }
-                      `}
+                      disabled={!inputMessage.trim() || sending}
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                        isWhatsAppConversation
+                          ? 'bg-emerald-600 shadow-emerald-600/10 hover:bg-emerald-500'
+                          : 'bg-blue-600 shadow-blue-600/10 hover:bg-blue-500'
+                      }`}
                       aria-label="Enviar mensagem"
                     >
-                      <FaPaperPlane size={14} />
+                      {sending ? (
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      ) : (
+                        <FaPaperPlane size={14} />
+                      )}
                     </button>
                   </form>
                 </>
               )}
-            </div>
+            </main>
           </div>
         </div>
 
-        {/* ====================================================
-            PARTICIPANTS PANEL
-        ===================================================== */}
+        {/* PAINEL DE PARTICIPANTES */}
 
-        {showParticipants &&
-          currentConversation?.type === 'broker_channel' &&
-          !isWhatsAppConversation && (
-            <div className="fixed inset-0 z-[60] flex">
-              <button
-                type="button"
-                aria-label="Fechar participantes"
-                onClick={() => setShowParticipants(false)}
-                className="absolute inset-0 cursor-default bg-black/60 backdrop-blur-[2px]"
-              />
+        {showParticipants && isCurrentChannel && !isWhatsAppConversation && (
+          <div className="fixed inset-0 z-[60] flex">
+            <button
+              type="button"
+              aria-label="Fechar participantes"
+              onClick={() => setShowParticipants(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+            />
 
-              <aside className="relative ml-auto flex h-full w-[340px] max-w-[90vw] flex-col border-l border-gray-800 bg-[#0c1017] shadow-2xl">
-                <div className="flex h-[76px] shrink-0 items-center justify-between border-b border-gray-800 px-5">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-500/10 bg-blue-500/[0.06]">
-                      <FaUsers size={15} className="text-blue-400" />
-                    </div>
+            <aside className="relative ml-auto flex h-full w-[340px] max-w-[90vw] flex-col border-l border-gray-800 bg-[#0c1017] shadow-2xl">
+              <div className="flex h-[76px] shrink-0 items-center justify-between border-b border-gray-800 px-5">
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    Participantes
+                  </h3>
 
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-bold text-white">
-                        Participantes
-                      </h3>
-
-                      <div className="mt-1 flex items-center gap-1.5">
-                        <span className="text-[10px] text-gray-600">
-                          {currentParticipantCount}{' '}
-                          {currentParticipantCount === 1
-                            ? 'participante'
-                            : 'participantes'}
-                        </span>
-
-                        {currentOnlineParticipantCount > 0 && (
-                          <>
-                            <span className="text-gray-800">•</span>
-
-                            <span className="text-[10px] text-emerald-400/70">
-                              {currentOnlineParticipantCount} online
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowParticipants(false)}
-                    className="
-                      w-9
-                      h-9
-                      rounded-lg
-                      flex
-                      items-center
-                      justify-center
-                      text-gray-600
-                      hover:text-white
-                      hover:bg-gray-800
-                      transition
-                    "
-                    aria-label="Fechar"
-                  >
-                    <FaTimes size={14} />
-                  </button>
+                  <p className="mt-1 text-[10px] text-gray-600">
+                    {currentParticipantCount} participantes
+                    {currentOnlineParticipantCount > 0
+                      ? ` · ${currentOnlineParticipantCount} online`
+                      : ''}
+                  </p>
                 </div>
-
-                <div className="flex-1 overflow-y-auto p-3 scrollbar-thin scrollbar-thumb-gray-800">
-                  {currentParticipants.length === 0 ? (
-                    <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-                      <div className="w-12 h-12 rounded-xl bg-gray-800/40 border border-gray-800 flex items-center justify-center mb-3">
-                        <FaUsers size={17} className="text-gray-600" />
-                      </div>
-
-                      <p className="text-xs font-semibold text-gray-500">
-                        Nenhum participante
-                      </p>
-
-                      <p className="text-[10px] text-gray-700 mt-1">
-                        Não foi possível carregar os participantes.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      {currentParticipants.map((participant) => {
-                        const participantOnline = isUserOnline(
-                          participant?._id,
-                        );
-
-                        const isCurrentUser =
-                          participant?._id?.toString() ===
-                          user?._id?.toString();
-
-                        const participantName = participant?.name || 'Usuário';
-
-                        return (
-                          <div
-                            key={participant?._id}
-                            className="
-                              flex
-                              items-center
-                              gap-3
-                              rounded-xl
-                              px-3
-                              py-3
-                              transition
-                              hover:bg-gray-800/30
-                            "
-                          >
-                            <div className="relative shrink-0">
-                              <div className="w-10 h-10 rounded-xl bg-gray-800 border border-gray-700 flex items-center justify-center overflow-hidden">
-                                {participant?.avatar ? (
-                                  <img
-                                    src={participant.avatar}
-                                    alt={participantName}
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : (
-                                  <span className="text-[10px] font-bold text-gray-500">
-                                    {getInitials(participantName)}
-                                  </span>
-                                )}
-                              </div>
-
-                              <span
-                                className={`
-                                  absolute
-                                  -bottom-0.5
-                                  -right-0.5
-                                  w-2.5
-                                  h-2.5
-                                  rounded-full
-                                  border-2
-                                  border-[#0c1017]
-                                  ${
-                                    participantOnline
-                                      ? 'bg-emerald-400'
-                                      : 'bg-gray-700'
-                                  }
-                                `}
-                              />
-                            </div>
-
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                <p className="text-xs font-semibold text-gray-300 truncate">
-                                  {participantName}
-                                </p>
-
-                                {isCurrentUser && (
-                                  <span className="shrink-0 px-1.5 py-0.5 rounded-md bg-blue-600/10 border border-blue-500/10 text-blue-400 text-[8px] font-semibold">
-                                    Você
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                <span
-                                  className={`
-                                    text-[9px]
-                                    ${
-                                      participantOnline
-                                        ? 'text-emerald-400/70'
-                                        : 'text-gray-600'
-                                    }
-                                  `}
-                                >
-                                  {participantOnline ? 'Online' : 'Offline'}
-                                </span>
-
-                                {participant?.role && (
-                                  <>
-                                    <span className="text-gray-800">•</span>
-
-                                    <span className="text-[9px] text-gray-600 truncate">
-                                      {getRoleLabel(participant.role)}
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-
-                            {participantOnline && (
-                              <FaCircle
-                                size={5}
-                                className="shrink-0 text-emerald-400/70"
-                              />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </aside>
-            </div>
-          )}
-
-        {/* ====================================================
-            MODAL: NOVA CONVERSA
-        ===================================================== */}
-
-        {showNewChat && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-            <div className="w-full max-w-md bg-[#0d1119] border border-gray-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-              <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
-                <h3 className="text-base font-bold text-white">
-                  Nova Conversa
-                </h3>
 
                 <button
                   type="button"
-                  onClick={resetNewChat}
-                  className="
-                    w-8
-                    h-8
-                    rounded-lg
-                    flex
-                    items-center
-                    justify-center
-                    text-gray-500
-                    hover:text-white
-                    hover:bg-gray-800
-                    transition
-                  "
+                  onClick={() => setShowParticipants(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition hover:bg-gray-800 hover:text-white"
+                  aria-label="Fechar"
                 >
                   <FaTimes size={14} />
                 </button>
               </div>
 
-              <div className="p-4 border-b border-gray-800 bg-[#090d13]">
-                <div className="grid grid-cols-2 gap-2 bg-[#080b11] p-1 rounded-xl border border-gray-800">
+              <div className="scrollbar-thin scrollbar-thumb-gray-800 flex-1 overflow-y-auto p-3">
+                {currentParticipants.length === 0 ? (
+                  <div className="flex h-full items-center justify-center text-xs text-gray-600">
+                    Nenhum participante encontrado.
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {currentParticipants.map((participant) => {
+                      const id = participant?._id?.toString();
+                      const online = isUserOnline(participant?._id);
+                      const isCurrentUser = id === user?._id?.toString();
+
+                      const name = participant?.name || 'Usuário';
+
+                      return (
+                        <div
+                          key={id}
+                          className="flex items-center gap-3 rounded-xl px-3 py-3 transition hover:bg-gray-800/30"
+                        >
+                          <div className="relative shrink-0">
+                            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-gray-700 bg-gray-800">
+                              {participant?.avatar ? (
+                                <img
+                                  src={participant.avatar}
+                                  alt={name}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-[10px] font-bold text-gray-500">
+                                  {getInitials(name)}
+                                </span>
+                              )}
+                            </div>
+
+                            <span
+                              className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0c1017] ${
+                                online ? 'bg-emerald-400' : 'bg-gray-700'
+                              }`}
+                            />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <p className="truncate text-xs font-semibold text-gray-300">
+                                {name}
+                              </p>
+
+                              {isCurrentUser && (
+                                <span className="shrink-0 rounded-md border border-blue-500/10 bg-blue-600/10 px-1.5 py-0.5 text-[8px] font-semibold text-blue-400">
+                                  Você
+                                </span>
+                              )}
+                            </div>
+
+                            <p
+                              className={`mt-0.5 text-[9px] ${
+                                online ? 'text-emerald-400/70' : 'text-gray-600'
+                              }`}
+                            >
+                              {online ? 'Online' : 'Offline'}
+                              {participant?.role
+                                ? ` · ${getRoleLabel(participant.role)}`
+                                : ''}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </aside>
+          </div>
+        )}
+
+        {/* MODAL DE NOVA CONVERSA */}
+
+        {showNewChat && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+            <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-gray-800 bg-[#0d1119] shadow-2xl">
+              <div className="flex items-center justify-between border-b border-gray-800 px-5 py-4">
+                <h3 className="text-base font-bold text-white">
+                  Nova conversa
+                </h3>
+
+                <button
+                  type="button"
+                  onClick={resetNewChat}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-800 hover:text-white"
+                  aria-label="Fechar"
+                >
+                  <FaTimes size={14} />
+                </button>
+              </div>
+
+              <div className="border-b border-gray-800 bg-[#090d13] p-4">
+                <div className="grid grid-cols-2 gap-2 rounded-xl border border-gray-800 bg-[#080b11] p-1">
                   <button
                     type="button"
                     onClick={() => {
@@ -2312,20 +1665,13 @@ export default function ChatPage() {
                       setChannelName('');
                       setSelectedUsers([]);
                     }}
-                    className={`
-                      py-2
-                      rounded-lg
-                      text-xs
-                      font-semibold
-                      transition
-                      ${
-                        newChatMode === 'direct'
-                          ? 'bg-blue-600 text-white shadow-md'
-                          : 'text-gray-400 hover:text-white'
-                      }
-                    `}
+                    className={`rounded-lg py-2 text-xs font-semibold transition ${
+                      newChatMode === 'direct'
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
                   >
-                    Conversa Direta
+                    Conversa direta
                   </button>
 
                   <button
@@ -2336,64 +1682,49 @@ export default function ChatPage() {
                       setSearchResults([]);
                       setSelectedUsers([]);
                     }}
-                    className={`
-                      py-2
-                      rounded-lg
-                      text-xs
-                      font-semibold
-                      transition
-                      ${
-                        newChatMode === 'channel'
-                          ? 'bg-blue-600 text-white shadow-md'
-                          : 'text-gray-400 hover:text-white'
-                      }
-                    `}
+                    className={`rounded-lg py-2 text-xs font-semibold transition ${
+                      newChatMode === 'channel'
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
                   >
-                    Canal da Equipe
+                    Canal da equipe
                   </button>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <div className="scrollbar-thin scrollbar-thumb-gray-800 flex-1 space-y-4 overflow-y-auto p-5">
                 {newChatMode === 'channel' ? (
                   <div className="space-y-3">
-                    <label className="block text-xs font-semibold text-gray-400">
-                      Nome do Canal
+                    <label
+                      htmlFor="channel-name"
+                      className="block text-xs font-semibold text-gray-400"
+                    >
+                      Nome do canal
                     </label>
 
                     <input
+                      id="channel-name"
                       type="text"
                       value={channelName}
-                      onChange={(e) => setChannelName(e.target.value)}
-                      placeholder="Ex: Corretores Centro"
-                      className="
-                        w-full
-                        h-11
-                        bg-[#080b11]
-                        border
-                        border-gray-800
-                        rounded-xl
-                        px-4
-                        text-sm
-                        text-white
-                        placeholder:text-gray-600
-                        outline-none
-                        focus:border-blue-500/50
-                        focus:ring-2
-                        focus:ring-blue-500/5
-                        transition
-                      "
+                      onChange={(event) => setChannelName(event.target.value)}
+                      maxLength={80}
+                      placeholder="Ex.: Corretores Centro"
+                      className="h-11 w-full rounded-xl border border-gray-800 bg-[#080b11] px-4 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500/50"
                     />
 
-                    <p className="text-[11px] text-gray-600 leading-relaxed">
-                      Crie um canal de comunicação para múltiplos membros da
-                      equipe discutirem negócios e clientes.
+                    <p className="text-[11px] leading-relaxed text-gray-600">
+                      Crie um canal para a equipe compartilhar informações sobre
+                      negócios e clientes.
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <label className="block text-xs font-semibold text-gray-400">
-                      Buscar Membro
+                    <label
+                      htmlFor="user-search"
+                      className="block text-xs font-semibold text-gray-400"
+                    >
+                      Buscar membro
                     </label>
 
                     <div className="relative">
@@ -2403,116 +1734,87 @@ export default function ChatPage() {
                       />
 
                       <input
+                        id="user-search"
                         type="text"
                         value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        onChange={(event) => setSearch(event.target.value)}
                         placeholder="Digite o nome do usuário..."
-                        className="
-                          w-full
-                          h-11
-                          bg-[#080b11]
-                          border
-                          border-gray-800
-                          rounded-xl
-                          pl-10
-                          pr-4
-                          text-sm
-                          text-white
-                          placeholder:text-gray-600
-                          outline-none
-                          focus:border-blue-500/50
-                          focus:ring-2
-                          focus:ring-blue-500/5
-                          transition
-                        "
+                        className="h-11 w-full rounded-xl border border-gray-800 bg-[#080b11] pl-10 pr-4 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500/50"
                       />
                     </div>
 
-                    <div className="space-y-2 max-h-60 overflow-y-auto pt-2">
+                    {selectedUsers.length > 0 && (
+                      <p className="text-[11px] text-blue-400">
+                        {selectedUsers.length} usuário(s) selecionado(s)
+                      </p>
+                    )}
+
+                    <div className="max-h-60 space-y-2 overflow-y-auto pt-2">
                       {searching ? (
                         <div className="flex items-center justify-center py-6">
-                          <div className="w-5 h-5 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+                          <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
                         </div>
                       ) : searchResults.length > 0 ? (
-                        searchResults.map((u) => {
-                          const isSelected = selectedUsers.some(
-                            (id) => id?.toString() === u?._id?.toString(),
+                        searchResults.map((item) => {
+                          const selected = selectedUsers.some(
+                            (id) => id?.toString() === item?._id?.toString(),
                           );
 
                           return (
                             <button
-                              key={u._id}
+                              key={item._id}
                               type="button"
-                              onClick={() => toggleUser(u._id)}
-                              className={`
-                                w-full
-                                p-2.5
-                                rounded-xl
-                                border
-                                flex
-                                items-center
-                                justify-between
-                                transition
-                                ${
-                                  isSelected
-                                    ? 'bg-blue-600/10 border-blue-500/40 text-white'
-                                    : 'bg-[#080b11] border-gray-800 text-gray-300 hover:border-gray-700'
-                                }
-                              `}
+                              onClick={() => toggleUser(item._id)}
+                              className={`flex w-full items-center justify-between rounded-xl border p-2.5 transition ${
+                                selected
+                                  ? 'border-blue-500/40 bg-blue-600/10 text-white'
+                                  : 'border-gray-800 bg-[#080b11] text-gray-300 hover:border-gray-700'
+                              }`}
                             >
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-8 h-8 rounded-lg bg-gray-800 flex items-center justify-center shrink-0 overflow-hidden">
-                                  {u.avatar ? (
+                              <div className="flex min-w-0 items-center gap-3">
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-800">
+                                  {item.avatar ? (
                                     <img
-                                      src={u.avatar}
-                                      alt={u.name}
-                                      className="w-full h-full object-cover"
+                                      src={item.avatar}
+                                      alt={item.name}
+                                      className="h-full w-full object-cover"
                                     />
                                   ) : (
                                     <span className="text-[10px] font-bold text-gray-500">
-                                      {getInitials(u.name)}
+                                      {getInitials(item.name)}
                                     </span>
                                   )}
                                 </div>
 
                                 <div className="min-w-0 text-left">
-                                  <p className="text-xs font-semibold truncate">
-                                    {u.name}
+                                  <p className="truncate text-xs font-semibold">
+                                    {item.name}
                                   </p>
 
-                                  <p className="text-[10px] text-gray-500 truncate">
-                                    {getRoleLabel(u.role)}
+                                  <p className="truncate text-[10px] text-gray-500">
+                                    {getRoleLabel(item.role)}
                                   </p>
                                 </div>
                               </div>
 
-                              <div
-                                className={`
-                                  w-5
-                                  h-5
-                                  rounded-md
-                                  border
-                                  flex
-                                  items-center
-                                  justify-center
-                                  ${
-                                    isSelected
-                                      ? 'bg-blue-600 border-blue-500 text-white'
-                                      : 'border-gray-700 bg-gray-800/40'
-                                  }
-                                `}
+                              <span
+                                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
+                                  selected
+                                    ? 'border-blue-500 bg-blue-600 text-white'
+                                    : 'border-gray-700 bg-gray-800/40'
+                                }`}
                               >
-                                {isSelected && <FaCheck size={10} />}
-                              </div>
+                                {selected && <FaCheck size={10} />}
+                              </span>
                             </button>
                           );
                         })
-                      ) : search.length >= 2 ? (
-                        <p className="text-center text-xs text-gray-600 py-4">
+                      ) : search.trim().length >= 2 ? (
+                        <p className="py-4 text-center text-xs text-gray-600">
                           Nenhum usuário encontrado.
                         </p>
                       ) : (
-                        <p className="text-center text-xs text-gray-600 py-4">
+                        <p className="py-4 text-center text-xs text-gray-600">
                           Digite ao menos 2 caracteres para buscar.
                         </p>
                       )}
@@ -2521,22 +1823,12 @@ export default function ChatPage() {
                 )}
               </div>
 
-              <div className="px-5 py-4 border-t border-gray-800 flex items-center justify-end gap-3 bg-[#090d13]">
+              <div className="flex items-center justify-end gap-3 border-t border-gray-800 bg-[#090d13] px-5 py-4">
                 <button
                   type="button"
                   onClick={resetNewChat}
-                  className="
-                    px-4
-                    py-2
-                    rounded-xl
-                    border
-                    border-gray-800
-                    text-gray-400
-                    hover:text-white
-                    text-xs
-                    font-semibold
-                    transition
-                  "
+                  disabled={creatingConversation}
+                  className="rounded-xl border border-gray-800 px-4 py-2 text-xs font-semibold text-gray-400 transition hover:text-white disabled:opacity-50"
                 >
                   Cancelar
                 </button>
@@ -2545,28 +1837,18 @@ export default function ChatPage() {
                   type="button"
                   onClick={handleCreateConversation}
                   disabled={
-                    newChatMode === 'channel'
+                    creatingConversation ||
+                    (newChatMode === 'channel'
                       ? !channelName.trim()
-                      : selectedUsers.length === 0
+                      : selectedUsers.length === 0)
                   }
-                  className="
-                    px-4
-                    py-2
-                    rounded-xl
-                    bg-blue-600
-                    hover:bg-blue-500
-                    active:bg-blue-700
-                    disabled:opacity-40
-                    disabled:hover:bg-blue-600
-                    text-white
-                    text-xs
-                    font-semibold
-                    transition
-                    shadow-lg
-                    shadow-blue-600/10
-                  "
+                  className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-blue-600/10 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  Criar Conversa
+                  {creatingConversation && (
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  )}
+
+                  {creatingConversation ? 'Criando...' : 'Criar conversa'}
                 </button>
               </div>
             </div>
