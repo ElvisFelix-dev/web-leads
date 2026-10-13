@@ -1057,45 +1057,88 @@ export const ChatProvider = ({ children }) => {
   // ENVIAR MENSAGEM
   // =========================================================
 
+  // =========================================================
+  // ENVIAR MENSAGEM — TEXTO, IMAGEM, GIF E ARQUIVO
+  // =========================================================
+
   const sendMessage = useCallback(
-    async (conversationId, content) => {
-      if (!content?.trim() || !conversationId) {
+    async (conversationId, input) => {
+      if (!conversationId || !input) {
         return;
       }
 
-      const trimmedContent = content.trim();
+      // Mantém compatibilidade com as chamadas antigas:
+      // sendMessage(conversationId, 'Olá!')
+      const payload =
+        typeof input === 'string'
+          ? {
+              content: input,
+              type: 'text',
+              attachment: null,
+            }
+          : input && typeof input === 'object'
+            ? {
+                content: input.content ?? '',
+                type: input.type || 'text',
+                attachment: input.attachment || null,
+              }
+            : null;
+
+      if (!payload) {
+        throw new Error('Formato de mensagem inválido.');
+      }
+
+      const type = String(payload.type).toLowerCase();
+      const content = String(payload.content || '').trim();
+      const attachment = payload.attachment;
+
+      if (!['text', 'image', 'file'].includes(type)) {
+        throw new Error('Tipo de mensagem não suportado.');
+      }
+
+      if (type === 'text' && !content) {
+        return;
+      }
+
+      if (type !== 'text' && !attachment?.url) {
+        throw new Error('O arquivo ou GIF não possui uma URL válida.');
+      }
+
+      const optimisticId = `temp_${Date.now()}_${Math.random()
+        .toString(36)
+        .substring(2, 8)}`;
 
       const optimisticMessage = {
-        _id: `temp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-
+        _id: optimisticId,
         conversation: conversationId,
-
-        content: trimmedContent,
-
+        content,
+        type,
+        attachment,
         sender: {
           _id: user?._id,
-
           name: user?.name || 'Você',
-
           avatar: user?.avatar || null,
         },
-
         createdAt: new Date().toISOString(),
-
         status: 'sending',
-
         isOptimistic: true,
       };
 
       setMessages((prev) => [...prev, optimisticMessage]);
 
       try {
-        console.log('📤 Enviando mensagem:', conversationId);
+        console.log('📤 Enviando mensagem:', {
+          conversationId,
+          type,
+          hasAttachment: Boolean(attachment?.url),
+        });
 
         const response = await api.post(
           `/api/chat/conversations/${conversationId}/messages`,
           {
-            content: trimmedContent,
+            content,
+            type,
+            attachment,
           },
         );
 
@@ -1105,8 +1148,6 @@ export const ChatProvider = ({ children }) => {
           throw new Error('O servidor retornou uma mensagem inválida.');
         }
 
-        console.log('✅ Mensagem criada:', newMessage);
-
         const sanitizedMessage = sanitizeMessage(newMessage);
 
         if (!sanitizedMessage) {
@@ -1114,18 +1155,19 @@ export const ChatProvider = ({ children }) => {
         }
 
         setMessages((prev) => {
-          const hasRealMessage = prev.some(
-            (msg) =>
-              !msg?.isOptimistic && isSameId(msg?._id, sanitizedMessage._id),
+          const withoutOptimistic = prev.filter(
+            (message) => message._id !== optimisticId,
           );
 
-          if (hasRealMessage) {
-            return prev.filter((msg) => msg?._id !== optimisticMessage._id);
+          const alreadyExists = withoutOptimistic.some((message) =>
+            isSameId(message._id, sanitizedMessage._id),
+          );
+
+          if (alreadyExists) {
+            return withoutOptimistic;
           }
 
-          return prev.map((msg) =>
-            msg?._id === optimisticMessage._id ? sanitizedMessage : msg,
-          );
+          return [...withoutOptimistic, sanitizedMessage];
         });
 
         updateConversationFromMessage(sanitizedMessage, conversationId, false);
@@ -1135,11 +1177,12 @@ export const ChatProvider = ({ children }) => {
         console.error('❌ Erro ao enviar mensagem:', error);
 
         setMessages((prev) =>
-          prev.filter((msg) => msg?._id !== optimisticMessage._id),
+          prev.filter((message) => message._id !== optimisticId),
         );
 
         setError(
           error?.response?.data?.message ||
+            error?.message ||
             'Erro ao enviar mensagem. Tente novamente.',
         );
 

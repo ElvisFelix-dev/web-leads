@@ -16,6 +16,9 @@ import {
   FaInfoCircle,
 } from 'react-icons/fa';
 
+import { GifPicker } from 'gif-picker-react';
+import { Klipy } from 'gif-picker-react/providers/klipy';
+
 import { useChat } from '../../context/ChatContext';
 import { UserContext } from '../../context/UserContext';
 
@@ -41,11 +44,13 @@ export default function ChatArea({ onBack }) {
   const [sending, setSending] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const emojiPickerRef = useRef(null);
+  const gifPickerRef = useRef(null);
 
   /*
   ====================================================
@@ -82,7 +87,6 @@ export default function ChatArea({ onBack }) {
     if (!userA || !userB) return false;
 
     const idA = typeof userA === 'object' ? userA._id || userA.id : userA;
-
     const idB = typeof userB === 'object' ? userB._id || userB.id : userB;
 
     if (!idA || !idB) return false;
@@ -96,9 +100,7 @@ export default function ChatArea({ onBack }) {
     try {
       const parsedDate = new Date(date);
 
-      if (Number.isNaN(parsedDate.getTime())) {
-        return '';
-      }
+      if (Number.isNaN(parsedDate.getTime())) return '';
 
       return parsedDate.toLocaleTimeString('pt-BR', {
         hour: '2-digit',
@@ -115,9 +117,7 @@ export default function ChatArea({ onBack }) {
     try {
       const messageDate = new Date(date);
 
-      if (Number.isNaN(messageDate.getTime())) {
-        return '';
-      }
+      if (Number.isNaN(messageDate.getTime())) return '';
 
       const today = new Date();
 
@@ -126,9 +126,7 @@ export default function ChatArea({ onBack }) {
         messageDate.getMonth() === today.getMonth() &&
         messageDate.getFullYear() === today.getFullYear();
 
-      if (isToday) {
-        return 'Hoje';
-      }
+      if (isToday) return 'Hoje';
 
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
@@ -138,9 +136,7 @@ export default function ChatArea({ onBack }) {
         messageDate.getMonth() === yesterday.getMonth() &&
         messageDate.getFullYear() === yesterday.getFullYear();
 
-      if (isYesterday) {
-        return 'Ontem';
-      }
+      if (isYesterday) return 'Ontem';
 
       return messageDate.toLocaleDateString('pt-BR', {
         day: '2-digit',
@@ -164,6 +160,18 @@ export default function ChatArea({ onBack }) {
     return roles[role] || 'Usuário';
   };
 
+  const isHttpUrl = (value) => {
+    if (typeof value !== 'string' || !value.trim()) return false;
+
+    try {
+      const url = new URL(value.trim());
+
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
   /*
   ====================================================
   CONVERSA
@@ -171,7 +179,6 @@ export default function ChatArea({ onBack }) {
   */
 
   const isWhatsApp = currentConversation?.channel === 'whatsapp';
-
   const isChannel = currentConversation?.type === 'broker_channel';
 
   const otherUser = currentConversation
@@ -180,7 +187,7 @@ export default function ChatArea({ onBack }) {
 
   /*
   ====================================================
-  DADOS DO CONTATO WHATSAPP
+  CONTATO WHATSAPP
   ====================================================
   */
 
@@ -223,7 +230,7 @@ export default function ChatArea({ onBack }) {
 
   /*
   ====================================================
-  TYPING
+  DIGITAÇÃO
   ====================================================
   */
 
@@ -231,7 +238,7 @@ export default function ChatArea({ onBack }) {
 
   /*
   ====================================================
-  EMOJI PICKER
+  FECHAR PICKERS AO CLICAR FORA
   ====================================================
   */
 
@@ -243,6 +250,13 @@ export default function ChatArea({ onBack }) {
       ) {
         setShowEmojiPicker(false);
       }
+
+      if (
+        gifPickerRef.current &&
+        !gifPickerRef.current.contains(event.target)
+      ) {
+        setShowGifPicker(false);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -252,23 +266,30 @@ export default function ChatArea({ onBack }) {
     };
   }, []);
 
+  /*
+  ====================================================
+  INSERIR EMOJI
+  ====================================================
+  */
+
   const insertEmoji = (emoji) => {
     setInputMessage((prev) => `${prev}${emoji}`);
 
-    setTimeout(() => {
+    requestAnimationFrame(() => {
       textareaRef.current?.focus();
-    }, 0);
+    });
   };
 
   /*
   ====================================================
-  SCROLL
+  SCROLL AUTOMÁTICO
   ====================================================
   */
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({
       behavior: 'smooth',
+      block: 'end',
     });
   }, [messages]);
 
@@ -280,9 +301,11 @@ export default function ChatArea({ onBack }) {
 
   useEffect(() => {
     if (!loading && currentConversation) {
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
         textareaRef.current?.focus();
       }, 100);
+
+      return () => clearTimeout(timeout);
     }
   }, [currentConversation, loading]);
 
@@ -297,6 +320,7 @@ export default function ChatArea({ onBack }) {
     setShowEmojiPicker(false);
     setShowParticipants(false);
     setIsTyping(false);
+    setShowGifPicker(false);
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -320,33 +344,23 @@ export default function ChatArea({ onBack }) {
 
   /*
   ====================================================
-  ENVIAR MENSAGEM
+  ENVIAR MENSAGEM DE TEXTO
   ====================================================
   */
 
   const handleSendMessage = async () => {
     const content = inputMessage.trim();
 
-    if (!content || sending || !currentConversation) {
-      return;
-    }
+    if (!content || sending || !currentConversation?._id) return;
 
     try {
       setSending(true);
 
-      /*
-       * O endpoint do ChatContext é o mesmo.
-       *
-       * O backend identifica:
-       *
-       * channel === "whatsapp"
-       *
-       * e encaminha para o WA-AKG.
-       */
       await sendMessage(currentConversation._id, content);
 
       setInputMessage('');
       setShowEmojiPicker(false);
+      setShowGifPicker(false);
       setIsTyping(false);
 
       if (typingTimeoutRef.current) {
@@ -354,9 +368,6 @@ export default function ChatArea({ onBack }) {
         typingTimeoutRef.current = null;
       }
 
-      /*
-       * Typing só existe para chat interno.
-       */
       if (!isWhatsApp) {
         sendTyping?.(currentConversation._id, false);
       }
@@ -371,6 +382,58 @@ export default function ChatArea({ onBack }) {
 
   /*
   ====================================================
+  ENVIAR GIF COMO IMAGEM
+  ====================================================
+  */
+
+  const handleGifSelected = async (gif) => {
+    const gifUrl = gif?.imageUrl;
+
+    if (!gifUrl || sending || !currentConversation?._id) {
+      console.error('GIF inválido ou conversa não selecionada:', gif);
+      return;
+    }
+
+    // Fecha o seletor imediatamente após selecionar o GIF.
+    // Não precisa esperar o envio terminar.
+    setShowGifPicker(false);
+    setShowEmojiPicker(false);
+
+    try {
+      setSending(true);
+
+      await sendMessage(currentConversation._id, {
+        content: gifUrl,
+        type: 'image',
+        attachment: {
+          url: gifUrl,
+          name: 'gif.gif',
+          mimeType: 'image/gif',
+        },
+      });
+
+      setInputMessage('');
+      setIsTyping(false);
+
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+
+      if (!isWhatsApp) {
+        sendTyping?.(currentConversation._id, false);
+      }
+
+      textareaRef.current?.focus();
+    } catch (error) {
+      console.error('Erro ao enviar GIF:', error);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  /*
+  ====================================================
   DIGITAÇÃO
   ====================================================
   */
@@ -378,21 +441,11 @@ export default function ChatArea({ onBack }) {
   const handleTyping = (value) => {
     setInputMessage(value);
 
-    /*
-     * WhatsApp não depende do typing do Socket.IO
-     * do CRM neste momento.
-     */
-    if (isWhatsApp) {
-      return;
-    }
-
-    if (!currentConversation) {
-      return;
-    }
+    if (isWhatsApp) return;
+    if (!currentConversation?._id) return;
 
     if (!isTyping) {
       setIsTyping(true);
-
       sendTyping?.(currentConversation._id, true);
     }
 
@@ -402,14 +455,13 @@ export default function ChatArea({ onBack }) {
 
     typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
-
       sendTyping?.(currentConversation._id, false);
     }, 1200);
   };
 
   /*
   ====================================================
-  ENTER
+  ENTER PARA ENVIAR
   ====================================================
   */
 
@@ -417,6 +469,11 @@ export default function ChatArea({ onBack }) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       handleSendMessage();
+    }
+
+    if (event.key === 'Escape') {
+      setShowEmojiPicker(false);
+      setShowGifPicker(false);
     }
   };
 
@@ -430,15 +487,15 @@ export default function ChatArea({ onBack }) {
     return (
       <div className="flex h-full min-h-0 flex-1 items-center justify-center bg-[#08090c]">
         <div className="flex max-w-sm flex-col items-center px-6 text-center">
-          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.025]">
-            <FaUsers className="text-xl text-gray-600" />
+          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/[0.07] bg-gradient-to-br from-white/[0.06] to-white/[0.015] shadow-xl shadow-black/20">
+            <FaUsers className="text-xl text-gray-500" />
           </div>
 
-          <h3 className="text-sm font-semibold text-gray-300">
+          <h3 className="text-sm font-semibold tracking-tight text-gray-200">
             Selecione uma conversa
           </h3>
 
-          <p className="mt-2 text-xs leading-5 text-gray-600">
+          <p className="mt-2 text-xs leading-5 text-gray-500">
             Escolha uma conversa na lista para começar a trocar mensagens.
           </p>
         </div>
@@ -472,68 +529,35 @@ export default function ChatArea({ onBack }) {
   */
 
   return (
-    <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#08090c]">
-      {/* ==================================================
-          HEADER
-      ================================================== */}
+    <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#08090c] text-gray-200">
+      {/* HEADER */}
 
-      <header className="relative z-20 flex h-[68px] shrink-0 items-center border-b border-white/[0.05] bg-[#0b0d11]/95 px-3 backdrop-blur-xl sm:px-4">
+      <header className="relative z-20 flex h-[68px] shrink-0 items-center border-b border-white/[0.06] bg-[#0b0d11]/95 px-3 backdrop-blur-xl sm:px-5">
         {onBack && (
           <button
             type="button"
             onClick={onBack}
-            className="
-              mr-2
-              flex
-              h-9
-              w-9
-              shrink-0
-              items-center
-              justify-center
-              rounded-xl
-              text-gray-500
-              transition
-              hover:bg-white/[0.05]
-              hover:text-gray-200
-            "
+            className="mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-transparent text-gray-500 transition-all duration-200 hover:border-white/[0.06] hover:bg-white/[0.05] hover:text-gray-200 active:scale-95"
             title="Voltar"
           >
             <FaChevronLeft size={13} />
           </button>
         )}
 
-        {/* Avatar */}
-
         <div className="relative mr-3 shrink-0">
           {headerAvatar ? (
             <img
               src={headerAvatar}
               alt={conversationName}
-              className="
-                h-10
-                w-10
-                rounded-xl
-                border
-                border-white/[0.06]
-                object-cover
-              "
+              className="h-10 w-10 rounded-xl border border-white/[0.08] object-cover shadow-lg shadow-black/20"
             />
           ) : (
             <div
-              className={`
-                flex
-                h-10
-                w-10
-                items-center
-                justify-center
-                rounded-xl
-                border
-                ${
-                  isWhatsApp
-                    ? 'border-emerald-500/20 bg-emerald-500/[0.06]'
-                    : 'border-white/[0.06] bg-white/[0.04]'
-                }
-              `}
+              className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
+                isWhatsApp
+                  ? 'border-emerald-500/20 bg-emerald-500/[0.08]'
+                  : 'border-white/[0.07] bg-gradient-to-br from-white/[0.06] to-white/[0.02]'
+              }`}
             >
               {isWhatsApp ? (
                 <FaWhatsapp className="text-base text-emerald-400" />
@@ -545,103 +569,55 @@ export default function ChatArea({ onBack }) {
             </div>
           )}
 
-          {/* Online somente interno */}
-
           {!isWhatsApp && !isChannel && (
             <span
-              className={`
-                absolute
-                -bottom-0.5
-                -right-0.5
-                h-3
-                w-3
-                rounded-full
-                border-2
-                border-[#0b0d11]
-                ${online ? 'bg-emerald-400' : 'bg-gray-600'}
-              `}
+              className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#0b0d11] ${
+                online ? 'bg-emerald-400' : 'bg-gray-600'
+              }`}
             />
           )}
         </div>
 
-        {/* Nome / informações */}
-
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
-            <h2 className="truncate text-sm font-semibold text-gray-200">
+            <h2 className="truncate text-sm font-semibold tracking-tight text-gray-100">
               {conversationName}
             </h2>
 
             {isWhatsApp && (
-              <span
-                className="
-                  inline-flex
-                  shrink-0
-                  items-center
-                  gap-1
-                  rounded-md
-                  border
-                  border-emerald-500/10
-                  bg-emerald-500/[0.06]
-                  px-1.5
-                  py-0.5
-                  text-[8px]
-                  font-semibold
-                  uppercase
-                  tracking-[0.1em]
-                  text-emerald-400/80
-                "
-              >
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-500/15 bg-emerald-500/[0.07] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.1em] text-emerald-400">
                 <FaWhatsapp size={8} />
                 WhatsApp
               </span>
             )}
 
             {isChannel && !isWhatsApp && (
-              <span
-                className="
-                  shrink-0
-                  rounded-md
-                  border
-                  border-indigo-400/10
-                  bg-indigo-400/[0.06]
-                  px-1.5
-                  py-0.5
-                  text-[8px]
-                  font-semibold
-                  uppercase
-                  tracking-[0.12em]
-                  text-indigo-300/70
-                "
-              >
+              <span className="shrink-0 rounded-md border border-indigo-400/15 bg-indigo-400/[0.07] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.12em] text-indigo-300">
                 Canal
               </span>
             )}
           </div>
 
-          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+          <div className="mt-1 flex min-w-0 items-center gap-1.5">
             {isWhatsApp ? (
               <>
-                <FaWhatsapp size={8} className="shrink-0 text-emerald-400/60" />
-
-                <span className="truncate text-[10px] text-gray-600">
+                <FaWhatsapp size={8} className="shrink-0 text-emerald-400/70" />
+                <span className="truncate text-[10px] text-gray-500">
                   {whatsappPhone || conversationSubtitle || 'Contato WhatsApp'}
                 </span>
               </>
             ) : isChannel ? (
               <>
-                <FaUsers size={8} className="text-gray-600" />
-
-                <span className="text-[10px] text-gray-600">
+                <FaUsers size={8} className="text-gray-500" />
+                <span className="text-[10px] text-gray-500">
                   {participantCount}{' '}
                   {participantCount === 1 ? 'participante' : 'participantes'}
                 </span>
 
                 {onlineParticipantCount > 0 && (
                   <>
-                    <span className="text-gray-800">•</span>
-
-                    <span className="text-[10px] text-emerald-400/70">
+                    <span className="text-gray-700">·</span>
+                    <span className="text-[10px] text-emerald-400/80">
                       {onlineParticipantCount} online
                     </span>
                   </>
@@ -655,19 +631,17 @@ export default function ChatArea({ onBack }) {
                 />
 
                 <span
-                  className={`
-                    text-[10px]
-                    ${online ? 'text-emerald-400/70' : 'text-gray-600'}
-                  `}
+                  className={`text-[10px] ${
+                    online ? 'text-emerald-400/80' : 'text-gray-500'
+                  }`}
                 >
                   {online ? 'Online' : 'Offline'}
                 </span>
 
                 {otherUser?.role && (
                   <>
-                    <span className="text-gray-800">•</span>
-
-                    <span className="truncate text-[10px] text-gray-600">
+                    <span className="text-gray-700">·</span>
+                    <span className="truncate text-[10px] text-gray-500">
                       {getRoleLabel(otherUser.role)}
                     </span>
                   </>
@@ -677,25 +651,12 @@ export default function ChatArea({ onBack }) {
           </div>
         </div>
 
-        {/* Ações */}
-
         <div className="ml-2 flex shrink-0 items-center gap-1">
           {isChannel && (
             <button
               type="button"
               onClick={() => setShowParticipants(true)}
-              className="
-                flex
-                h-9
-                w-9
-                items-center
-                justify-center
-                rounded-xl
-                text-gray-500
-                transition
-                hover:bg-white/[0.05]
-                hover:text-gray-200
-              "
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 transition-all duration-200 hover:bg-white/[0.06] hover:text-gray-200 active:scale-95"
               title="Ver participantes"
             >
               <FaUsers size={14} />
@@ -705,22 +666,9 @@ export default function ChatArea({ onBack }) {
           <button
             type="button"
             onClick={() => {
-              if (isChannel) {
-                setShowParticipants(true);
-              }
+              if (isChannel) setShowParticipants(true);
             }}
-            className="
-              flex
-              h-9
-              w-9
-              items-center
-              justify-center
-              rounded-xl
-              text-gray-500
-              transition
-              hover:bg-white/[0.05]
-              hover:text-gray-200
-            "
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 transition-all duration-200 hover:bg-white/[0.06] hover:text-gray-200 active:scale-95"
             title={
               isChannel ? 'Informações do canal' : 'Informações da conversa'
             }
@@ -730,18 +678,7 @@ export default function ChatArea({ onBack }) {
 
           <button
             type="button"
-            className="
-              flex
-              h-9
-              w-9
-              items-center
-              justify-center
-              rounded-xl
-              text-gray-500
-              transition
-              hover:bg-white/[0.05]
-              hover:text-gray-200
-            "
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 transition-all duration-200 hover:bg-white/[0.06] hover:text-gray-200 active:scale-95"
             title="Mais opções"
           >
             <FaEllipsisV size={13} />
@@ -749,9 +686,7 @@ export default function ChatArea({ onBack }) {
         </div>
       </header>
 
-      {/* ==================================================
-          PARTICIPANTS PANEL
-      ================================================== */}
+      {/* PAINEL DE PARTICIPANTES */}
 
       {showParticipants && isChannel && (
         <div className="absolute inset-0 z-50 flex">
@@ -759,45 +694,23 @@ export default function ChatArea({ onBack }) {
             type="button"
             aria-label="Fechar participantes"
             onClick={() => setShowParticipants(false)}
-            className="
-              absolute
-              inset-0
-              cursor-default
-              bg-black/50
-              backdrop-blur-[2px]
-            "
+            className="absolute inset-0 cursor-default bg-black/60 backdrop-blur-sm"
           />
 
-          <aside
-            className="
-              relative
-              ml-auto
-              flex
-              h-full
-              w-[320px]
-              max-w-[88vw]
-              flex-col
-              border-l
-              border-white/[0.07]
-              bg-[#0c0e12]
-              shadow-2xl
-            "
-          >
-            {/* Header */}
-
-            <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-white/[0.05] px-5">
+          <aside className="relative ml-auto flex h-full w-[320px] max-w-[88vw] flex-col border-l border-white/[0.08] bg-[#0c0e12] shadow-2xl shadow-black/40">
+            <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-white/[0.06] px-5">
               <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.035]">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04]">
                   <FaUsers className="text-sm text-gray-400" />
                 </div>
 
                 <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-gray-200">
+                  <h3 className="text-sm font-semibold text-gray-100">
                     Participantes
                   </h3>
 
-                  <div className="mt-0.5 flex items-center gap-1.5">
-                    <span className="text-[10px] text-gray-600">
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-500">
                       {participantCount}{' '}
                       {participantCount === 1
                         ? 'participante'
@@ -806,9 +719,8 @@ export default function ChatArea({ onBack }) {
 
                     {onlineParticipantCount > 0 && (
                       <>
-                        <span className="text-gray-800">•</span>
-
-                        <span className="text-[10px] text-emerald-400/70">
+                        <span className="text-gray-700">·</span>
+                        <span className="text-[10px] text-emerald-400/80">
                           {onlineParticipantCount} online
                         </span>
                       </>
@@ -820,31 +732,17 @@ export default function ChatArea({ onBack }) {
               <button
                 type="button"
                 onClick={() => setShowParticipants(false)}
-                className="
-                  flex
-                  h-8
-                  w-8
-                  items-center
-                  justify-center
-                  rounded-lg
-                  text-gray-600
-                  transition
-                  hover:bg-white/[0.05]
-                  hover:text-gray-300
-                "
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-white/[0.06] hover:text-gray-200"
                 title="Fechar"
               >
                 <FaTimes size={13} />
               </button>
             </div>
 
-            {/* Participants */}
-
             <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
               {participants.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center px-6 text-center">
                   <FaUsers className="mb-3 text-xl text-gray-700" />
-
                   <p className="text-xs text-gray-500">
                     Nenhum participante encontrado.
                   </p>
@@ -853,99 +751,64 @@ export default function ChatArea({ onBack }) {
                 <div className="space-y-1">
                   {participants.map((participant) => {
                     const participantOnline = isUserOnline?.(participant?._id);
-
                     const isCurrentUser = isSameUser(participant, user);
-
                     const participantName = participant?.name || 'Usuário';
 
                     return (
                       <div
                         key={participant?._id}
-                        className="
-                            group
-                            flex
-                            items-center
-                            gap-3
-                            rounded-xl
-                            px-3
-                            py-2.5
-                            transition
-                            hover:bg-white/[0.035]
-                          "
+                        className="group flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 transition hover:border-white/[0.04] hover:bg-white/[0.035]"
                       >
-                        {/* Avatar */}
-
                         <div className="relative shrink-0">
                           {participant?.avatar ? (
                             <img
                               src={participant.avatar}
                               alt={participantName}
-                              className="
-                                  h-10
-                                  w-10
-                                  rounded-xl
-                                  object-cover
-                                "
+                              className="h-10 w-10 rounded-xl border border-white/[0.06] object-cover"
                             />
                           ) : (
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.04] text-[11px] font-semibold text-gray-400">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-[11px] font-semibold text-gray-400">
                               {getInitials(participantName)}
                             </div>
                           )}
 
                           <span
-                            className={`
-                                absolute
-                                -bottom-0.5
-                                -right-0.5
-                                h-2.5
-                                w-2.5
-                                rounded-full
-                                border-2
-                                border-[#0c0e12]
-                                ${
-                                  participantOnline
-                                    ? 'bg-emerald-400'
-                                    : 'bg-gray-700'
-                                }
-                              `}
+                            className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0c0e12] ${
+                              participantOnline
+                                ? 'bg-emerald-400'
+                                : 'bg-gray-700'
+                            }`}
                           />
                         </div>
 
-                        {/* Info */}
-
                         <div className="min-w-0 flex-1">
                           <div className="flex min-w-0 items-center gap-1.5">
-                            <span className="truncate text-xs font-medium text-gray-300">
+                            <span className="truncate text-xs font-medium text-gray-200">
                               {participantName}
                             </span>
 
                             {isCurrentUser && (
-                              <span className="shrink-0 rounded-md border border-indigo-400/10 bg-indigo-400/[0.07] px-1.5 py-0.5 text-[8px] font-semibold text-indigo-300/70">
+                              <span className="shrink-0 rounded-md border border-indigo-400/15 bg-indigo-400/[0.07] px-1.5 py-0.5 text-[8px] font-semibold text-indigo-300">
                                 Você
                               </span>
                             )}
                           </div>
 
-                          <div className="mt-0.5 flex items-center gap-1.5">
+                          <div className="mt-1 flex items-center gap-1.5">
                             <span
-                              className={`
-                                  text-[9px]
-                                  ${
-                                    participantOnline
-                                      ? 'text-emerald-400/70'
-                                      : 'text-gray-600'
-                                  }
-                                `}
+                              className={`text-[9px] ${
+                                participantOnline
+                                  ? 'text-emerald-400/80'
+                                  : 'text-gray-500'
+                              }`}
                             >
                               {participantOnline ? 'Online' : 'Offline'}
                             </span>
 
                             {participant?.role && (
                               <>
-                                <span className="text-gray-800">•</span>
-
-                                <span className="truncate text-[9px] text-gray-600">
+                                <span className="text-gray-700">·</span>
+                                <span className="truncate text-[9px] text-gray-500">
                                   {getRoleLabel(participant.role)}
                                 </span>
                               </>
@@ -956,7 +819,7 @@ export default function ChatArea({ onBack }) {
                         {participantOnline && (
                           <FaCircle
                             size={5}
-                            className="shrink-0 text-emerald-400/70"
+                            className="shrink-0 text-emerald-400/80"
                           />
                         )}
                       </div>
@@ -969,41 +832,21 @@ export default function ChatArea({ onBack }) {
         </div>
       )}
 
-      {/* ==================================================
-          MESSAGES
-      ================================================== */}
+      {/* MENSAGENS */}
 
-      <div
-        className="
-          relative
-          min-h-0
-          flex-1
-          overflow-y-auto
-          px-3
-          py-4
-          sm:px-4
-          sm:py-5
-        "
-      >
+      <div className="relative min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5">
         {loading ? (
           <div className="flex h-full items-center justify-center">
             <div className="flex flex-col items-center gap-3">
               <div
-                className={`
-                  h-6
-                  w-6
-                  animate-spin
-                  rounded-full
-                  border-2
-                  ${
-                    isWhatsApp
-                      ? 'border-emerald-500/20 border-t-emerald-400'
-                      : 'border-gray-700 border-t-indigo-400'
-                  }
-                `}
+                className={`h-6 w-6 animate-spin rounded-full border-2 ${
+                  isWhatsApp
+                    ? 'border-emerald-500/20 border-t-emerald-400'
+                    : 'border-gray-700 border-t-indigo-400'
+                }`}
               />
 
-              <span className="text-[10px] text-gray-600">
+              <span className="text-[10px] text-gray-500">
                 Carregando mensagens...
               </span>
             </div>
@@ -1011,36 +854,26 @@ export default function ChatArea({ onBack }) {
         ) : messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <div
-              className={`
-                mb-4
-                flex
-                h-14
-                w-14
-                items-center
-                justify-center
-                rounded-2xl
-                border
-                ${
-                  isWhatsApp
-                    ? 'border-emerald-500/10 bg-emerald-500/[0.04]'
-                    : 'border-white/[0.06] bg-white/[0.025]'
-                }
-              `}
+              className={`mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border shadow-lg shadow-black/10 ${
+                isWhatsApp
+                  ? 'border-emerald-500/15 bg-emerald-500/[0.05]'
+                  : 'border-white/[0.07] bg-gradient-to-br from-white/[0.05] to-white/[0.015]'
+              }`}
             >
               {isWhatsApp ? (
-                <FaWhatsapp className="text-lg text-emerald-400/70" />
+                <FaWhatsapp className="text-lg text-emerald-400/80" />
               ) : isChannel ? (
-                <FaUsers className="text-lg text-gray-600" />
+                <FaUsers className="text-lg text-gray-500" />
               ) : (
-                <FaUser className="text-lg text-gray-600" />
+                <FaUser className="text-lg text-gray-500" />
               )}
             </div>
 
-            <h3 className="text-sm font-semibold text-gray-400">
-              {isWhatsApp ? 'Nenhuma mensagem ainda' : 'Nenhuma mensagem ainda'}
+            <h3 className="text-sm font-semibold text-gray-300">
+              Nenhuma mensagem ainda
             </h3>
 
-            <p className="mt-1 max-w-xs text-[11px] leading-5 text-gray-600">
+            <p className="mt-2 max-w-xs text-[11px] leading-5 text-gray-500">
               {isWhatsApp
                 ? 'Envie uma mensagem pelo CRM para iniciar a conversa no WhatsApp.'
                 : 'Envie uma mensagem para iniciar a conversa.'}
@@ -1049,18 +882,6 @@ export default function ChatArea({ onBack }) {
         ) : (
           <div className="mx-auto max-w-4xl space-y-3">
             {messages.map((message, index) => {
-              /*
-               * WhatsApp inbound:
-               *
-               * sender = null
-               * senderType = whatsapp_contact
-               * whatsappContact = contato
-               *
-               * WhatsApp outbound:
-               *
-               * sender = usuário atual
-               * senderType = user
-               */
               const messageIsWhatsAppContact =
                 message?.senderType === 'whatsapp_contact';
 
@@ -1086,28 +907,71 @@ export default function ChatArea({ onBack }) {
 
               const senderAvatar = messageIsWhatsAppContact
                 ? messageContact?.avatar || headerAvatar
-                : sender?.avatar;
+                : sender?.avatar || sender?.profileImage || null;
+
+              /*
+              ====================================================
+              DETECTAR IMAGENS, GIFS E ARQUIVOS
+              ====================================================
+              */
+
+              const messageContent = String(message?.content || '').trim();
+
+              const attachmentMimeType = String(
+                message?.attachment?.mimeType || '',
+              ).toLowerCase();
+
+              const contentLooksLikeImage =
+                /\.(gif|jpe?g|png|webp|bmp|svg)(?:[?#].*)?$/i.test(
+                  messageContent,
+                ) || /(?:klipy|giphy|tenor)/i.test(messageContent);
+
+              const attachmentUrl =
+                message?.attachment?.url ||
+                (message?.type === 'image' && isHttpUrl(messageContent)
+                  ? messageContent
+                  : '') ||
+                (isHttpUrl(messageContent) && contentLooksLikeImage
+                  ? messageContent
+                  : '');
+
+              const isImageMessage =
+                message?.type === 'image' ||
+                attachmentMimeType.startsWith('image/') ||
+                Boolean(attachmentUrl && contentLooksLikeImage);
+
+              const isFileMessage = message?.type === 'file';
+
+              const placeholderContents = [
+                'Imagem',
+                'Imagem recebida',
+                'Arquivo',
+                'Arquivo recebido',
+                'GIF',
+                'GIF enviado',
+                message?.attachment?.name,
+              ]
+                .filter(Boolean)
+                .map((value) => String(value).trim());
+
+              const shouldShowText =
+                Boolean(messageContent) &&
+                messageContent !== attachmentUrl &&
+                !placeholderContents.includes(messageContent) &&
+                !(isImageMessage && isHttpUrl(messageContent));
 
               return (
                 <div key={message?._id || message?.externalMessageId || index}>
-                  {/* Data */}
+                  {/* DATA */}
 
                   {showDate && (
                     <div className="my-5 flex items-center justify-center">
                       <span
-                        className={`
-                          rounded-full
-                          border
-                          px-3
-                          py-1
-                          text-[9px]
-                          font-medium
-                          ${
-                            isWhatsApp
-                              ? 'border-emerald-500/10 bg-emerald-500/[0.035] text-gray-600'
-                              : 'border-white/[0.05] bg-white/[0.025] text-gray-600'
-                          }
-                        `}
+                        className={`rounded-full border px-3 py-1 text-[9px] font-medium shadow-sm ${
+                          isWhatsApp
+                            ? 'border-emerald-500/[0.12] bg-emerald-500/[0.035] text-gray-500'
+                            : 'border-white/[0.06] bg-white/[0.025] text-gray-500'
+                        }`}
                       >
                         {formatDate(message.createdAt)}
                       </span>
@@ -1115,13 +979,11 @@ export default function ChatArea({ onBack }) {
                   )}
 
                   <div
-                    className={`
-                      flex
-                      gap-2
-                      ${isOwnMessage ? 'justify-end' : 'justify-start'}
-                    `}
+                    className={`flex gap-2.5 ${
+                      isOwnMessage ? 'justify-end' : 'justify-start'
+                    }`}
                   >
-                    {/* Avatar mensagem recebida */}
+                    {/* AVATAR DA MENSAGEM RECEBIDA */}
 
                     {!isOwnMessage && (
                       <div className="mt-5 shrink-0">
@@ -1129,33 +991,15 @@ export default function ChatArea({ onBack }) {
                           <img
                             src={senderAvatar}
                             alt={senderName}
-                            className="
-                              h-8
-                              w-8
-                              rounded-lg
-                              border
-                              border-white/[0.05]
-                              object-cover
-                            "
+                            className="h-8 w-8 rounded-lg border border-white/[0.06] object-cover"
                           />
                         ) : (
                           <div
-                            className={`
-                              flex
-                              h-8
-                              w-8
-                              items-center
-                              justify-center
-                              rounded-lg
-                              border
-                              text-[9px]
-                              font-semibold
-                              ${
-                                messageIsWhatsAppContact
-                                  ? 'border-emerald-500/10 bg-emerald-500/[0.04] text-emerald-400/70'
-                                  : 'border-white/[0.05] bg-white/[0.035] text-gray-500'
-                              }
-                            `}
+                            className={`flex h-8 w-8 items-center justify-center rounded-lg border text-[9px] font-semibold ${
+                              messageIsWhatsAppContact
+                                ? 'border-emerald-500/15 bg-emerald-500/[0.05] text-emerald-400'
+                                : 'border-white/[0.06] bg-white/[0.035] text-gray-400'
+                            }`}
                           >
                             {messageIsWhatsAppContact ? (
                               <FaWhatsapp size={12} />
@@ -1167,33 +1011,23 @@ export default function ChatArea({ onBack }) {
                       </div>
                     )}
 
-                    {/* Mensagem */}
+                    {/* CORPO DA MENSAGEM */}
 
                     <div
-                      className={`
-                        flex
-                        max-w-[88%]
-                        flex-col
-                        sm:max-w-[72%]
-                        ${isOwnMessage ? 'items-end' : 'items-start'}
-                      `}
+                      className={`flex max-w-[88%] flex-col sm:max-w-[72%] ${
+                        isOwnMessage ? 'items-end' : 'items-start'
+                      }`}
                     >
-                      {/* Nome do remetente */}
+                      {/* NOME DO REMETENTE */}
 
                       {!isOwnMessage && (
-                        <div className="mb-1 ml-1 flex max-w-full items-center gap-1.5">
+                        <div className="mb-1.5 ml-1 flex max-w-full items-center gap-1.5">
                           <span
-                            className={`
-                              max-w-[220px]
-                              truncate
-                              text-[10px]
-                              font-medium
-                              ${
-                                messageIsWhatsAppContact
-                                  ? 'text-emerald-400/70'
-                                  : 'text-gray-500'
-                              }
-                            `}
+                            className={`max-w-[220px] truncate text-[10px] font-medium ${
+                              messageIsWhatsAppContact
+                                ? 'text-emerald-400/80'
+                                : 'text-gray-400'
+                            }`}
                           >
                             {senderName}
                           </span>
@@ -1201,95 +1035,116 @@ export default function ChatArea({ onBack }) {
                           {messageIsWhatsAppContact && (
                             <FaWhatsapp
                               size={8}
-                              className="shrink-0 text-emerald-400/50"
+                              className="shrink-0 text-emerald-400/60"
                             />
                           )}
 
                           {!messageIsWhatsAppContact && sender?.role && (
-                            <span className="text-[8px] text-gray-700">
+                            <span className="text-[8px] text-gray-600">
                               {getRoleLabel(sender.role)}
                             </span>
                           )}
                         </div>
                       )}
 
-                      {/* Bubble */}
+                      {/* BALÃO */}
 
                       <div
-                        className={`
-                          relative
-                          rounded-2xl
-                          px-3.5
-                          py-2.5
-                          ${
-                            isOwnMessage
-                              ? isWhatsApp
-                                ? 'rounded-br-md bg-emerald-500/[0.13] text-gray-200'
-                                : 'rounded-br-md bg-indigo-500/[0.13] text-gray-200'
-                              : isWhatsApp
-                                ? 'rounded-bl-md border border-emerald-500/[0.07] bg-white/[0.035] text-gray-300'
-                                : 'rounded-bl-md border border-white/[0.05] bg-white/[0.035] text-gray-300'
-                          }
-                        `}
+                        className={`relative max-w-full rounded-2xl border px-3.5 py-2.5 shadow-sm ${
+                          isOwnMessage
+                            ? isWhatsApp
+                              ? 'rounded-br-md border-emerald-400/[0.12] bg-gradient-to-br from-emerald-500/[0.14] to-emerald-500/[0.07] text-gray-100'
+                              : 'rounded-br-md border-indigo-400/[0.14] bg-gradient-to-br from-indigo-500/[0.15] to-indigo-500/[0.07] text-gray-100'
+                            : isWhatsApp
+                              ? 'rounded-bl-md border-emerald-500/[0.08] bg-[#101410] text-gray-300'
+                              : 'rounded-bl-md border-white/[0.06] bg-[#111318] text-gray-300'
+                        }`}
                       >
-                        {/* Reply */}
+                        {/* RESPOSTA */}
 
                         {message.replyTo && (
                           <div
-                            className={`
-                              mb-2
-                              rounded-lg
-                              border-l-2
-                              px-2.5
-                              py-1.5
-                              ${
-                                isWhatsApp
-                                  ? 'border-emerald-400/40 bg-black/10'
-                                  : 'border-indigo-400/40 bg-black/10'
-                              }
-                            `}
+                            className={`mb-2 rounded-lg border-l-2 px-2.5 py-1.5 ${
+                              isWhatsApp
+                                ? 'border-emerald-400/50 bg-black/15'
+                                : 'border-indigo-400/50 bg-black/15'
+                            }`}
                           >
                             <p
-                              className={`
-                                mb-0.5
-                                text-[8px]
-                                font-medium
-                                uppercase
-                                tracking-wider
-                                ${
-                                  isWhatsApp
-                                    ? 'text-emerald-300/60'
-                                    : 'text-indigo-300/60'
-                                }
-                              `}
+                              className={`mb-1 text-[8px] font-semibold uppercase tracking-wider ${
+                                isWhatsApp
+                                  ? 'text-emerald-300/80'
+                                  : 'text-indigo-300/80'
+                              }`}
                             >
                               Resposta
                             </p>
 
-                            <p className="line-clamp-2 text-[10px] text-gray-600">
+                            <p className="line-clamp-2 text-[10px] leading-4 text-gray-400">
                               {message.replyTo.content}
                             </p>
                           </div>
                         )}
 
-                        {/* Conteúdo */}
+                        {/* IMAGEM OU GIF */}
 
-                        <p className="whitespace-pre-wrap break-words text-xs leading-5">
-                          {message.content}
-                        </p>
+                        {isImageMessage && attachmentUrl && (
+                          <a
+                            href={attachmentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mb-1 block max-w-full overflow-hidden rounded-xl"
+                            title="Abrir imagem em tamanho original"
+                          >
+                            <img
+                              src={attachmentUrl}
+                              alt={
+                                attachmentMimeType === 'image/gif'
+                                  ? 'GIF enviado'
+                                  : 'Imagem enviada'
+                              }
+                              loading="lazy"
+                              className="block h-auto max-h-[320px] max-w-full rounded-xl object-contain transition-opacity duration-200 hover:opacity-90"
+                              onError={(event) => {
+                                event.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          </a>
+                        )}
 
-                        {/* Meta */}
+                        {/* ARQUIVO */}
+
+                        {isFileMessage && attachmentUrl && (
+                          <a
+                            href={attachmentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mb-1 flex items-center gap-2 rounded-xl border border-white/[0.07] bg-black/15 px-3 py-2.5 text-xs text-indigo-300 transition hover:border-indigo-400/20 hover:bg-black/25"
+                          >
+                            <FaPaperclip size={12} />
+
+                            <span className="max-w-[220px] break-all">
+                              {message?.attachment?.name || 'Abrir arquivo'}
+                            </span>
+                          </a>
+                        )}
+
+                        {/* TEXTO */}
+
+                        {shouldShowText && (
+                          <p className="whitespace-pre-wrap break-words text-xs leading-5">
+                            {messageContent}
+                          </p>
+                        )}
+
+                        {/* HORÁRIO E STATUS */}
 
                         <div
-                          className={`
-                            mt-1.5
-                            flex
-                            items-center
-                            gap-1.5
-                            ${isOwnMessage ? 'justify-end' : 'justify-start'}
-                          `}
+                          className={`mt-1.5 flex items-center gap-1.5 ${
+                            isOwnMessage ? 'justify-end' : 'justify-start'
+                          }`}
                         >
-                          <span className="text-[8px] text-gray-600">
+                          <span className="text-[8px] tabular-nums text-gray-500">
                             {formatTime(message.createdAt)}
                           </span>
 
@@ -1310,19 +1165,18 @@ export default function ChatArea({ onBack }) {
                                     size={8}
                                     className={
                                       isWhatsApp
-                                        ? 'text-emerald-400/70'
-                                        : 'text-indigo-400/70'
+                                        ? 'text-emerald-400/80'
+                                        : 'text-indigo-400/80'
                                     }
                                   />
-
                                   <FaCheck size={8} className="-ml-1.5" />
                                 </span>
                               ) : message.status === 'sent' ? (
-                                <FaCheck size={8} className="text-gray-600" />
+                                <FaCheck size={8} className="text-gray-500" />
                               ) : (
                                 <FaRegClock
                                   size={8}
-                                  className="text-gray-700"
+                                  className="text-gray-500"
                                 />
                               )}
                             </>
@@ -1335,19 +1189,19 @@ export default function ChatArea({ onBack }) {
               );
             })}
 
-            {/* Typing — somente interno */}
+            {/* DIGITANDO — SOMENTE CHAT INTERNO */}
 
             {isTypingUser && !isWhatsApp && (
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.05] bg-white/[0.035]">
-                  <FaUser size={10} className="text-gray-600" />
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.035]">
+                  <FaUser size={10} className="text-gray-500" />
                 </div>
 
-                <div className="rounded-2xl rounded-bl-md border border-white/[0.05] bg-white/[0.035] px-3.5 py-2.5">
+                <div className="rounded-2xl rounded-bl-md border border-white/[0.06] bg-[#111318] px-3.5 py-2.5">
                   <div className="flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-600 [animation-delay:-0.3s]" />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-600 [animation-delay:-0.15s]" />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-600" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-500 [animation-delay:-0.3s]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-500 [animation-delay:-0.15s]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-500" />
                   </div>
                 </div>
               </div>
@@ -1358,40 +1212,40 @@ export default function ChatArea({ onBack }) {
         )}
       </div>
 
-      {/* ==================================================
-          FOOTER / INPUT
-      ================================================== */}
+      {/* FOOTER / INPUT */}
 
-      <div className="relative z-20 shrink-0 border-t border-white/[0.05] bg-[#0b0d11] px-3 py-3 sm:px-4">
-        {/* Emoji picker */}
+      <div className="relative z-30 shrink-0 border-t border-white/[0.06] bg-[#0b0d11] px-3 py-3 sm:px-5">
+        {/* SELETOR DE EMOJIS */}
 
         {showEmojiPicker && (
           <div
             ref={emojiPickerRef}
-            className="
-              absolute
-              bottom-[76px]
-              left-3
-              z-30
-              w-[280px]
-              overflow-hidden
-              rounded-2xl
-              border
-              border-white/[0.07]
-              bg-[#111318]
-              shadow-2xl
-            "
+            className="absolute bottom-[82px] left-3 z-40 w-[280px] overflow-hidden rounded-2xl border border-white/[0.09] bg-[#111318] shadow-2xl shadow-black/50 animate-in fade-in slide-in-from-bottom-2 duration-150"
           >
-            <div className="border-b border-white/[0.05] px-4 py-3">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500">
-                Emojis
-              </span>
+            <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
+              <div>
+                <span className="block text-xs font-semibold text-gray-200">
+                  Emojis
+                </span>
+                <span className="mt-0.5 block text-[9px] text-gray-500">
+                  Escolha uma reação
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-500 transition hover:bg-white/[0.06] hover:text-gray-200"
+                title="Fechar emojis"
+              >
+                <FaTimes size={11} />
+              </button>
             </div>
 
             <div className="max-h-[230px] overflow-y-auto p-3">
               {Object.entries(emojiCategories).map(([category, emojis]) => (
                 <div key={category} className="mb-3 last:mb-0">
-                  <p className="mb-2 text-[8px] uppercase tracking-wider text-gray-700">
+                  <p className="mb-2 text-[8px] font-semibold uppercase tracking-wider text-gray-500">
                     {category}
                   </p>
 
@@ -1401,17 +1255,7 @@ export default function ChatArea({ onBack }) {
                         key={`${emoji}-${index}`}
                         type="button"
                         onClick={() => insertEmoji(emoji)}
-                        className="
-                            flex
-                            h-8
-                            w-8
-                            items-center
-                            justify-center
-                            rounded-lg
-                            text-base
-                            transition
-                            hover:bg-white/[0.05]
-                          "
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-base transition hover:bg-white/[0.07] active:scale-90"
                       >
                         {emoji}
                       </button>
@@ -1423,55 +1267,121 @@ export default function ChatArea({ onBack }) {
           </div>
         )}
 
+        {/* SELETOR DE GIFS — DARK PREMIUM */}
+
+        {showGifPicker && (
+          <div
+            ref={gifPickerRef}
+            className="absolute bottom-[82px] left-3 z-40 w-[min(360px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-white/[0.1] bg-[#101116] shadow-2xl shadow-black/60 animate-in fade-in slide-in-from-bottom-2 duration-150"
+          >
+            {/* Cabeçalho próprio do seletor */}
+
+            <div className="flex items-center justify-between border-b border-white/[0.07] bg-gradient-to-r from-[#15171e] to-[#101116] px-4 py-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-indigo-400/20 bg-indigo-500/[0.12]">
+                  <span className="text-[11px] font-black tracking-wide text-indigo-300">
+                    GIF
+                  </span>
+                </div>
+
+                <div className="min-w-0">
+                  <h3 className="text-xs font-semibold text-gray-100">
+                    Escolha um GIF
+                  </h3>
+                  <p className="mt-0.5 text-[9px] text-gray-500">
+                    Encontre a reação perfeita
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowGifPicker(false)}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-transparent text-gray-500 transition hover:border-white/[0.06] hover:bg-white/[0.06] hover:text-gray-200 active:scale-95"
+                title="Fechar seletor de GIFs"
+                aria-label="Fechar seletor de GIFs"
+              >
+                <FaTimes size={12} />
+              </button>
+            </div>
+
+            {/* Biblioteca de GIFs */}
+
+            <div className="gif-picker-dark-surface bg-[#101116] p-2">
+              <GifPicker
+                provider={Klipy(
+                  'H9jbrsVDruuiPMCdinhGLHKgvl1aUsoRnmT5o4MTtmuDLZRMZQXLeZ8s3Jcp5kA6',
+                )}
+                onGifClick={handleGifSelected}
+                width="100%"
+                height={350}
+                theme="dark"
+              />
+            </div>
+
+            <div className="flex items-center justify-between border-t border-white/[0.06] px-3 py-2">
+              <span className="text-[9px] text-gray-500">
+                Selecione um GIF para enviar
+              </span>
+
+              <span className="rounded-md border border-white/[0.07] bg-white/[0.03] px-1.5 py-1 text-[8px] font-medium text-gray-500">
+                KLIPY
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="mx-auto flex max-w-4xl items-end gap-2">
-          {/* Emoji */}
+          {/* EMOJI */}
 
           <button
             type="button"
-            onClick={() => setShowEmojiPicker((prev) => !prev)}
-            className={`
-              mb-1
-              flex
-              h-9
-              w-9
-              shrink-0
-              items-center
-              justify-center
-              rounded-xl
-              transition
-              ${
-                showEmojiPicker
-                  ? isWhatsApp
-                    ? 'bg-emerald-500/[0.08] text-emerald-400'
-                    : 'bg-white/[0.07] text-gray-300'
-                  : 'text-gray-600 hover:bg-white/[0.04] hover:text-gray-400'
-              }
-            `}
-            title="Emoji"
+            onClick={() => {
+              setShowEmojiPicker((prev) => !prev);
+              setShowGifPicker(false);
+            }}
+            className={`mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-all duration-200 active:scale-95 ${
+              showEmojiPicker
+                ? isWhatsApp
+                  ? 'border-emerald-500/20 bg-emerald-500/[0.1] text-emerald-400'
+                  : 'border-indigo-400/20 bg-indigo-500/[0.1] text-indigo-300'
+                : 'border-transparent text-gray-500 hover:border-white/[0.06] hover:bg-white/[0.04] hover:text-gray-300'
+            }`}
+            title="Inserir emoji"
+            aria-label="Inserir emoji"
+            aria-expanded={showEmojiPicker}
           >
-            <FaSmile size={15} />
+            <FaSmile size={16} />
           </button>
 
-          {/* Input */}
+          {/* BOTÃO GIF */}
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowGifPicker((prev) => !prev);
+              setShowEmojiPicker(false);
+            }}
+            className={`mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-[10px] font-extrabold tracking-wide transition-all duration-200 active:scale-95 ${
+              showGifPicker
+                ? 'border-indigo-400/25 bg-indigo-500/[0.12] text-indigo-300 shadow-sm shadow-indigo-950/30'
+                : 'border-transparent text-gray-500 hover:border-white/[0.06] hover:bg-white/[0.04] hover:text-gray-300'
+            }`}
+            title="Enviar GIF"
+            aria-label="Enviar GIF"
+            aria-expanded={showGifPicker}
+          >
+            GIF
+          </button>
+
+          {/* CAMPO DE TEXTO */}
 
           <div
-            className={`
-              relative
-              flex
-              min-h-[42px]
-              flex-1
-              items-end
-              rounded-2xl
-              border
-              bg-white/[0.025]
-              transition
-              focus-within:bg-white/[0.035]
-              ${
-                isWhatsApp
-                  ? 'border-emerald-500/[0.08] focus-within:border-emerald-400/20'
-                  : 'border-white/[0.06] focus-within:border-indigo-400/20'
-              }
-            `}
+            className={`relative flex min-h-[44px] flex-1 items-end rounded-2xl border bg-[#101116] transition-all duration-200 focus-within:bg-[#12141a] ${
+              isWhatsApp
+                ? 'border-white/[0.07] focus-within:border-emerald-400/30 focus-within:shadow-[0_0_0_3px_rgba(16,185,129,0.04)]'
+                : 'border-white/[0.07] focus-within:border-indigo-400/30 focus-within:shadow-[0_0_0_3px_rgba(99,102,241,0.05)]'
+            }`}
           >
             <textarea
               ref={textareaRef}
@@ -1485,86 +1395,43 @@ export default function ChatArea({ onBack }) {
               }
               rows={1}
               disabled={sending}
-              className="
-                max-h-32
-                min-h-[42px]
-                flex-1
-                resize-none
-                bg-transparent
-                px-3.5
-                py-3
-                pr-12
-                text-xs
-                leading-5
-                text-gray-300
-                outline-none
-                placeholder:text-gray-700
-                disabled:cursor-not-allowed
-              "
+              className="max-h-32 min-h-[44px] flex-1 resize-none bg-transparent px-3.5 py-3 pr-12 text-xs leading-5 text-gray-200 outline-none placeholder:text-gray-600 disabled:cursor-not-allowed disabled:opacity-60"
             />
 
             <button
               type="button"
-              className="
-                absolute
-                bottom-1.5
-                right-1.5
-                flex
-                h-8
-                w-8
-                items-center
-                justify-center
-                rounded-xl
-                text-gray-600
-                transition
-                hover:bg-white/[0.05]
-                hover:text-gray-400
-              "
+              className="absolute bottom-1.5 right-1.5 flex h-8 w-8 items-center justify-center rounded-xl text-gray-500 transition-all duration-200 hover:bg-white/[0.06] hover:text-gray-300 active:scale-95"
               title="Anexar arquivo"
+              aria-label="Anexar arquivo"
+              onClick={() => {
+                console.info(
+                  'O envio de arquivos ainda precisa ser conectado ao serviço de upload.',
+                );
+              }}
             >
               <FaPaperclip size={13} />
             </button>
           </div>
 
-          {/* Send */}
+          {/* ENVIAR */}
 
           <button
             type="button"
             onClick={handleSendMessage}
             disabled={!inputMessage.trim() || sending}
-            className={`
-              mb-0.5
-              flex
-              h-10
-              w-10
-              shrink-0
-              items-center
-              justify-center
-              rounded-xl
-              text-white
-              transition
-              disabled:cursor-not-allowed
-              disabled:bg-white/[0.04]
-              disabled:text-gray-700
-              ${
-                isWhatsApp
-                  ? 'bg-emerald-600 hover:bg-emerald-500'
-                  : 'bg-indigo-500 hover:bg-indigo-400'
-              }
-            `}
+            className={`mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-lg transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:bg-white/[0.04] disabled:text-gray-600 disabled:shadow-none ${
+              isWhatsApp
+                ? 'bg-emerald-600 shadow-emerald-950/20 hover:bg-emerald-500'
+                : 'bg-indigo-500 shadow-indigo-950/20 hover:bg-indigo-400'
+            }`}
             title="Enviar mensagem"
+            aria-label="Enviar mensagem"
           >
             {sending ? (
               <div
-                className={`
-                  h-3.5
-                  w-3.5
-                  animate-spin
-                  rounded-full
-                  border-2
-                  border-white/30
-                  ${isWhatsApp ? 'border-t-emerald-100' : 'border-t-white'}
-                `}
+                className={`h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 ${
+                  isWhatsApp ? 'border-t-emerald-100' : 'border-t-white'
+                }`}
               />
             ) : (
               <FaPaperPlane size={13} />
@@ -1572,8 +1439,8 @@ export default function ChatArea({ onBack }) {
           </button>
         </div>
 
-        <div className="mx-auto mt-1.5 hidden max-w-4xl items-center justify-between sm:flex">
-          <span className="text-[8px] text-gray-700">
+        <div className="mx-auto mt-2 hidden max-w-4xl items-center justify-between sm:flex">
+          <span className="text-[9px] text-gray-600">
             {isWhatsApp
               ? 'Mensagem enviada pelo WhatsApp'
               : 'Enter para enviar · Shift + Enter para nova linha'}
@@ -1581,9 +1448,9 @@ export default function ChatArea({ onBack }) {
 
           {isWhatsApp && (
             <div className="flex items-center gap-1.5">
-              <FaWhatsapp size={8} className="text-emerald-400/50" />
-
-              <span className="text-[8px] text-gray-700">WA-AKG</span>
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/80" />
+              <FaWhatsapp size={9} className="text-emerald-400/60" />
+              <span className="text-[9px] text-gray-500">WA-AKG</span>
             </div>
           )}
         </div>
