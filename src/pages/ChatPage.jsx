@@ -51,6 +51,7 @@ export default function ChatPage() {
     createBrokerChannel,
   } = useChat();
 
+  const [activeTab, setActiveTab] = useState('internal');
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -469,12 +470,42 @@ export default function ChatPage() {
   ============================================================
   */
 
+  const internalUnreadCount = useMemo(
+    () =>
+      conversations
+        .filter((conversation) => conversation?.channel !== 'whatsapp')
+        .reduce(
+          (total, conversation) =>
+            total + Math.max(0, Number(conversation?.unreadCount || 0)),
+          0,
+        ),
+    [conversations],
+  );
+
+  const whatsappUnreadCount = useMemo(
+    () =>
+      conversations
+        .filter((conversation) => conversation?.channel === 'whatsapp')
+        .reduce(
+          (total, conversation) =>
+            total + Math.max(0, Number(conversation?.unreadCount || 0)),
+          0,
+        ),
+    [conversations],
+  );
+
   const filteredConversations = useMemo(() => {
     const term = search.trim().toLowerCase();
 
-    if (!term || showNewChat) return conversations;
+    const tabConversations = conversations.filter((conversation) =>
+      activeTab === 'whatsapp'
+        ? conversation?.channel === 'whatsapp'
+        : conversation?.channel !== 'whatsapp',
+    );
 
-    return conversations.filter((conversation) => {
+    if (!term) return tabConversations;
+
+    return tabConversations.filter((conversation) => {
       const name = String(getSafeConversationName(conversation)).toLowerCase();
 
       const subtitle = String(
@@ -491,11 +522,32 @@ export default function ChatPage() {
     });
   }, [
     conversations,
+    activeTab,
     search,
-    showNewChat,
     getConversationName,
     getConversationSubtitle,
   ]);
+
+  const handleChangeTab = (tab) => {
+    if (tab === activeTab) return;
+
+    setActiveTab(tab);
+    setSearch('');
+    setShowNewChat(false);
+    setSearchResults([]);
+    setShowParticipants(false);
+    setInputMessage('');
+    setIsTyping(false);
+    initialScrollConversationRef.current = null;
+    previousMessagesCountRef.current = 0;
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+
+    setCurrentConversation(null);
+  };
 
   /*
   ============================================================
@@ -732,9 +784,20 @@ export default function ChatPage() {
                   Mensagens
                 </h1>
 
-                {unreadCount > 0 && (
-                  <span className="shrink-0 rounded-full border border-blue-500/20 bg-blue-600/15 px-2 py-0.5 text-[10px] font-bold text-blue-400">
-                    {unreadCount} novas
+                {(activeTab === 'whatsapp'
+                  ? whatsappUnreadCount
+                  : internalUnreadCount) > 0 && (
+                  <span
+                    className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                      activeTab === 'whatsapp'
+                        ? 'border-emerald-500/20 bg-emerald-600/15 text-emerald-400'
+                        : 'border-blue-500/20 bg-blue-600/15 text-blue-400'
+                    }`}
+                  >
+                    {activeTab === 'whatsapp'
+                      ? whatsappUnreadCount
+                      : internalUnreadCount}{' '}
+                    não lidas
                   </span>
                 )}
               </div>
@@ -745,19 +808,62 @@ export default function ChatPage() {
             </div>
           </div>
 
+          {activeTab === 'internal' && (
+            <button
+              type="button"
+              onClick={() => setShowNewChat(true)}
+              className="flex h-10 shrink-0 items-center gap-2 rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white shadow-lg shadow-blue-600/10 transition hover:bg-blue-500 lg:h-11 lg:px-4 lg:text-sm"
+            >
+              <FaPlus size={12} />
+              <span className="hidden sm:inline">Nova conversa</span>
+            </button>
+          )}
+        </header>
+
+        {/* ABAS: CHAT INTERNO E WHATSAPP */}
+        <div className="mb-4 grid grid-cols-2 gap-2 rounded-2xl border border-gray-800/80 bg-[#0d1119] p-1.5">
           <button
             type="button"
-            onClick={() => setShowNewChat(true)}
-            className="flex h-10 shrink-0 items-center gap-2 rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white shadow-lg shadow-blue-600/10 transition hover:bg-blue-500 lg:h-11 lg:px-4 lg:text-sm"
+            onClick={() => handleChangeTab('internal')}
+            aria-pressed={activeTab === 'internal'}
+            className={`flex min-w-0 items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-semibold transition ${
+              activeTab === 'internal'
+                ? 'border border-blue-500/20 bg-blue-600/15 text-blue-300 shadow-sm'
+                : 'text-gray-500 hover:bg-gray-800/50 hover:text-gray-200'
+            }`}
           >
-            <FaPlus size={12} />
-            <span className="hidden sm:inline">Nova conversa</span>
+            <FaComments size={15} />
+            <span>Chat interno</span>
+            {internalUnreadCount > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[10px] font-bold text-white">
+                {internalUnreadCount > 99 ? '99+' : internalUnreadCount}
+              </span>
+            )}
           </button>
-        </header>
+
+          <button
+            type="button"
+            onClick={() => handleChangeTab('whatsapp')}
+            aria-pressed={activeTab === 'whatsapp'}
+            className={`flex min-w-0 items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-semibold transition ${
+              activeTab === 'whatsapp'
+                ? 'border border-emerald-500/20 bg-emerald-600/15 text-emerald-300 shadow-sm'
+                : 'text-gray-500 hover:bg-gray-800/50 hover:text-gray-200'
+            }`}
+          >
+            <FaWhatsapp size={16} />
+            <span>WhatsApp</span>
+            {whatsappUnreadCount > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-600 px-1.5 text-[10px] font-bold text-white">
+                {whatsappUnreadCount > 99 ? '99+' : whatsappUnreadCount}
+              </span>
+            )}
+          </button>
+        </div>
 
         {/* CHAT PRINCIPAL */}
 
-        <div className="flex h-[calc(100dvh-205px)] min-h-[520px] overflow-hidden rounded-2xl border border-gray-800/80 bg-[#0d1119] shadow-2xl shadow-black/20">
+        <div className="flex h-[calc(100dvh-270px)] min-h-[520px] overflow-hidden rounded-2xl border border-gray-800/80 bg-[#0d1119] shadow-2xl shadow-black/20">
           <div className="flex h-full w-full">
             {/* SIDEBAR */}
 
@@ -798,22 +904,28 @@ export default function ChatPage() {
                     <p className="text-sm font-semibold text-gray-400">
                       {search
                         ? 'Nenhuma conversa encontrada'
-                        : 'Nenhuma conversa'}
+                        : activeTab === 'whatsapp'
+                          ? 'Nenhuma conversa no WhatsApp'
+                          : 'Nenhuma conversa interna'}
                     </p>
 
                     <p className="mt-1.5 text-xs leading-relaxed text-gray-600">
                       {search
                         ? 'Tente buscar outro nome ou mensagem.'
-                        : 'Comece uma nova conversa com sua equipe.'}
+                        : activeTab === 'whatsapp'
+                          ? 'As conversas com seus leads aparecerão aqui.'
+                          : 'Comece uma nova conversa com sua equipe.'}
                     </p>
 
-                    <button
-                      type="button"
-                      onClick={() => setShowNewChat(true)}
-                      className="mt-5 rounded-lg border border-blue-500/20 bg-blue-600/10 px-3.5 py-2 text-xs font-semibold text-blue-400 transition hover:bg-blue-600/15"
-                    >
-                      Iniciar conversa
-                    </button>
+                    {activeTab === 'internal' && (
+                      <button
+                        type="button"
+                        onClick={() => setShowNewChat(true)}
+                        className="mt-5 rounded-lg border border-blue-500/20 bg-blue-600/10 px-3.5 py-2 text-xs font-semibold text-blue-400 transition hover:bg-blue-600/15"
+                      >
+                        Iniciar conversa
+                      </button>
+                    )}
                   </div>
                 ) : (
                   filteredConversations.map((conversation) => {
@@ -1041,18 +1153,21 @@ export default function ChatPage() {
                     </h2>
 
                     <p className="mt-2 text-sm leading-relaxed text-gray-600">
-                      Selecione uma conversa para visualizar as mensagens
-                      internas ou do WhatsApp.
+                      {activeTab === 'whatsapp'
+                        ? 'Selecione uma conversa do WhatsApp para atender seus leads.'
+                        : 'Selecione uma conversa para trocar mensagens com sua equipe.'}
                     </p>
 
-                    <button
-                      type="button"
-                      onClick={() => setShowNewChat(true)}
-                      className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-blue-500"
-                    >
-                      <FaPlus size={11} />
-                      Nova conversa
-                    </button>
+                    {activeTab === 'internal' && (
+                      <button
+                        type="button"
+                        onClick={() => setShowNewChat(true)}
+                        className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-blue-500"
+                      >
+                        <FaPlus size={11} />
+                        Nova conversa
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (
