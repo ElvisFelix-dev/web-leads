@@ -7,6 +7,7 @@ import {
   FaUsers,
   FaCircle,
   FaWhatsapp,
+  FaComments as FaChatBubble,
 } from 'react-icons/fa';
 
 import { useChat } from '../../context/ChatContext';
@@ -85,14 +86,20 @@ export default function ChatWidget() {
     };
 
     const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+
+    if (isMobile) {
+      document.body.style.overflow = 'hidden';
+    }
+
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      document.body.style.overflow = previousOverflow;
+      if (isMobile) {
+        document.body.style.overflow = previousOverflow;
+      }
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, showNewChat]);
+  }, [isOpen, showNewChat, isMobile]);
 
   const handleClose = () => {
     setIsOpen(false);
@@ -134,8 +141,13 @@ export default function ChatWidget() {
     : '';
 
   const participantCount = currentConversation?.participants?.length || 0;
+
   const activeUnreadCount =
     activeTab === 'whatsapp' ? whatsappUnreadCount : internalUnreadCount;
+
+  // ============================================================
+  // ESTADO FECHADO — BOTÃO FLUTUANTE (APENAS ÍCONE)
+  // ============================================================
 
   if (!isOpen) {
     return (
@@ -143,16 +155,16 @@ export default function ChatWidget() {
         type="button"
         onClick={() => setIsOpen(true)}
         aria-label="Abrir mensagens"
-        className="group fixed bottom-5 right-5 z-[60] flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-400/30 bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-2xl shadow-blue-900/40 transition-all duration-300 hover:-translate-y-1 hover:scale-105 hover:shadow-blue-900/60 active:scale-95 sm:bottom-6 sm:right-6 sm:h-16 sm:w-16"
+        className="group fixed bottom-5 right-5 z-[60] flex h-14 w-14 items-center justify-center text-gray-400 transition-all duration-300 hover:text-white active:scale-95 sm:bottom-6 sm:right-6 sm:h-16 sm:w-16"
       >
-        <span className="absolute inset-0 rounded-2xl bg-blue-400/20 opacity-0 blur-xl transition-opacity duration-300 group-hover:opacity-100" />
         <span className="relative flex items-center justify-center">
           <FaComments
-            size={23}
-            className="transition-transform duration-300 group-hover:scale-110"
+            size={26}
+            className="drop-shadow-lg transition-transform duration-300 group-hover:scale-110"
           />
+
           {unreadCount > 0 && (
-            <span className="absolute -right-3 -top-3 flex h-[21px] min-w-[21px] items-center justify-center rounded-full border-2 border-[#0d1119] bg-red-500 px-1 text-[10px] font-extrabold text-white shadow-lg shadow-red-900/40">
+            <span className="absolute -right-2.5 -top-2 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-extrabold text-white shadow-lg shadow-rose-950/50">
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
@@ -161,11 +173,29 @@ export default function ChatWidget() {
     );
   }
 
+  // ============================================================
+  // ESTADO ABERTO — JANELA DO CHAT
+  // ============================================================
+
   return (
     <>
-      <div className="fixed inset-0 z-50 flex animate-[fadeIn_180ms_ease-out] items-center justify-center bg-black/75 p-0 backdrop-blur-md sm:p-4 lg:p-6">
-        <div className="relative flex h-full w-full animate-[chatOpen_220ms_ease-out] flex-col overflow-hidden border-0 bg-[#0b0f17] shadow-2xl shadow-black/60 sm:h-[92vh] sm:max-h-[900px] sm:rounded-2xl sm:border sm:border-white/[0.06] lg:max-w-[1280px]">
-          <header className="relative z-20 flex h-[68px] shrink-0 items-center justify-between border-b border-white/[0.06] bg-[#10151f]/95 px-4 backdrop-blur-xl sm:px-5 lg:px-6">
+      <div
+        className={`${
+          isMobile
+            ? 'fixed inset-0 z-50 flex animate-[fadeIn_180ms_ease-out] items-center justify-center bg-black/75 p-0 backdrop-blur-md'
+            : 'pointer-events-none fixed bottom-24 right-6 z-50 flex items-end justify-end bg-transparent p-0'
+        }`}
+      >
+        <div
+          className={`${
+            isMobile
+              ? 'relative flex h-full w-full animate-[chatOpen_220ms_ease-out] flex-col overflow-hidden border-0 bg-[#0b0f17] shadow-2xl shadow-black/60'
+              : 'pointer-events-auto relative flex h-[min(700px,calc(100dvh-120px))] w-[min(980px,calc(100vw-48px))] animate-[chatOpen_220ms_ease-out] flex-col overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0b0f17] shadow-2xl shadow-black/60 ring-1 ring-white/[0.02]'
+          }`}
+        >
+          {/* HEADER */}
+
+          <header className="relative z-20 flex h-[68px] shrink-0 items-center justify-between border-b border-white/[0.06] bg-[#0e1219]/95 px-4 backdrop-blur-xl sm:px-5 lg:px-6">
             <div className="flex min-w-0 items-center">
               {isMobile && currentConversation && (
                 <button
@@ -181,22 +211,22 @@ export default function ChatWidget() {
               <div
                 className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${
                   isWhatsAppConversation
-                    ? 'border-emerald-500/10 bg-emerald-500/10'
-                    : 'border-blue-500/10 bg-blue-500/10'
+                    ? 'border-emerald-500/15 bg-emerald-500/[0.06] text-emerald-400'
+                    : 'border-white/[0.07] bg-white/[0.035] text-gray-300'
                 }`}
               >
                 {isWhatsAppConversation ? (
-                  <FaWhatsapp size={18} className="text-emerald-400" />
+                  <FaWhatsapp size={18} />
                 ) : currentConversation ? (
-                  <FaComments size={17} className="text-blue-400" />
+                  <FaChatBubble size={16} />
                 ) : (
-                  <FaUsers size={17} className="text-blue-400" />
+                  <FaUsers size={16} />
                 )}
               </div>
 
               <div className="ml-3 min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
-                  <h2 className="truncate text-sm font-bold text-white sm:text-[15px]">
+                  <h2 className="truncate text-sm font-semibold tracking-tight text-gray-100 sm:text-[15px]">
                     {currentConversation
                       ? isWhatsAppConversation
                         ? conversationName
@@ -207,14 +237,14 @@ export default function ChatWidget() {
                   </h2>
 
                   {isWhatsAppConversation && (
-                    <span className="hidden items-center gap-1.5 rounded-full border border-emerald-500/10 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold text-emerald-400 sm:inline-flex">
+                    <span className="hidden items-center gap-1.5 rounded-full border border-emerald-500/15 bg-emerald-500/[0.07] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-400 sm:inline-flex">
                       <FaWhatsapp size={8} />
                       WhatsApp
                     </span>
                   )}
 
                   {isInternalChannel && !isWhatsAppConversation && (
-                    <span className="hidden items-center gap-1.5 rounded-full border border-blue-500/10 bg-blue-500/10 px-2 py-0.5 text-[9px] font-semibold text-blue-400 sm:inline-flex">
+                    <span className="hidden items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 sm:inline-flex">
                       <FaUsers size={8} />
                       Canal
                     </span>
@@ -223,8 +253,8 @@ export default function ChatWidget() {
                   {currentConversation &&
                     !isWhatsAppConversation &&
                     !isInternalChannel && (
-                      <span className="hidden items-center gap-1.5 rounded-full border border-blue-500/10 bg-blue-500/10 px-2 py-0.5 text-[9px] font-semibold text-blue-400 sm:inline-flex">
-                        <FaCircle size={5} />
+                      <span className="hidden items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 sm:inline-flex">
+                        <FaCircle size={5} className="text-emerald-400" />
                         Interno
                       </span>
                     )}
@@ -254,9 +284,9 @@ export default function ChatWidget() {
 
             <div className="flex items-center gap-2">
               {!currentConversation && activeUnreadCount > 0 && (
-                <div className="hidden items-center gap-2 rounded-xl border border-red-500/10 bg-red-500/10 px-3 py-1.5 sm:flex">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-400" />
-                  <span className="text-[10px] font-semibold text-red-400">
+                <div className="hidden items-center gap-2 rounded-xl border border-rose-500/15 bg-rose-500/[0.06] px-3 py-1.5 sm:flex">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400" />
+                  <span className="text-[10px] font-semibold text-rose-300">
                     {activeUnreadCount > 99 ? '99+' : activeUnreadCount}
                   </span>
                 </div>
@@ -266,34 +296,38 @@ export default function ChatWidget() {
                 type="button"
                 onClick={handleClose}
                 aria-label="Fechar chat"
-                className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 transition-all duration-200 hover:bg-white/[0.06] hover:text-white"
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 transition-all duration-200 hover:bg-white/[0.06] hover:text-gray-200"
               >
-                <FaTimes size={16} />
+                <FaTimes size={15} />
               </button>
             </div>
           </header>
+
+          {/* CONTEÚDO */}
 
           <div className="flex min-h-0 flex-1 overflow-hidden">
             <aside
               className={`${
                 currentConversation && isMobile ? 'hidden' : 'flex'
-              } w-full shrink-0 flex-col border-r border-white/[0.06] bg-[#0d121b] lg:w-[360px] xl:w-[390px]`}
+              } w-full shrink-0 flex-col border-r border-white/[0.06] bg-[#0c1016] lg:w-[360px] xl:w-[390px]`}
             >
-              <div className="grid grid-cols-2 gap-1 border-b border-white/[0.06] bg-[#0d121b] p-3">
+              {/* TABS NEUTRAS */}
+
+              <div className="grid grid-cols-2 gap-1 border-b border-white/[0.06] bg-[#0c1016] p-3">
                 <button
                   type="button"
                   onClick={() => handleChangeTab('internal')}
                   aria-pressed={activeTab === 'internal'}
                   className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border px-2 text-xs font-semibold transition sm:text-sm ${
                     activeTab === 'internal'
-                      ? 'border-blue-400/20 bg-blue-500/15 text-blue-300 shadow-lg shadow-blue-950/20'
-                      : 'border-transparent text-gray-500 hover:bg-white/[0.04] hover:text-gray-200'
+                      ? 'border-white/[0.09] bg-white/[0.05] text-gray-100 shadow-inner shadow-black/20'
+                      : 'border-transparent text-gray-500 hover:bg-white/[0.035] hover:text-gray-300'
                   }`}
                 >
-                  <FaComments size={14} />
+                  <FaChatBubble size={13} />
                   Chat interno
                   {internalUnreadCount > 0 && (
-                    <span className="rounded-full bg-blue-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    <span className="rounded-full bg-white/[0.09] px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-gray-200">
                       {internalUnreadCount > 99 ? '99+' : internalUnreadCount}
                     </span>
                   )}
@@ -305,14 +339,20 @@ export default function ChatWidget() {
                   aria-pressed={activeTab === 'whatsapp'}
                   className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border px-2 text-xs font-semibold transition sm:text-sm ${
                     activeTab === 'whatsapp'
-                      ? 'border-emerald-400/20 bg-emerald-500/15 text-emerald-300 shadow-lg shadow-emerald-950/20'
-                      : 'border-transparent text-gray-500 hover:bg-white/[0.04] hover:text-gray-200'
+                      ? 'border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-300 shadow-inner shadow-black/20'
+                      : 'border-transparent text-gray-500 hover:bg-white/[0.035] hover:text-gray-300'
                   }`}
                 >
-                  <FaWhatsapp size={15} />
+                  <FaWhatsapp size={14} />
                   WhatsApp
                   {whatsappUnreadCount > 0 && (
-                    <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    <span
+                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                        activeTab === 'whatsapp'
+                          ? 'bg-emerald-500/20 text-emerald-200'
+                          : 'bg-white/[0.09] text-gray-200'
+                      }`}
+                    >
                       {whatsappUnreadCount > 99 ? '99+' : whatsappUnreadCount}
                     </span>
                   )}
@@ -337,9 +377,11 @@ export default function ChatWidget() {
             </main>
           </div>
 
+          {/* LINHA INFERIOR SUTIL */}
+
           <div
             className={`pointer-events-none absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent ${
-              isWhatsAppConversation ? 'via-emerald-500/20' : 'via-blue-500/20'
+              isWhatsAppConversation ? 'via-emerald-500/25' : 'via-white/[0.08]'
             } to-transparent`}
           />
         </div>
