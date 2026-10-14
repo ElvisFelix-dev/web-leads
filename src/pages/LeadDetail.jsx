@@ -21,15 +21,19 @@ import {
   AlertCircle,
   ChevronRight,
   CheckCircle2,
+  X,
 } from 'lucide-react';
 
 import api from '../service/api';
+import { useChat } from '../context/ChatContext';
 
 import LeadHistory from '../components/lead/LeadHistory';
 
 export default function LeadDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  const { openLeadConversation } = useChat();
 
   const [lead, setLead] = useState(null);
   const [proposals, setProposals] = useState([]);
@@ -38,8 +42,10 @@ export default function LeadDetails() {
   const [loading, setLoading] = useState(true);
   const [loadingProposals, setLoadingProposals] = useState(false);
   const [loadingVisits, setLoadingVisits] = useState(false);
+  const [openingChat, setOpeningChat] = useState(false);
 
   const [error, setError] = useState(null);
+  const [chatError, setChatError] = useState('');
 
   /*
    * ============================================================
@@ -54,7 +60,6 @@ export default function LeadDetails() {
         setError(null);
 
         const response = await api.get(`/api/leads/${id}`);
-
         const payload = response?.data;
 
         const loadedLead =
@@ -91,20 +96,14 @@ export default function LeadDetails() {
         setLoadingProposals(true);
 
         const response = await api.get(`/api/proposals/lead/${id}`);
-
         const payload = response?.data;
 
         const loadedProposals =
           payload?.data?.proposals || payload?.data || payload?.proposals || [];
 
-        if (Array.isArray(loadedProposals)) {
-          setProposals(loadedProposals);
-        } else {
-          setProposals([]);
-        }
+        setProposals(Array.isArray(loadedProposals) ? loadedProposals : []);
       } catch (error) {
         console.error('Erro ao carregar propostas do lead:', error);
-
         setProposals([]);
       } finally {
         setLoadingProposals(false);
@@ -119,23 +118,10 @@ export default function LeadDetails() {
    * CARREGAR VISITAS DO LEAD
    * ============================================================
    *
-   * IMPORTANTE:
+   * O imóvel visitado é obtido da própria visita,
+   * priorizando visit.propertyInfo.
    *
-   * O imóvel exibido neste componente NÃO será mais obtido de:
-   *
-   * lead.property
-   *
-   * O imóvel visitado deve vir da própria visita:
-   *
-   * visit.propertyInfo
-   *
-   * A API de visitas retorna informações como:
-   *
-   * - visit.status
-   * - visit.date
-   * - visit.finishedAt
-   * - visit.leadInfo
-   * - visit.propertyInfo
+   * Não utilizamos lead.property para exibir o imóvel visitado.
    */
 
   useEffect(() => {
@@ -167,12 +153,6 @@ export default function LeadDetails() {
           return;
         }
 
-        /*
-         * Filtra somente as visitas pertencentes ao Lead atual.
-         *
-         * Compatibilidade com diferentes estruturas possíveis
-         * da API.
-         */
         const leadVisits = loadedVisits.filter((visit) => {
           const visitLeadId =
             visit?.leadInfo?.id ||
@@ -181,17 +161,12 @@ export default function LeadDetails() {
             visit?.lead?.id ||
             (typeof visit?.lead === 'string' ? visit.lead : null);
 
-          if (!visitLeadId) {
-            return false;
-          }
-
-          return String(visitLeadId) === String(id);
+          return visitLeadId && String(visitLeadId) === String(id);
         });
 
         setVisits(leadVisits);
       } catch (error) {
         console.error('Erro ao carregar visitas do lead:', error);
-
         setVisits([]);
       } finally {
         setLoadingVisits(false);
@@ -213,10 +188,7 @@ export default function LeadDetails() {
     const source = proposals.length > 0 ? proposals : leadProposals;
 
     return [...source].sort((a, b) => {
-      const dateA = getProposalDateValue(a);
-      const dateB = getProposalDateValue(b);
-
-      return dateB - dateA;
+      return getProposalDateValue(b) - getProposalDateValue(a);
     });
   }, [proposals, lead?.proposals]);
 
@@ -227,11 +199,7 @@ export default function LeadDetails() {
    */
 
   const latestProposal = useMemo(() => {
-    if (!normalizedProposals.length) {
-      return null;
-    }
-
-    return normalizedProposals[0];
+    return normalizedProposals[0] || null;
   }, [normalizedProposals]);
 
   /*
@@ -259,9 +227,7 @@ export default function LeadDetails() {
    */
 
   const latestProposalValue = useMemo(() => {
-    if (!latestProposal) {
-      return null;
-    }
+    if (!latestProposal) return null;
 
     return getProposalValue(latestProposal);
   }, [latestProposal]);
@@ -270,35 +236,18 @@ export default function LeadDetails() {
    * ============================================================
    * VISITAS REALIZADAS COM IMÓVEL
    * ============================================================
-   *
-   * Aqui está a regra principal:
-   *
-   * Só entram:
-   *
-   * 1. visitas concluídas/realizadas
-   * 2. que possuem um imóvel válido
-   *
-   * Depois ordenamos da mais recente para a mais antiga.
    */
 
   const completedVisits = useMemo(() => {
-    if (!Array.isArray(visits)) {
-      return [];
-    }
+    if (!Array.isArray(visits)) return [];
 
     return visits
       .filter((visit) => {
-        if (!isCompletedVisit(visit)) {
-          return false;
-        }
+        if (!isCompletedVisit(visit)) return false;
 
-        const property = extractVisitProperty(visit);
-
-        return Boolean(property);
+        return Boolean(extractVisitProperty(visit));
       })
-      .sort((a, b) => {
-        return getVisitDateValue(b) - getVisitDateValue(a);
-      });
+      .sort((a, b) => getVisitDateValue(b) - getVisitDateValue(a));
   }, [visits]);
 
   /*
@@ -315,21 +264,10 @@ export default function LeadDetails() {
    * ============================================================
    * IMÓVEL EFETIVAMENTE VISITADO
    * ============================================================
-   *
-   * ATENÇÃO:
-   *
-   * Nunca usamos:
-   *
-   * lead.property
-   *
-   * O imóvel é exclusivamente aquele vinculado
-   * à visita realizada.
    */
 
   const visitedProperty = useMemo(() => {
-    if (!latestCompletedVisit) {
-      return null;
-    }
+    if (!latestCompletedVisit) return null;
 
     return extractVisitProperty(latestCompletedVisit);
   }, [latestCompletedVisit]);
@@ -341,9 +279,7 @@ export default function LeadDetails() {
    */
 
   const completedVisitDate = useMemo(() => {
-    if (!latestCompletedVisit) {
-      return null;
-    }
+    if (!latestCompletedVisit) return null;
 
     return getVisitDate(latestCompletedVisit);
   }, [latestCompletedVisit]);
@@ -359,15 +295,12 @@ export default function LeadDetails() {
 
     const parsedDate = new Date(date);
 
-    if (Number.isNaN(parsedDate.getTime())) {
-      return '-';
-    }
+    if (Number.isNaN(parsedDate.getTime())) return '-';
 
     return parsedDate.toLocaleDateString('pt-BR', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
-
       ...(withTime
         ? {
             hour: '2-digit',
@@ -395,27 +328,60 @@ export default function LeadDetails() {
 
   /*
    * ============================================================
-   * WHATSAPP
+   * WHATSAPP WEB
    * ============================================================
    */
-
-  const normalizePhone = (phone) => {
-    if (!phone) return '';
-
-    return String(phone).replace(/\D/g, '');
-  };
 
   const whatsappUrl = useMemo(() => {
     const phone = normalizePhone(lead?.phone);
 
     if (!phone) return null;
 
-    if (phone.startsWith('55')) {
-      return `https://wa.me/${phone}`;
-    }
+    // Evita adicionar o código do Brasil duas vezes.
+    const internationalPhone = phone.startsWith('55') ? phone : `55${phone}`;
 
-    return `https://wa.me/55${phone}`;
+    return `https://wa.me/${internationalPhone}`;
   }, [lead?.phone]);
+
+  /*
+   * ============================================================
+   * ABRIR CONVERSA WHATSAPP DENTRO DO CRM
+   * ============================================================
+   *
+   * A função openLeadConversation deve estar implementada
+   * no ChatContext e localizar a conversa vinculada ao lead.
+   *
+   * O envio da mensagem continua sendo feito pela tela de chat.
+   */
+
+  const handleOpenWhatsAppChat = async () => {
+    if (!lead?._id || openingChat) return;
+
+    setOpeningChat(true);
+    setChatError('');
+
+    try {
+      if (typeof openLeadConversation !== 'function') {
+        throw new Error(
+          'A função de abrir conversas não está disponível no ChatContext.',
+        );
+      }
+
+      await openLeadConversation(lead._id);
+
+      navigate('/chat');
+    } catch (error) {
+      console.error('Erro ao abrir conversa WhatsApp:', error);
+
+      setChatError(
+        error?.response?.data?.message ||
+          error?.message ||
+          'Não foi possível abrir a conversa deste lead.',
+      );
+    } finally {
+      setOpeningChat(false);
+    }
+  };
 
   /*
    * ============================================================
@@ -456,45 +422,17 @@ export default function LeadDetails() {
       <div className="min-h-screen bg-slate-950 p-6">
         <div className="mx-auto max-w-7xl">
           <button
+            type="button"
             onClick={() => navigate(-1)}
-            className="
-              mb-6
-              flex
-              items-center
-              gap-2
-              text-sm
-              text-slate-400
-              transition
-              hover:text-white
-            "
+            className="mb-6 flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"
           >
             <ArrowLeft size={18} />
             Voltar
           </button>
 
-          <div
-            className="
-              rounded-2xl
-              border
-              border-red-500/20
-              bg-red-500/5
-              p-8
-            "
-          >
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-8">
             <div className="flex items-start gap-4">
-              <div
-                className="
-                  flex
-                  h-11
-                  w-11
-                  shrink-0
-                  items-center
-                  justify-center
-                  rounded-xl
-                  bg-red-500/10
-                  text-red-400
-                "
-              >
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-400">
                 <AlertCircle size={22} />
               </div>
 
@@ -506,21 +444,9 @@ export default function LeadDetails() {
                 <p className="mt-1 text-sm text-slate-400">{error}</p>
 
                 <button
+                  type="button"
                   onClick={() => window.location.reload()}
-                  className="
-                    mt-4
-                    rounded-lg
-                    border
-                    border-slate-700
-                    bg-slate-900
-                    px-4
-                    py-2
-                    text-sm
-                    font-medium
-                    text-slate-200
-                    transition
-                    hover:bg-slate-800
-                  "
+                  className="mt-4 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
                 >
                   Tentar novamente
                 </button>
@@ -532,24 +458,12 @@ export default function LeadDetails() {
     );
   }
 
-  if (!lead) {
-    return null;
-  }
+  if (!lead) return null;
 
   /*
    * ============================================================
    * DADOS RELACIONADOS
    * ============================================================
-   *
-   * IMPORTANTE:
-   *
-   * Não fazemos:
-   *
-   * const property = lead.property;
-   *
-   * O imóvel visitado agora vem exclusivamente de:
-   *
-   * visitedProperty
    */
 
   const assignedTo = lead.assignedTo;
@@ -565,98 +479,58 @@ export default function LeadDetails() {
   return (
     <div className="min-h-screen bg-slate-950">
       <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
-        {/* ======================================================
-            TOP BAR
-        ======================================================= */}
+        {/* TOP BAR */}
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <button
+            type="button"
             onClick={() => navigate(-1)}
-            className="
-              flex
-              w-fit
-              items-center
-              gap-2
-              text-sm
-              font-medium
-              text-slate-400
-              transition
-              hover:text-white
-            "
+            className="flex w-fit items-center gap-2 text-sm font-medium text-slate-400 transition hover:text-white"
           >
             <ArrowLeft size={18} />
             Voltar
           </button>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* NOVO: ABRIR CONVERSA DENTRO DO CRM */}
+
+            <button
+              type="button"
+              onClick={handleOpenWhatsAppChat}
+              disabled={openingChat}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-400 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <MessageCircle size={17} />
+              {openingChat ? 'Abrindo conversa...' : 'Conversar no CRM'}
+            </button>
+
+            {/* WHATSAPP WEB EXISTENTE */}
+
             {whatsappUrl && (
               <a
                 href={whatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="
-                  inline-flex
-                  items-center
-                  gap-2
-                  rounded-lg
-                  border
-                  border-emerald-500/20
-                  bg-emerald-500/10
-                  px-4
-                  py-2
-                  text-sm
-                  font-medium
-                  text-emerald-400
-                  transition
-                  hover:bg-emerald-500/20
-                "
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
               >
-                <MessageCircle size={17} />
-                WhatsApp
+                <ExternalLink size={17} />
+                WhatsApp Web
               </a>
             )}
 
             <button
+              type="button"
               onClick={handleEdit}
-              className="
-                inline-flex
-                items-center
-                gap-2
-                rounded-lg
-                border
-                border-slate-700
-                bg-slate-900
-                px-4
-                py-2
-                text-sm
-                font-medium
-                text-slate-200
-                transition
-                hover:bg-slate-800
-              "
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
             >
               <Edit size={17} />
               Editar
             </button>
 
             <button
+              type="button"
               onClick={handleCreateProposal}
-              className="
-                inline-flex
-                items-center
-                gap-2
-                rounded-lg
-                bg-blue-600
-                px-4
-                py-2
-                text-sm
-                font-semibold
-                text-white
-                shadow-lg
-                shadow-blue-900/20
-                transition
-                hover:bg-blue-500
-              "
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/20 transition hover:bg-blue-500"
             >
               <FileText size={17} />
               Fazer proposta
@@ -664,36 +538,39 @@ export default function LeadDetails() {
           </div>
         </div>
 
-        {/* ======================================================
-            LEAD HEADER
-        ======================================================= */}
+        {/* ERRO AO ABRIR CONVERSA */}
 
-        <section
-          className="
-            overflow-hidden
-            rounded-2xl
-            border
-            border-slate-800
-            bg-slate-900
-            shadow-xl
-          "
-        >
+        {chatError && (
+          <div
+            role="alert"
+            className="flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-300"
+          >
+            <AlertCircle size={19} className="mt-0.5 shrink-0" />
+
+            <div className="min-w-0 flex-1">
+              <p className="font-medium">Não foi possível abrir a conversa</p>
+
+              <p className="mt-1 break-words text-red-300/80">{chatError}</p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setChatError('')}
+              aria-label="Fechar mensagem de erro"
+              className="text-red-300 transition hover:text-white"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        )}
+
+        {/* LEAD HEADER */}
+
+        <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-xl">
           <div className="p-6 lg:p-8">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex items-start gap-4">
-                <div
-                  className="
-                    flex
-                    h-14
-                    w-14
-                    shrink-0
-                    items-center
-                    justify-center
-                    rounded-2xl
-                    bg-blue-500/10
-                    text-blue-400
-                  "
-                >
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-400">
                   <User size={26} />
                 </div>
 
@@ -757,20 +634,10 @@ export default function LeadDetails() {
           </div>
         </section>
 
-        {/* ======================================================
-            PRÓXIMA AÇÃO
-        ======================================================= */}
+        {/* PRÓXIMA AÇÃO */}
 
         {(lead.nextAction || lead.nextActionDate) && (
-          <section
-            className="
-              rounded-2xl
-              border
-              border-blue-500/20
-              bg-blue-500/5
-              p-5
-            "
-          >
+          <section className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 text-blue-400">
@@ -795,24 +662,9 @@ export default function LeadDetails() {
               </div>
 
               <button
+                type="button"
                 onClick={() => navigate('/calendar')}
-                className="
-                  inline-flex
-                  items-center
-                  justify-center
-                  gap-2
-                  rounded-lg
-                  border
-                  border-blue-500/20
-                  bg-blue-500/10
-                  px-4
-                  py-2
-                  text-sm
-                  font-medium
-                  text-blue-400
-                  transition
-                  hover:bg-blue-500/20
-                "
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-400 transition hover:bg-blue-500/20"
               >
                 Ver agenda
                 <ArrowRight size={16} />
@@ -821,19 +673,13 @@ export default function LeadDetails() {
           </section>
         )}
 
-        {/* ======================================================
-            GRID PRINCIPAL
-        ======================================================= */}
+        {/* GRID PRINCIPAL */}
 
         <div className="grid gap-6 xl:grid-cols-3">
-          {/* ====================================================
-              COLUNA PRINCIPAL
-          ===================================================== */}
+          {/* COLUNA PRINCIPAL */}
 
           <div className="space-y-6 xl:col-span-2">
-            {/* ==================================================
-                INFORMAÇÕES DO LEAD
-            =================================================== */}
+            {/* INFORMAÇÕES DO LEAD */}
 
             <Card title="Informações do Lead" icon={<User size={18} />}>
               <div className="grid gap-6 md:grid-cols-2">
@@ -893,9 +739,7 @@ export default function LeadDetails() {
               </div>
             </Card>
 
-            {/* ==================================================
-                IMÓVEL EFETIVAMENTE VISITADO
-            =================================================== */}
+            {/* IMÓVEL EFETIVAMENTE VISITADO */}
 
             {!loadingVisits && visitedProperty && (
               <PropertyCard
@@ -907,9 +751,7 @@ export default function LeadDetails() {
               />
             )}
 
-            {/* ==================================================
-                PROPOSTAS
-            =================================================== */}
+            {/* PROPOSTAS */}
 
             <ProposalCard
               proposals={normalizedProposals}
@@ -918,21 +760,12 @@ export default function LeadDetails() {
               navigate={navigate}
             />
 
-            {/* ==================================================
-                OBSERVAÇÕES
-            =================================================== */}
+            {/* OBSERVAÇÕES */}
 
             <Card title="Observações" icon={<MessageCircle size={18} />}>
               {lead.notes ? (
                 <div className="space-y-4">
-                  <p
-                    className="
-                      whitespace-pre-line
-                      text-sm
-                      leading-7
-                      text-slate-300
-                    "
-                  >
+                  <p className="whitespace-pre-line text-sm leading-7 text-slate-300">
                     {lead.notes}
                   </p>
 
@@ -950,9 +783,7 @@ export default function LeadDetails() {
               )}
             </Card>
 
-            {/* ==================================================
-                DATAS COMERCIAIS
-            =================================================== */}
+            {/* DATAS COMERCIAIS */}
 
             <Card title="Datas comerciais" icon={<Calendar size={18} />}>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -983,16 +814,7 @@ export default function LeadDetails() {
               </div>
 
               {latestProposal && (
-                <div
-                  className="
-                    mt-5
-                    rounded-xl
-                    border
-                    border-blue-500/10
-                    bg-blue-500/5
-                    p-4
-                  "
-                >
+                <div className="mt-5 rounded-xl border border-blue-500/10 bg-blue-500/5 p-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-xs uppercase tracking-wide text-slate-500">
@@ -1023,18 +845,14 @@ export default function LeadDetails() {
               )}
             </Card>
 
-            {/* ==================================================
-                HISTÓRICO
-            =================================================== */}
+            {/* HISTÓRICO */}
 
             <Card title="Histórico" icon={<History size={18} />} noPadding>
               <LeadHistory lead={lead} />
             </Card>
           </div>
 
-          {/* ====================================================
-              SIDEBAR
-          ===================================================== */}
+          {/* SIDEBAR */}
 
           <div className="space-y-6">
             <UserCard
@@ -1049,14 +867,11 @@ export default function LeadDetails() {
               user={createdBy}
             />
 
-            {/* ==================================================
-                CAPTAÇÃO
-            =================================================== */}
+            {/* CAPTAÇÃO */}
 
             <Card title="Captação" icon={<Target size={18} />}>
               <div className="space-y-5">
                 <Info label="Origem" value={formatLabel(lead.source)} />
-
                 <Info label="Tipo" value={formatLabel(lead.sourceType)} />
 
                 {sourceBroker && (
@@ -1071,9 +886,7 @@ export default function LeadDetails() {
               </div>
             </Card>
 
-            {/* ==================================================
-                DISTRIBUIÇÃO
-            =================================================== */}
+            {/* DISTRIBUIÇÃO */}
 
             <Card title="Distribuição" icon={<BriefcaseBusiness size={18} />}>
               <div className="space-y-5">
@@ -1100,9 +913,7 @@ export default function LeadDetails() {
               </div>
             </Card>
 
-            {/* ==================================================
-                RESUMO DA PROPOSTA
-            =================================================== */}
+            {/* RESUMO DA PROPOSTA */}
 
             <Card title="Resumo da proposta" icon={<FileText size={18} />}>
               {latestProposal ? (
@@ -1125,26 +936,9 @@ export default function LeadDetails() {
                   <Info label="Data" value={formatDate(proposalDate, true)} />
 
                   <button
+                    type="button"
                     onClick={() => navigate(`/proposals/${latestProposal._id}`)}
-                    className="
-                      mt-2
-                      flex
-                      w-full
-                      items-center
-                      justify-center
-                      gap-2
-                      rounded-lg
-                      border
-                      border-slate-700
-                      bg-slate-800
-                      px-4
-                      py-2.5
-                      text-sm
-                      font-medium
-                      text-slate-200
-                      transition
-                      hover:bg-slate-700
-                    "
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-700"
                   >
                     Ver proposta
                     <ChevronRight size={16} />
@@ -1158,16 +952,23 @@ export default function LeadDetails() {
               )}
             </Card>
 
-            {/* ==================================================
-                AÇÕES RÁPIDAS
-            =================================================== */}
+            {/* AÇÕES RÁPIDAS */}
 
             <Card title="Ações rápidas" icon={<ArrowRight size={18} />}>
               <div className="space-y-2">
+                <QuickAction
+                  icon={<MessageCircle size={17} />}
+                  label={
+                    openingChat ? 'Abrindo conversa...' : 'Conversar no CRM'
+                  }
+                  onClick={handleOpenWhatsAppChat}
+                  disabled={openingChat}
+                />
+
                 {whatsappUrl && (
                   <QuickAction
-                    icon={<MessageCircle size={17} />}
-                    label="Conversar no WhatsApp"
+                    icon={<ExternalLink size={17} />}
+                    label="Abrir WhatsApp Web"
                     onClick={() =>
                       window.open(whatsappUrl, '_blank', 'noopener,noreferrer')
                     }
@@ -1216,29 +1017,9 @@ export default function LeadDetails() {
 
 function Card({ title, icon, children, noPadding = false }) {
   return (
-    <section
-      className="
-        overflow-hidden
-        rounded-2xl
-        border
-        border-slate-800
-        bg-slate-900
-        shadow-lg
-      "
-    >
-      <div
-        className="
-          flex
-          items-center
-          gap-2
-          border-b
-          border-slate-800
-          px-6
-          py-4
-        "
-      >
+    <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-lg">
+      <div className="flex items-center gap-2 border-b border-slate-800 px-6 py-4">
         {icon && <span className="text-blue-400">{icon}</span>}
-
         <h2 className="font-semibold text-white">{title}</h2>
       </div>
 
@@ -1261,15 +1042,7 @@ function Info({ icon, label, value, href = null }) {
           {label}
         </p>
 
-        <div
-          className="
-            mt-1
-            break-words
-            text-sm
-            font-medium
-            text-slate-200
-          "
-        >
+        <div className="mt-1 break-words text-sm font-medium text-slate-200">
           {value || '-'}
         </div>
       </div>
@@ -1280,14 +1053,7 @@ function Info({ icon, label, value, href = null }) {
     return (
       <a
         href={href}
-        className="
-          flex
-          items-start
-          gap-3
-          rounded-lg
-          transition
-          hover:bg-slate-800/50
-        "
+        className="flex items-start gap-3 rounded-lg transition hover:bg-slate-800/50"
       >
         {content}
       </a>
@@ -1304,47 +1070,29 @@ function Info({ icon, label, value, href = null }) {
 function CommercialDate({ label, value, icon, highlight = false }) {
   return (
     <div
-      className={`
-        rounded-xl
-        border
-        p-4
-        ${
-          highlight && value
-            ? 'border-blue-500/20 bg-blue-500/5'
-            : 'border-slate-800 bg-slate-950/40'
-        }
-      `}
+      className={`rounded-xl border p-4 ${
+        highlight && value
+          ? 'border-blue-500/20 bg-blue-500/5'
+          : 'border-slate-800 bg-slate-950/40'
+      }`}
     >
       <div
-        className={`
-          flex
-          items-center
-          gap-2
-          ${highlight && value ? 'text-blue-400' : 'text-slate-500'}
-        `}
+        className={`flex items-center gap-2 ${
+          highlight && value ? 'text-blue-400' : 'text-slate-500'
+        }`}
       >
         {icon}
-
         <span className="text-xs font-medium uppercase tracking-wide">
           {label}
         </span>
       </div>
 
       <p
-        className={`
-          mt-3
-          text-sm
-          font-semibold
-          ${highlight && value ? 'text-blue-300' : 'text-slate-200'}
-        `}
+        className={`mt-3 text-sm font-semibold ${
+          highlight && value ? 'text-blue-300' : 'text-slate-200'
+        }`}
       >
-        {value
-          ? new Date(value).toLocaleDateString('pt-BR', {
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric',
-            })
-          : '-'}
+        {value ? formatDateStatic(value) : '-'}
       </p>
 
       {!value && <p className="mt-1 text-xs text-slate-600">Não registrada</p>}
@@ -1365,30 +1113,10 @@ function UserCard({ title, icon, user }) {
             <img
               src={user.avatar}
               alt={user.name || 'Usuário'}
-              className="
-                h-12
-                w-12
-                shrink-0
-                rounded-full
-                border
-                border-slate-700
-                object-cover
-              "
+              className="h-12 w-12 shrink-0 rounded-full border border-slate-700 object-cover"
             />
           ) : (
-            <div
-              className="
-                flex
-                h-12
-                w-12
-                shrink-0
-                items-center
-                justify-center
-                rounded-full
-                bg-slate-800
-                text-slate-400
-              "
-            >
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-800 text-slate-400">
               <User size={20} />
             </div>
           )}
@@ -1428,25 +1156,16 @@ function PropertyCard({
   onCreateProposal,
   navigate,
 }) {
-  if (!property) {
-    return null;
-  }
+  if (!property) return null;
 
   const address = property.address || {};
-
   const propertyTitle = property.title || property.name || 'Imóvel sem título';
-
   const propertyPrice = property.price;
-
   const propertyId = property._id || property.id || null;
 
   return (
     <Card title="Imóvel visitado" icon={<Building2 size={18} />}>
       <div className="space-y-5">
-        {/* ==================================================
-            CABEÇALHO
-        =================================================== */}
-
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1455,43 +1174,14 @@ function PropertyCard({
               </h3>
 
               {property.code && (
-                <span
-                  className="
-                    rounded-md
-                    border
-                    border-slate-700
-                    bg-slate-800
-                    px-2
-                    py-1
-                    text-xs
-                    font-medium
-                    text-slate-400
-                  "
-                >
+                <span className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-xs font-medium text-slate-400">
                   {property.code}
                 </span>
               )}
             </div>
 
-            {/* STATUS DA VISITA */}
-
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span
-                className="
-                  inline-flex
-                  items-center
-                  gap-1.5
-                  rounded-full
-                  border
-                  border-emerald-500/20
-                  bg-emerald-500/10
-                  px-2.5
-                  py-1
-                  text-xs
-                  font-medium
-                  text-emerald-400
-                "
-              >
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-400">
                 <CheckCircle2 size={14} />
                 Visita realizada
               </span>
@@ -1509,7 +1199,6 @@ function PropertyCard({
               address.cidade) && (
               <div className="mt-3 flex items-start gap-2 text-sm text-slate-400">
                 <MapPin size={16} className="mt-0.5 shrink-0" />
-
                 <span>{formatPropertyAddress(address)}</span>
               </div>
             )}
@@ -1528,10 +1217,6 @@ function PropertyCard({
           )}
         </div>
 
-        {/* ==================================================
-            DADOS DO IMÓVEL
-        =================================================== */}
-
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {property.type && (
             <PropertyStat label="Tipo" value={formatLabel(property.type)} />
@@ -1545,39 +1230,17 @@ function PropertyCard({
             <PropertyStat label="Banheiros" value={property.bathrooms} />
           )}
 
-          {(property.area?.total !== undefined ||
-            property.area?.total !== null) &&
-            property.area?.total && (
-              <PropertyStat label="Área" value={`${property.area.total} m²`} />
-            )}
+          {property.area?.total && (
+            <PropertyStat label="Área" value={`${property.area.total} m²`} />
+          )}
         </div>
-
-        {/* ==================================================
-            AÇÕES
-        =================================================== */}
 
         <div className="flex flex-col gap-2 sm:flex-row">
           {propertyId && (
             <button
+              type="button"
               onClick={() => navigate(`/properties/${propertyId}`)}
-              className="
-                inline-flex
-                flex-1
-                items-center
-                justify-center
-                gap-2
-                rounded-lg
-                border
-                border-slate-700
-                bg-slate-800
-                px-4
-                py-2.5
-                text-sm
-                font-medium
-                text-slate-200
-                transition
-                hover:bg-slate-700
-              "
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-700"
             >
               Ver imóvel
               <ChevronRight size={16} />
@@ -1585,23 +1248,9 @@ function PropertyCard({
           )}
 
           <button
+            type="button"
             onClick={onCreateProposal}
-            className="
-              inline-flex
-              flex-1
-              items-center
-              justify-center
-              gap-2
-              rounded-lg
-              bg-blue-600
-              px-4
-              py-2.5
-              text-sm
-              font-semibold
-              text-white
-              transition
-              hover:bg-blue-500
-            "
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500"
           >
             <FileText size={17} />
             Fazer proposta
@@ -1635,52 +1284,17 @@ function ProposalCard({ proposals, loading, onCreateProposal, navigate }) {
           ))}
 
           <button
+            type="button"
             onClick={onCreateProposal}
-            className="
-              mt-3
-              inline-flex
-              items-center
-              gap-2
-              text-sm
-              font-medium
-              text-blue-400
-              transition
-              hover:text-blue-300
-            "
+            className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-blue-400 transition hover:text-blue-300"
           >
             <FileText size={16} />
             Criar nova proposta
           </button>
         </div>
       ) : (
-        <div
-          className="
-            flex
-            flex-col
-            items-center
-            justify-center
-            rounded-xl
-            border
-            border-dashed
-            border-slate-700
-            bg-slate-950/40
-            px-6
-            py-8
-            text-center
-          "
-        >
-          <div
-            className="
-              flex
-              h-12
-              w-12
-              items-center
-              justify-center
-              rounded-xl
-              bg-blue-500/10
-              text-blue-400
-            "
-          >
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-6 py-8 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
             <FileText size={22} />
           </div>
 
@@ -1694,22 +1308,9 @@ function ProposalCard({ proposals, loading, onCreateProposal, navigate }) {
           </p>
 
           <button
+            type="button"
             onClick={onCreateProposal}
-            className="
-              mt-5
-              inline-flex
-              items-center
-              gap-2
-              rounded-lg
-              bg-blue-600
-              px-4
-              py-2.5
-              text-sm
-              font-semibold
-              text-white
-              transition
-              hover:bg-blue-500
-            "
+            className="mt-5 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500"
           >
             <FileText size={17} />
             Fazer proposta
@@ -1726,25 +1327,13 @@ function ProposalCard({ proposals, loading, onCreateProposal, navigate }) {
 
 function ProposalItem({ proposal, onClick }) {
   const proposalValue = getProposalValue(proposal);
-
   const proposalDate = getProposalDate(proposal);
 
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="
-        group
-        w-full
-        rounded-xl
-        border
-        border-slate-800
-        bg-slate-950/50
-        p-4
-        text-left
-        transition
-        hover:border-slate-700
-        hover:bg-slate-800/60
-      "
+      className="group w-full rounded-xl border border-slate-800 bg-slate-950/50 p-4 text-left transition hover:border-slate-700 hover:bg-slate-800/60"
     >
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
@@ -1776,11 +1365,7 @@ function ProposalItem({ proposal, onClick }) {
 
           <ChevronRight
             size={18}
-            className="
-              text-slate-600
-              transition
-              group-hover:text-slate-300
-            "
+            className="text-slate-600 transition group-hover:text-slate-300"
           />
         </div>
       </div>
@@ -1804,7 +1389,6 @@ function PropertyStat({ label, value }) {
   return (
     <div className="rounded-lg bg-slate-950/60 p-3">
       <p className="text-xs text-slate-500">{label}</p>
-
       <p className="mt-1 text-sm font-medium text-slate-200">{value}</p>
     </div>
   );
@@ -1816,18 +1400,9 @@ function PropertyStat({ label, value }) {
 
 function MetricCard({ label, value, icon }) {
   return (
-    <div
-      className="
-        rounded-xl
-        border
-        border-slate-800
-        bg-slate-950/50
-        p-4
-      "
-    >
+    <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
       <div className="flex items-center gap-2 text-slate-500">
         {icon}
-
         <span className="text-xs">{label}</span>
       </div>
 
@@ -1840,31 +1415,15 @@ function MetricCard({ label, value, icon }) {
    QUICK ACTION
 ================================================================ */
 
-function QuickAction({ icon, label, onClick }) {
+function QuickAction({ icon, label, onClick, disabled = false }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="
-        flex
-        w-full
-        items-center
-        gap-3
-        rounded-lg
-        border
-        border-transparent
-        px-3
-        py-2.5
-        text-left
-        text-sm
-        text-slate-300
-        transition
-        hover:border-slate-800
-        hover:bg-slate-800
-        hover:text-white
-      "
+      disabled={disabled}
+      className="flex w-full items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm text-slate-300 transition hover:border-slate-800 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
     >
       <span className="text-slate-500">{icon}</span>
-
       {label}
     </button>
   );
@@ -1878,7 +1437,6 @@ function EmptyState({ icon, text }) {
   return (
     <div className="flex items-center gap-3 py-2 text-sm text-slate-500">
       <span className="text-slate-600">{icon}</span>
-
       {text}
     </div>
   );
@@ -1891,31 +1449,18 @@ function EmptyState({ icon, text }) {
 function Badge({ text, type = 'gray' }) {
   const styles = {
     blue: 'border-blue-500/20 bg-blue-500/10 text-blue-400',
-
     green: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
-
     yellow: 'border-yellow-500/20 bg-yellow-500/10 text-yellow-400',
-
     red: 'border-red-500/20 bg-red-500/10 text-red-400',
-
     gray: 'border-slate-700 bg-slate-800 text-slate-300',
-
     purple: 'border-purple-500/20 bg-purple-500/10 text-purple-400',
   };
 
   return (
     <span
-      className={`
-        inline-flex
-        items-center
-        rounded-full
-        border
-        px-2.5
-        py-1
-        text-xs
-        font-medium
-        ${styles[type] || styles.gray}
-      `}
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
+        styles[type] || styles.gray
+      }`}
     >
       {text || '-'}
     </span>
@@ -1931,7 +1476,6 @@ function LeadDetailsSkeleton() {
     <div className="min-h-screen bg-slate-950 p-6">
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="h-6 w-24 animate-pulse rounded bg-slate-800" />
-
         <div className="h-48 animate-pulse rounded-2xl bg-slate-900" />
 
         <div className="grid gap-6 lg:grid-cols-3">
@@ -1960,6 +1504,12 @@ function SkeletonCard() {
    HELPERS
 ================================================================ */
 
+function normalizePhone(phone) {
+  if (!phone) return '';
+
+  return String(phone).replace(/\D/g, '');
+}
+
 function formatLabel(value) {
   if (!value) return '-';
 
@@ -1968,20 +1518,8 @@ function formatLabel(value) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-/*
- * Normaliza texto para comparações de status.
- *
- * Ex:
- *
- * "Concluída" -> "concluida"
- * "CONCLUIDA" -> "concluida"
- * "concluída" -> "concluida"
- */
-
 function normalizeText(value) {
-  if (!value) {
-    return '';
-  }
+  if (!value) return '';
 
   return String(value)
     .trim()
@@ -1994,17 +1532,8 @@ function normalizeText(value) {
    VISIT HELPERS
 ================================================================ */
 
-/*
- * Identifica se a visita foi realmente realizada.
- *
- * O backend utiliza "concluida", mas deixamos compatibilidade
- * com outras nomenclaturas que possam existir.
- */
-
 function isCompletedVisit(visit) {
-  if (!visit) {
-    return false;
-  }
+  if (!visit) return false;
 
   const status = normalizeText(
     visit.status || visit.visitStatus || visit.state || '',
@@ -2020,27 +1549,8 @@ function isCompletedVisit(visit) {
   ].includes(status);
 }
 
-/*
- * Retorna a data que representa a visita realizada.
- *
- * Prioridade:
- *
- * 1. finishedAt
- * 2. completedAt
- * 3. realizedAt
- * 4. realizedDate
- * 5. date
- * 6. visitDate
- * 7. startAt
- * 8. startDate
- * 9. scheduledAt
- * 10. createdAt
- */
-
 function getVisitDate(visit) {
-  if (!visit) {
-    return null;
-  }
+  if (!visit) return null;
 
   return (
     visit.finishedAt ||
@@ -2060,33 +1570,15 @@ function getVisitDate(visit) {
 function getVisitDateValue(visit) {
   const date = getVisitDate(visit);
 
-  if (!date) {
-    return 0;
-  }
+  if (!date) return 0;
 
   const timestamp = new Date(date).getTime();
 
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
-/*
- * Extrai o imóvel diretamente da visita.
- *
- * A estrutura principal esperada é:
- *
- * visit.propertyInfo
- *
- * Compatibilidade:
- *
- * visit.property
- * visit.propertyData
- * visit.propertyDetails
- */
-
 function extractVisitProperty(visit) {
-  if (!visit) {
-    return null;
-  }
+  if (!visit) return null;
 
   const property =
     visit.propertyInfo ||
@@ -2095,17 +1587,10 @@ function extractVisitProperty(visit) {
     visit.propertyDetails ||
     null;
 
-  /*
-   * Se a propriedade veio somente como ObjectId/string,
-   * não temos dados suficientes para exibir o imóvel.
-   */
   if (!property || typeof property === 'string') {
     return null;
   }
 
-  /*
-   * Também evita considerar um objeto vazio como imóvel.
-   */
   const hasPropertyIdentifier =
     property._id ||
     property.id ||
@@ -2113,23 +1598,15 @@ function extractVisitProperty(visit) {
     property.name ||
     property.title;
 
-  if (!hasPropertyIdentifier) {
-    return null;
-  }
+  if (!hasPropertyIdentifier) return null;
 
   return {
     ...property,
-
     _id: property._id || property.id || null,
-
     id: property.id || property._id || null,
-
     name: property.name || property.title || 'Imóvel sem título',
-
     title: property.title || property.name || '',
-
     address: property.address || property.location || {},
-
     price:
       property.price ??
       property.prices?.salePrice ??
@@ -2163,9 +1640,7 @@ function formatDateStatic(date) {
 
   const parsedDate = new Date(date);
 
-  if (Number.isNaN(parsedDate.getTime())) {
-    return '-';
-  }
+  if (Number.isNaN(parsedDate.getTime())) return '-';
 
   return parsedDate.toLocaleDateString('pt-BR', {
     day: '2-digit',
@@ -2177,13 +1652,9 @@ function formatDateStatic(date) {
 function formatPropertyAddress(address = {}) {
   const parts = [
     address.street || address.logradouro,
-
     address.number || address.numero,
-
     address.district || address.neighborhood || address.bairro,
-
     address.city || address.cidade,
-
     address.state || address.uf,
   ].filter(Boolean);
 
