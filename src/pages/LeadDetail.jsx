@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-
+Web;
 import {
   ArrowLeft,
   ArrowRight,
@@ -506,7 +506,7 @@ export default function LeadDetails() {
 
             {/* WHATSAPP WEB EXISTENTE */}
 
-            {whatsappUrl && (
+            {/* {whatsappUrl && (
               <a
                 href={whatsappUrl}
                 target="_blank"
@@ -516,7 +516,7 @@ export default function LeadDetails() {
                 <ExternalLink size={17} />
                 WhatsApp Web
               </a>
-            )}
+            )} */}
 
             <button
               type="button"
