@@ -47,6 +47,7 @@ import Properties from './pages/site/Properties';
 import Opportunities from './pages/Opportunities';
 import OpportunityCreate from './pages/OpportunityCreate';
 import OpportunityDetails from './pages/OpportunityDetails';
+import OpportunityEdit from './pages/OpportunityEdit';
 import Proposals from './pages/Proposals';
 import ProposalCreate from './pages/ProposalCreate';
 import ProposalDetails from './pages/ProposalDetails';
@@ -122,6 +123,7 @@ export function App() {
           <Route path="/opportunities" element={<Opportunities />} />
           <Route path="/opportunities/new" element={<OpportunityCreate />} />
           <Route path="/opportunities/:id" element={<OpportunityDetails />} />
+          <Route path="/opportunities/:id/edit" element={<OpportunityEdit />} />
           <Route path="/proposals" element={<Proposals />} />
           <Route path="/proposals/create" element={<ProposalCreate />} />
           <Route path="/proposals/:id" element={<ProposalDetails />} />
