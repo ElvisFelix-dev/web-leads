@@ -15,8 +15,6 @@ import {
 } from 'react-icons/fa';
 import api from '../service/api';
 
-const INTEGRATION_ID = '6ac3a588b306b9ba06537ef2';
-
 const STEPS = [
   {
     number: '01',
@@ -46,14 +44,41 @@ export default function WhatsAppQrCode() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const loadQrCode = useCallback(async () => {
+  const loadQrCode = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError('');
-      setQrCode('');
+
+      // Descobre a integração cadastrada no backend; não fixa um ObjectId no frontend.
+      const integrationsResponse = await api.get('/api/whatsapp/integrations');
+      const integrations = integrationsResponse.data?.data;
+
+      if (!Array.isArray(integrations) || integrations.length === 0) {
+        setQrCode('');
+        setStatus('');
+        setError(
+          'Nenhuma integração WhatsApp foi cadastrada. Configure a sessão compartilhada no gerenciamento de integrações.',
+        );
+        return;
+      }
+
+      const integration = integrations.find((item) => item.enabled !== false);
+
+      if (!integration) {
+        setQrCode('');
+        setStatus('STOPPED');
+        setError('A integração WhatsApp está desativada. Ative a sessão compartilhada antes de conectar.');
+        return;
+      }
+
+      const integrationId = integration._id || integration.id;
+
+      if (!integrationId) {
+        throw new Error('A integração retornada não possui um identificador válido.');
+      }
 
       const response = await api.get(
-        `/api/whatsapp/qr?integrationId=${INTEGRATION_ID}`,
+        `/api/whatsapp/qr?integrationId=${encodeURIComponent(integrationId)}`,
       );
 
       const data = response.data?.data;
@@ -63,42 +88,40 @@ export default function WhatsAppQrCode() {
       }
 
       const currentStatus = String(data.status || '').toUpperCase();
-
       setStatus(currentStatus);
 
       if (currentStatus === 'CONNECTED') {
+        setQrCode('');
         return;
       }
 
-      if (!data.qr) {
-        if (currentStatus === 'CONNECTING') {
-          setError(
-            'A conexão está sendo iniciada. Aguarde alguns segundos e tente verificar novamente.',
-          );
-        } else if (currentStatus === 'STOPPED') {
-          setError(
-            'A sessão do WhatsApp está parada. Inicie a sessão pelo gerenciamento do WA-AKG e tente novamente.',
-          );
-        } else {
-          setError(
-            'O QR Code ainda não está disponível. Verifique o status da sessão e tente novamente.',
-          );
-        }
-
+      if (data.base64) {
+        const base64 = String(data.base64);
+        setQrCode(
+          base64.startsWith('data:')
+            ? base64
+            : `data:image/png;base64,${base64}`,
+        );
         return;
       }
 
-      const image = await QRCode.toDataURL(data.qr, {
-        width: 360,
-        margin: 2,
-        errorCorrectionLevel: 'H',
-        color: {
-          dark: '#111827',
-          light: '#FFFFFF',
-        },
-      });
+      if (data.qr) {
+        const image = await QRCode.toDataURL(String(data.qr), {
+          width: 360,
+          margin: 2,
+          errorCorrectionLevel: 'H',
+          color: {
+            dark: '#111827',
+            light: '#FFFFFF',
+          },
+        });
 
-      setQrCode(image);
+        setQrCode(image);
+        return;
+      }
+
+      // O QR pode demorar alguns segundos para ficar disponível.
+      setQrCode('');
     } catch (err) {
       console.error('Erro ao carregar dados do WhatsApp:', err);
 
@@ -118,12 +141,18 @@ export default function WhatsAppQrCode() {
         );
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     loadQrCode();
+
+    const intervalId = window.setInterval(() => {
+      loadQrCode(true);
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
   }, [loadQrCode]);
 
   const isConnected = status === 'CONNECTED';
@@ -347,6 +376,29 @@ export default function WhatsAppQrCode() {
                     Se o problema continuar, verifique o estado da sessão no
                     gerenciamento do WA-AKG.
                   </p>
+                </div>
+              )}
+
+              {/* Waiting for QR */}
+              {!loading && !isConnected && !error && !qrCode && (
+                <div className="flex min-h-[390px] flex-col items-center justify-center rounded-2xl border border-white/[0.06] bg-[#0b1018] px-5 text-center">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-400/10">
+                    <FaClock className="text-2xl text-amber-300" />
+                  </div>
+                  <h3 className="mt-5 text-base font-semibold text-white">
+                    Aguardando QR Code
+                  </h3>
+                  <p className="mt-2 max-w-sm text-sm leading-6 text-slate-400">
+                    Estamos aguardando o WA-AKG disponibilizar o código. Esta tela verifica novamente automaticamente.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => loadQrCode()}
+                    className="mt-5 inline-flex items-center gap-2 rounded-xl border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-white/[0.08]"
+                  >
+                    <FaSyncAlt size={12} />
+                    Verificar agora
+                  </button>
                 </div>
               )}
 

@@ -897,8 +897,16 @@ export const ChatProvider = ({ children }) => {
     // NOVA MENSAGEM
     // =======================================================
 
-    newSocket.on('new_message', (message) => {
-      console.log('📨 NEW_MESSAGE RECEBIDO PELO FRONTEND:', message);
+    newSocket.on('new_message', (payload) => {
+      console.log('📨 NEW_MESSAGE RECEBIDO PELO FRONTEND:', payload);
+
+      const message = payload?.message
+        ? {
+            ...payload.message,
+            conversation: payload.conversationId,
+            conversationId: payload.conversationId,
+          }
+        : payload;
 
       handleMessageReceived(message);
     });
