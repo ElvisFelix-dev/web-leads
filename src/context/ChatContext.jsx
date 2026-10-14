@@ -986,16 +986,17 @@ export const ChatProvider = ({ children }) => {
         throw new Error('Não foi possível identificar o lead.');
       }
 
-      // Primeiro procura na lista já carregada.
-      let conversation = conversationsRef.current.find(
-        (item) =>
-          item?.channel === 'whatsapp' &&
-          getConversationLeadId(item) === leadId,
-      );
+      const findLeadConversation = (items) =>
+        items.find(
+          (item) =>
+            item?.channel === 'whatsapp' &&
+            getConversationLeadId(item) === leadId,
+        );
 
-      // Se não encontrou, consulta novamente a API.
-      // A busca direta evita depender de uma eventual requisição
-      // de loadConversations que já esteja em andamento.
+      let conversation = findLeadConversation(conversationsRef.current);
+
+      // Primeiro, atualiza a lista para verificar se a conversa
+      // já foi criada por um webhook ou por outra ação.
       if (!conversation) {
         const response = await api.get('/api/chat/conversations');
         const refreshedConversations = extractConversations(response);
@@ -1018,17 +1019,46 @@ export const ChatProvider = ({ children }) => {
           });
         }
 
-        conversation = refreshedConversations.find(
-          (item) =>
-            item?.channel === 'whatsapp' &&
-            getConversationLeadId(item) === leadId,
+        conversation = findLeadConversation(refreshedConversations);
+      }
+
+      // Se não existe, pede ao backend para preparar o contato
+      // e criar ou recuperar a conversa WhatsApp do lead.
+      if (!conversation) {
+        await api.post(
+          `/api/whatsapp/leads/${encodeURIComponent(leadId)}/conversation`,
         );
+
+        // Atualiza a lista usando o endpoint oficial do chat,
+        // que já aplica as regras de acesso do usuário.
+        const response = await api.get('/api/chat/conversations');
+        const refreshedConversations = extractConversations(response);
+
+        conversationsRef.current = refreshedConversations;
+        setConversations(refreshedConversations);
+
+        setUnreadCount(
+          refreshedConversations.reduce(
+            (sum, item) => sum + Number(item?.unreadCount || 0),
+            0,
+          ),
+        );
+
+        if (socketRef.current?.connected) {
+          refreshedConversations.forEach((item) => {
+            if (item?._id) {
+              socketRef.current.emit('join_conversation', item._id);
+            }
+          });
+        }
+
+        conversation = findLeadConversation(refreshedConversations);
       }
 
       if (!conversation) {
         throw new Error(
-          'Não foi encontrada uma conversa WhatsApp vinculada a este lead. ' +
-            'Verifique se o contato e a conversa estão associados ao lead no backend.',
+          'A conversa foi preparada, mas não apareceu na lista do chat. ' +
+            'Verifique se o backend inclui essa conversa no retorno de /api/chat/conversations.',
         );
       }
 
