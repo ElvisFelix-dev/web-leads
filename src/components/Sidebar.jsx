@@ -3,6 +3,7 @@ import { useState, useRef, useContext, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { UserContext } from '../context/UserContext';
+import { useNotifications } from '../context/NotificationContext';
 
 import {
   FaBars,
@@ -54,6 +55,7 @@ export default function Sidebar({ onCollapseChange }) {
   const navigate = useNavigate();
 
   const { user, logout } = useContext(UserContext);
+  const { unreadCount } = useNotifications();
 
   // ============================================================
   // HELPERS
@@ -272,6 +274,12 @@ export default function Sidebar({ onCollapseChange }) {
       icon: <FaComments />,
     },
 
+    {
+      path: '/notifications',
+      label: 'Notificações',
+      icon: <FaBell />,
+    },
+
     // ----------------------------------------------------------
     // IMÓVEIS
     // ----------------------------------------------------------
@@ -374,6 +382,12 @@ export default function Sidebar({ onCollapseChange }) {
           icon: <FaComments />,
         },
 
+        {
+          path: '/notifications',
+          label: 'Notificações',
+          icon: <FaBell />,
+        },
+
         // ------------------------------------------------------
         // LEADS
         // ------------------------------------------------------
@@ -441,7 +455,7 @@ export default function Sidebar({ onCollapseChange }) {
     const active = isActive(item.path);
 
     return (
-      <li key={item.path}>
+      <li key={item.path} className={item.path === '/notifications' ? 'relative' : undefined}>
         <Link
           to={item.path}
           target={item.target}
@@ -486,6 +500,17 @@ export default function Sidebar({ onCollapseChange }) {
           {/* Label */}
           {!collapsed && (
             <span className="text-sm font-medium truncate">{item.label}</span>
+          )}
+
+          {item.path === '/notifications' && unreadCount > 0 && (
+            <span
+              className={`${
+                collapsed ? 'absolute right-1 top-1' : 'ml-auto'
+              } inline-flex min-w-5 items-center justify-center rounded-full bg-blue-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white`}
+              aria-label={`${unreadCount} notificações não lidas`}
+            >
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
           )}
 
           {/* Indicador ativo */}

@@ -50,7 +50,7 @@ export default function AboutUs() {
   };
 
   const handleContact = () => {
-    navigate('/contato');
+    navigate('/contact');
   };
 
   return (

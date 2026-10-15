@@ -40,7 +40,7 @@ export default function PersonalizedService() {
   ];
 
   const handleContact = () => {
-    navigate('/contato');
+    navigate('/contact');
   };
 
   return (

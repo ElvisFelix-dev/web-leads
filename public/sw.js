@@ -33,7 +33,7 @@ self.addEventListener('notificationclick', (event) => {
 
   const notificationData = event.notification.data || {};
 
-  const url = notificationData.url || '/dashboard';
+  const url = notificationData.url || notificationData.link || '/dashboard';
 
   event.waitUntil(
     clients

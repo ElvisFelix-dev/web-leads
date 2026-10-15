@@ -5,7 +5,7 @@ export default function FinalCTA({ onSearch }) {
   const navigate = useNavigate();
 
   const handleContact = () => {
-    navigate('/contato');
+    navigate('/contact');
   };
 
   return (
