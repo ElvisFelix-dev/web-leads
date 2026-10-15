@@ -28,6 +28,7 @@ import api from '../service/api';
 import { useChat } from '../context/ChatContext';
 
 import LeadHistory from '../components/lead/LeadHistory';
+import LeadRecentMessages from '../components/lead/LeadRecentMessages';
 
 export default function LeadDetails() {
   const { id } = useParams();
@@ -844,6 +845,10 @@ export default function LeadDetails() {
                 </div>
               )}
             </Card>
+
+            {/* ÚLTIMAS MENSAGENS DO LEAD */}
+
+            <LeadRecentMessages leadId={lead._id} />
 
             {/* HISTÓRICO */}
 
