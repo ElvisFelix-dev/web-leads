@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import {
   FaSearch,
@@ -8,6 +9,7 @@ import {
   FaPlus,
   FaComments,
   FaWhatsapp,
+  FaExternalLinkAlt,
 } from 'react-icons/fa';
 
 import { useChat } from '../../context/ChatContext';
@@ -31,6 +33,7 @@ export default function ConversationList({
 
   const [search, setSearch] = useState('');
   const [brokenAvatars, setBrokenAvatars] = useState({});
+  const navigate = useNavigate();
 
   /**
    * Normaliza o canal.
@@ -54,6 +57,46 @@ export default function ConversationList({
    */
   const getConversationId = (conversation) =>
     conversation?._id || conversation?.id;
+
+  const getProfileTarget = (conversation) => {
+    if (!conversation) return null;
+
+    if (isWhatsAppConversation(conversation)) {
+      const lead =
+        conversation?.lead ||
+        conversation?.relatedLead ||
+        conversation?.contactLead;
+      const leadId = lead?._id || lead?.id || conversation?.leadId;
+      return leadId
+        ? { path: `/lead-detail/${leadId}`, label: 'Abrir detalhes do lead' }
+        : null;
+    }
+
+    if (conversation?.type === 'broker_channel') return null;
+
+    const person = getOtherParticipant?.(conversation);
+    const personId = person?._id || person?.id;
+    const role = String(person?.role || '').toLowerCase();
+
+    if (personId && ['broker', 'corretor'].includes(role)) {
+      return {
+        path: `/broker-details/${personId}`,
+        label: 'Abrir detalhes do corretor',
+      };
+    }
+
+    const lead = conversation?.lead || conversation?.relatedLead;
+    const leadId = lead?._id || lead?.id || conversation?.leadId;
+    return leadId
+      ? { path: `/lead-detail/${leadId}`, label: 'Abrir detalhes do lead' }
+      : null;
+  };
+
+  const handleOpenProfile = (event, conversation) => {
+    event.stopPropagation();
+    const target = getProfileTarget(conversation);
+    if (target) navigate(target.path);
+  };
 
   /**
    * Filtra primeiro pelo canal e depois pelo texto pesquisado.
@@ -422,21 +465,42 @@ export default function ConversationList({
               );
 
               return (
-                <button
+                <div
                   key={conversationId}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onSelect?.(conversation)}
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      onSelect?.(conversation);
+                    }
+                  }}
                   aria-label={`Abrir conversa com ${name}`}
                   aria-current={isActive ? 'true' : undefined}
-                  className={`group w-full border-b border-gray-800/50 p-3.5 text-left transition focus:outline-none focus:bg-gray-800/40 ${
+                  className={`group w-full cursor-pointer border-b border-gray-800/50 p-3.5 text-left transition focus:outline-none focus:bg-gray-800/40 ${
                     isActive ? 'bg-gray-800/50' : 'hover:bg-gray-800/30'
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     {/* AVATAR */}
                     <div className="relative shrink-0">
-                      <div
-                        className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border ${
+                      <button
+                        type="button"
+                        disabled={!getProfileTarget(conversation)}
+                        onClick={(event) =>
+                          handleOpenProfile(event, conversation)
+                        }
+                        aria-label={
+                          getProfileTarget(conversation)?.label ||
+                          `Avatar de ${name}`
+                        }
+                        title={
+                          getProfileTarget(conversation)?.label ||
+                          'Detalhes indisponíveis'
+                        }
+                        className={`relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 ${
                           isActive
                             ? isWhatsApp
                               ? 'border-emerald-500/40 bg-emerald-500/10'
@@ -444,7 +508,7 @@ export default function ConversationList({
                             : isWhatsApp
                               ? 'border-emerald-500/20 bg-emerald-500/5'
                               : 'border-gray-800 bg-gray-900'
-                        }`}
+                        } ${getProfileTarget(conversation) ? 'cursor-pointer hover:scale-[1.04] hover:border-sky-400/50' : 'cursor-default'}`}
                       >
                         {avatar ? (
                           <img
@@ -461,11 +525,16 @@ export default function ConversationList({
                         ) : (
                           <FaUser size={16} className="text-gray-600" />
                         )}
-                      </div>
+                        {getProfileTarget(conversation) && (
+                          <span className="absolute bottom-0 right-0 flex h-4 w-4 items-center justify-center rounded-tl-md bg-sky-500 text-white">
+                            <FaExternalLinkAlt size={7} />
+                          </span>
+                        )}
+                      </button>
 
                       {online && (
                         <span
-                          className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#0d1119] bg-emerald-400"
+                          className="pointer-events-none absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#0d1119] bg-emerald-400"
                           title="Online"
                         />
                       )}
@@ -555,7 +624,7 @@ export default function ConversationList({
                       }`}
                     />
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>

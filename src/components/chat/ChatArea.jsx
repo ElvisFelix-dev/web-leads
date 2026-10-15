@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import {
   FaPaperPlane,
@@ -14,6 +15,10 @@ import {
   FaPaperclip,
   FaEllipsisV,
   FaInfoCircle,
+  FaComments,
+  FaExternalLinkAlt,
+  FaCalendarAlt,
+  FaLink,
 } from 'react-icons/fa';
 
 import { GifPicker } from 'gif-picker-react';
@@ -38,12 +43,14 @@ export default function ChatArea({ onBack }) {
   } = useChat();
 
   const { user } = useContext(UserContext);
+  const navigate = useNavigate();
 
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [sending, setSending] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
+  const [showConversationInfo, setShowConversationInfo] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
 
   const messagesEndRef = useRef(null);
@@ -170,6 +177,87 @@ export default function ChatArea({ onBack }) {
     } catch {
       return false;
     }
+  };
+
+  const getProfileTarget = (
+    conversation = currentConversation,
+    participant = null,
+  ) => {
+    if (!conversation) return null;
+
+    if (conversation.channel === 'whatsapp') {
+      const lead =
+        conversation.lead ||
+        conversation.relatedLead ||
+        conversation.contactLead;
+      const leadId = lead?._id || lead?.id || conversation.leadId;
+      return leadId
+        ? { path: `/lead-detail/${leadId}`, label: 'Ver detalhes do lead' }
+        : null;
+    }
+
+    const person = participant || getOtherParticipant?.(conversation);
+    const personId = person?._id || person?.id;
+    if (!personId || isSameUser(person, user)) return null;
+
+    const role = String(person?.role || '').toLowerCase();
+    if (
+      ['broker', 'corretor', 'manager', 'admin', 'supervisor'].includes(role)
+    ) {
+      return {
+        path: `/broker-details/${personId}`,
+        label: 'Ver detalhes do corretor',
+      };
+    }
+
+    const lead = conversation.lead || conversation.relatedLead;
+    const leadId = lead?._id || lead?.id || conversation.leadId;
+    return leadId
+      ? { path: `/lead-detail/${leadId}`, label: 'Ver detalhes do lead' }
+      : null;
+  };
+
+  const openProfile = (
+    conversation = currentConversation,
+    participant = null,
+  ) => {
+    const target = getProfileTarget(conversation, participant);
+    if (target) navigate(target.path);
+  };
+
+  const renderMessageText = (text) => {
+    const urlPattern = /(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
+    const parts = String(text || '').split(urlPattern);
+
+    return parts.map((part, index) => {
+      if (!/^(https?:\/\/|www\.)/i.test(part)) {
+        return <span key={`text-${index}`}>{part}</span>;
+      }
+
+      const match = part.match(/[.,!?;:)]*$/);
+      const punctuation = match?.[0] || '';
+      const rawUrl = punctuation ? part.slice(0, -punctuation.length) : part;
+      const href = rawUrl.startsWith('www.') ? `https://${rawUrl}` : rawUrl;
+
+      if (!rawUrl || !isHttpUrl(href)) {
+        return <span key={`text-${index}`}>{part}</span>;
+      }
+
+      return (
+        <span key={`url-${index}`}>
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            className="break-all font-medium text-sky-300 underline decoration-sky-400/40 underline-offset-2 transition hover:text-sky-200 hover:decoration-sky-300"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {rawUrl}
+          </a>
+          {punctuation}
+        </span>
+      );
+    });
   };
 
   /*
@@ -319,6 +407,7 @@ export default function ChatArea({ onBack }) {
     setInputMessage('');
     setShowEmojiPicker(false);
     setShowParticipants(false);
+    setShowConversationInfo(false);
     setIsTyping(false);
     setShowGifPicker(false);
 
@@ -545,35 +634,37 @@ export default function ChatArea({ onBack }) {
         )}
 
         <div className="relative mr-3 shrink-0">
-          {headerAvatar ? (
-            <img
-              src={headerAvatar}
-              alt={conversationName}
-              className="h-10 w-10 rounded-xl border border-white/[0.08] object-cover shadow-lg shadow-black/20"
-            />
-          ) : (
-            <div
-              className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
-                isWhatsApp
-                  ? 'border-emerald-500/20 bg-emerald-500/[0.08]'
-                  : 'border-white/[0.07] bg-gradient-to-br from-white/[0.06] to-white/[0.02]'
-              }`}
-            >
-              {isWhatsApp ? (
-                <FaWhatsapp className="text-base text-emerald-400" />
-              ) : isChannel ? (
-                <FaUsers className="text-sm text-gray-400" />
-              ) : (
-                <FaUser className="text-sm text-gray-400" />
-              )}
-            </div>
-          )}
-
+          <button
+            type="button"
+            onClick={() => openProfile()}
+            disabled={!getProfileTarget()}
+            aria-label={getProfileTarget()?.label || 'Avatar da conversa'}
+            title={getProfileTarget()?.label || 'Detalhes indisponíveis'}
+            className={`relative flex rounded-xl text-left outline-none transition focus-visible:ring-2 focus-visible:ring-sky-400/70 ${getProfileTarget() ? 'cursor-pointer hover:brightness-110' : 'cursor-default'}`}
+          >
+            {headerAvatar ? (
+              <img
+                src={headerAvatar}
+                alt={conversationName}
+                className="h-10 w-10 rounded-xl border border-white/[0.08] object-cover shadow-lg shadow-black/20"
+              />
+            ) : (
+              <span
+                className={`flex h-10 w-10 items-center justify-center rounded-xl border ${isWhatsApp ? 'border-emerald-500/20 bg-emerald-500/[0.08]' : 'border-white/[0.07] bg-gradient-to-br from-white/[0.06] to-white/[0.02]'}`}
+              >
+                {isWhatsApp ? (
+                  <FaWhatsapp className="text-base text-emerald-400" />
+                ) : isChannel ? (
+                  <FaUsers className="text-sm text-gray-400" />
+                ) : (
+                  <FaUser className="text-sm text-gray-400" />
+                )}
+              </span>
+            )}
+          </button>
           {!isWhatsApp && !isChannel && (
             <span
-              className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#0b0d11] ${
-                online ? 'bg-emerald-400' : 'bg-gray-600'
-              }`}
+              className={`pointer-events-none absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#0b0d11] ${online ? 'bg-emerald-400' : 'bg-gray-600'}`}
             />
           )}
         </div>
@@ -665,13 +756,9 @@ export default function ChatArea({ onBack }) {
 
           <button
             type="button"
-            onClick={() => {
-              if (isChannel) setShowParticipants(true);
-            }}
+            onClick={() => setShowConversationInfo(true)}
             className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 transition-all duration-200 hover:bg-white/[0.06] hover:text-gray-200 active:scale-95"
-            title={
-              isChannel ? 'Informações do canal' : 'Informações da conversa'
-            }
+            title={isChannel ? 'Dados do canal' : 'Dados da conversa'}
           >
             <FaInfoCircle size={14} />
           </button>
@@ -688,12 +775,15 @@ export default function ChatArea({ onBack }) {
 
       {/* PAINEL DE PARTICIPANTES */}
 
-      {showParticipants && isChannel && (
+      {(showParticipants || showConversationInfo) && (
         <div className="absolute inset-0 z-50 flex">
           <button
             type="button"
             aria-label="Fechar participantes"
-            onClick={() => setShowParticipants(false)}
+            onClick={() => {
+              setShowParticipants(false);
+              setShowConversationInfo(false);
+            }}
             className="absolute inset-0 cursor-default bg-black/60 backdrop-blur-sm"
           />
 
@@ -706,7 +796,9 @@ export default function ChatArea({ onBack }) {
 
                 <div className="min-w-0">
                   <h3 className="text-sm font-semibold text-gray-100">
-                    Participantes
+                    {showConversationInfo
+                      ? 'Dados da conversa'
+                      : 'Participantes'}
                   </h3>
 
                   <div className="mt-1 flex items-center gap-1.5">
@@ -731,7 +823,10 @@ export default function ChatArea({ onBack }) {
 
               <button
                 type="button"
-                onClick={() => setShowParticipants(false)}
+                onClick={() => {
+                  setShowParticipants(false);
+                  setShowConversationInfo(false);
+                }}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-white/[0.06] hover:text-gray-200"
                 title="Fechar"
               >
@@ -740,93 +835,180 @@ export default function ChatArea({ onBack }) {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-              {participants.length === 0 ? (
-                <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-                  <FaUsers className="mb-3 text-xl text-gray-700" />
-                  <p className="text-xs text-gray-500">
-                    Nenhum participante encontrado.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  {participants.map((participant) => {
-                    const participantOnline = isUserOnline?.(participant?._id);
-                    const isCurrentUser = isSameUser(participant, user);
-                    const participantName = participant?.name || 'Usuário';
-
-                    return (
-                      <div
-                        key={participant?._id}
-                        className="group flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 transition hover:border-white/[0.04] hover:bg-white/[0.035]"
-                      >
-                        <div className="relative shrink-0">
-                          {participant?.avatar ? (
-                            <img
-                              src={participant.avatar}
-                              alt={participantName}
-                              className="h-10 w-10 rounded-xl border border-white/[0.06] object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-[11px] font-semibold text-gray-400">
-                              {getInitials(participantName)}
-                            </div>
-                          )}
-
-                          <span
-                            className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0c0e12] ${
-                              participantOnline
-                                ? 'bg-emerald-400'
-                                : 'bg-gray-700'
-                            }`}
-                          />
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex min-w-0 items-center gap-1.5">
-                            <span className="truncate text-xs font-medium text-gray-200">
-                              {participantName}
-                            </span>
-
-                            {isCurrentUser && (
-                              <span className="shrink-0 rounded-md border border-indigo-400/15 bg-indigo-400/[0.07] px-1.5 py-0.5 text-[8px] font-semibold text-indigo-300">
-                                Você
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="mt-1 flex items-center gap-1.5">
-                            <span
-                              className={`text-[9px] ${
-                                participantOnline
-                                  ? 'text-emerald-400/80'
-                                  : 'text-gray-500'
-                              }`}
-                            >
-                              {participantOnline ? 'Online' : 'Offline'}
-                            </span>
-
-                            {participant?.role && (
-                              <>
-                                <span className="text-gray-700">·</span>
-                                <span className="truncate text-[9px] text-gray-500">
-                                  {getRoleLabel(participant.role)}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        {participantOnline && (
-                          <FaCircle
-                            size={5}
-                            className="shrink-0 text-emerald-400/80"
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
+              {showConversationInfo && (
+                <div className="mb-4 space-y-2">
+                  <div className="rounded-xl border border-white/[0.06] bg-white/[0.025] p-3">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-gray-500">
+                      Conversa
+                    </p>
+                    <p className="mt-1 break-words text-sm font-semibold text-gray-100">
+                      {conversationName}
+                    </p>
+                    <p className="mt-1 text-[10px] text-gray-500">
+                      {isWhatsApp
+                        ? 'WhatsApp'
+                        : isChannel
+                          ? 'Canal interno'
+                          : 'Conversa interna'}
+                    </p>
+                    {conversationSubtitle && (
+                      <p className="mt-1 break-words text-[11px] text-gray-400">
+                        {conversationSubtitle}
+                      </p>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.025] p-3">
+                      <FaCalendarAlt className="mb-2 text-xs text-sky-400" />
+                      <p className="text-[9px] text-gray-500">Criada em</p>
+                      <p className="mt-1 text-[11px] font-medium text-gray-200">
+                        {formatDate(currentConversation?.createdAt) ||
+                          'Não informado'}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.025] p-3">
+                      <FaComments className="mb-2 text-xs text-sky-400" />
+                      <p className="text-[9px] text-gray-500">
+                        Mensagens carregadas
+                      </p>
+                      <p className="mt-1 text-[11px] font-medium text-gray-200">
+                        {messages?.length || 0}
+                      </p>
+                    </div>
+                  </div>
+                  {isWhatsApp && whatsappPhone && (
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.025] p-3">
+                      <p className="text-[9px] text-gray-500">Telefone</p>
+                      <p className="mt-1 text-xs text-gray-200">
+                        {whatsappPhone}
+                      </p>
+                    </div>
+                  )}
+                  {getProfileTarget() && (
+                    <button
+                      type="button"
+                      onClick={() => openProfile()}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-sky-400/20 bg-sky-400/[0.07] px-3 py-2.5 text-xs font-semibold text-sky-300 transition hover:bg-sky-400/[0.12]"
+                    >
+                      <FaExternalLinkAlt size={10} />
+                      {getProfileTarget().label}
+                    </button>
+                  )}
+                  <div className="flex items-center gap-2 px-1 pt-1 text-[10px] text-gray-500">
+                    <FaLink size={10} />
+                    Links das mensagens são abertos em uma nova aba.
+                  </div>
                 </div>
               )}
+              {(!showConversationInfo || isChannel) &&
+                (participants.length === 0 ? (
+                  <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+                    <FaUsers className="mb-3 text-xl text-gray-700" />
+                    <p className="text-xs text-gray-500">
+                      Nenhum participante encontrado.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {participants.map((participant) => {
+                      const participantOnline = isUserOnline?.(
+                        participant?._id,
+                      );
+                      const isCurrentUser = isSameUser(participant, user);
+                      const participantName = participant?.name || 'Usuário';
+
+                      return (
+                        <div
+                          key={participant?._id}
+                          className="group flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 transition hover:border-white/[0.04] hover:bg-white/[0.035]"
+                        >
+                          <div className="relative shrink-0">
+                            <button
+                              type="button"
+                              disabled={
+                                !getProfileTarget(
+                                  currentConversation,
+                                  participant,
+                                )
+                              }
+                              onClick={() =>
+                                openProfile(currentConversation, participant)
+                              }
+                              title={
+                                getProfileTarget(
+                                  currentConversation,
+                                  participant,
+                                )?.label || 'Detalhes indisponíveis'
+                              }
+                              aria-label={
+                                getProfileTarget(
+                                  currentConversation,
+                                  participant,
+                                )?.label || `Avatar de ${participantName}`
+                              }
+                              className={`flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.04] text-[11px] font-semibold text-gray-400 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 ${getProfileTarget(currentConversation, participant) ? 'cursor-pointer hover:border-sky-400/50' : 'cursor-default'}`}
+                            >
+                              {participant?.avatar ? (
+                                <img
+                                  src={participant.avatar}
+                                  alt={participantName}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                getInitials(participantName)
+                              )}
+                            </button>
+                            <span
+                              className={`pointer-events-none absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0c0e12] ${participantOnline ? 'bg-emerald-400' : 'bg-gray-700'}`}
+                            />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              <span className="truncate text-xs font-medium text-gray-200">
+                                {participantName}
+                              </span>
+
+                              {isCurrentUser && (
+                                <span className="shrink-0 rounded-md border border-indigo-400/15 bg-indigo-400/[0.07] px-1.5 py-0.5 text-[8px] font-semibold text-indigo-300">
+                                  Você
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="mt-1 flex items-center gap-1.5">
+                              <span
+                                className={`text-[9px] ${
+                                  participantOnline
+                                    ? 'text-emerald-400/80'
+                                    : 'text-gray-500'
+                                }`}
+                              >
+                                {participantOnline ? 'Online' : 'Offline'}
+                              </span>
+
+                              {participant?.role && (
+                                <>
+                                  <span className="text-gray-700">·</span>
+                                  <span className="truncate text-[9px] text-gray-500">
+                                    {getRoleLabel(participant.role)}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {participantOnline && (
+                            <FaCircle
+                              size={5}
+                              className="shrink-0 text-emerald-400/80"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
             </div>
           </aside>
         </div>
@@ -1133,7 +1315,7 @@ export default function ChatArea({ onBack }) {
 
                         {shouldShowText && (
                           <p className="whitespace-pre-wrap break-words text-xs leading-5">
-                            {messageContent}
+                            {renderMessageText(messageContent)}
                           </p>
                         )}
 

@@ -22,6 +22,9 @@ import {
   FaSmile,
   FaArrowDown,
   FaCheckCircle,
+  FaLink,
+  FaCalendarAlt,
+  FaRegComments,
 } from 'react-icons/fa';
 
 import { GifPicker } from 'gif-picker-react';
@@ -130,6 +133,7 @@ export default function ChatPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
+  const [showConversationDetails, setShowConversationDetails] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
@@ -244,6 +248,48 @@ export default function ChatPage() {
       return false;
     }
   };
+
+  // Converte URLs no texto em links clicáveis sem usar dangerouslySetInnerHTML.
+  const renderMessageWithLinks = (text) => {
+    const urlPattern = /((?:https?:\/\/|www\.)[^\s<>]+[^\s<>.,;:!?)\]"'])/gi;
+    const parts = String(text || '').split(urlPattern);
+
+    return parts.map((part, index) => {
+      if (!part) return null;
+
+      const isUrl = /^(?:https?:\/\/|www\.)/i.test(part);
+      if (!isUrl) return part;
+
+      const href = /^www\./i.test(part) ? `https://${part}` : part;
+      if (!isHttpUrl(href)) return part;
+
+      return (
+        <a
+          key={`url-${index}`}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          onClick={(event) => event.stopPropagation()}
+          className="break-all font-medium underline decoration-current/40 underline-offset-2 transition hover:decoration-current"
+          title={`Abrir ${part} em nova aba`}
+        >
+          {part}
+        </a>
+      );
+    });
+  };
+
+  const getConversationCreatedAt = (conversation) =>
+    conversation?.createdAt ||
+    conversation?.created_at ||
+    conversation?.startedAt ||
+    null;
+
+  const getConversationLastActivity = (conversation) =>
+    conversation?.lastMessageAt ||
+    conversation?.updatedAt ||
+    conversation?.lastMessage?.createdAt ||
+    null;
 
   const getLastMessage = (conversation) => {
     const lastMessage = conversation?.lastMessage;
@@ -699,6 +745,7 @@ export default function ChatPage() {
     setShowNewChat(false);
     setSearchResults([]);
     setShowParticipants(false);
+    setShowConversationDetails(false);
     setShowEmojiPicker(false);
     setShowGifPicker(false);
     setInputMessage('');
@@ -885,6 +932,7 @@ export default function ChatPage() {
 
   const handleSelectConversation = (conversation) => {
     setShowParticipants(false);
+    setShowConversationDetails(false);
     setShowEmojiPicker(false);
     setShowGifPicker(false);
     setIsTyping(false);
@@ -906,6 +954,7 @@ export default function ChatPage() {
 
   const handleBack = () => {
     setShowParticipants(false);
+    setShowConversationDetails(false);
     setShowEmojiPicker(false);
     setShowGifPicker(false);
     setIsTyping(false);
@@ -1569,6 +1618,29 @@ export default function ChatPage() {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowConversationDetails((previous) => !previous);
+                          setShowParticipants(false);
+                        }}
+                        className={`flex h-9 items-center justify-center gap-2 rounded-xl border px-2.5 text-[11px] font-semibold transition sm:px-3 ${
+                          showConversationDetails
+                            ? isWhatsAppConversation
+                              ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
+                              : 'border-blue-500/25 bg-blue-500/10 text-blue-200'
+                            : 'border-white/[0.07] bg-white/[0.025] text-gray-400 hover:bg-white/[0.06] hover:text-white'
+                        }`}
+                        aria-label="Dados da conversa"
+                        aria-expanded={showConversationDetails}
+                        title="Dados da conversa"
+                      >
+                        <FaInfoCircle size={13} />
+                        <span className="hidden sm:inline">
+                          Dados da conversa
+                        </span>
+                      </button>
+
                       {isCurrentChannel && !isWhatsAppConversation && (
                         <button
                           type="button"
@@ -1863,7 +1935,7 @@ export default function ChatPage() {
 
                                   {shouldShowText && (
                                     <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-                                      {messageContent}
+                                      {renderMessageWithLinks(messageContent)}
                                     </p>
                                   )}
 
@@ -2165,6 +2237,267 @@ export default function ChatPage() {
             </main>
           </div>
         </div>
+
+        {/* PAINEL DE DADOS DA CONVERSA */}
+
+        {showConversationDetails && currentConversation && (
+          <div className="fixed inset-0 z-[60] flex">
+            <button
+              type="button"
+              aria-label="Fechar dados da conversa"
+              onClick={() => setShowConversationDetails(false)}
+              className="absolute inset-0 bg-black/65 backdrop-blur-sm"
+            />
+
+            <aside className="relative ml-auto flex h-full w-[380px] max-w-[94vw] flex-col border-l border-white/[0.08] bg-[#0c1017] shadow-2xl">
+              <div className="flex min-h-[76px] shrink-0 items-center justify-between border-b border-white/[0.07] px-5">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
+                      isWhatsAppConversation
+                        ? 'border-emerald-500/20 bg-emerald-500/[0.08] text-emerald-300'
+                        : 'border-blue-500/20 bg-blue-500/[0.08] text-blue-300'
+                    }`}
+                  >
+                    {isWhatsAppConversation ? (
+                      <FaWhatsapp size={17} />
+                    ) : (
+                      <FaRegComments size={17} />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">
+                      Dados da conversa
+                    </h3>
+                    <p className="mt-1 text-[10px] text-gray-500">
+                      Informações e participantes
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowConversationDetails(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 transition hover:bg-white/[0.06] hover:text-white"
+                  aria-label="Fechar dados da conversa"
+                >
+                  <FaTimes size={13} />
+                </button>
+              </div>
+
+              <div className="scrollbar-thin scrollbar-thumb-gray-800 flex-1 space-y-5 overflow-y-auto p-5">
+                <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border ${
+                        isWhatsAppConversation
+                          ? 'border-emerald-500/20 bg-emerald-500/[0.08]'
+                          : 'border-blue-500/20 bg-blue-500/[0.08]'
+                      }`}
+                    >
+                      {getConversationAvatar(currentConversation) ? (
+                        <img
+                          src={getConversationAvatar(currentConversation)}
+                          alt={getSafeConversationName(currentConversation)}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : isWhatsAppConversation ? (
+                        <FaWhatsapp size={20} className="text-emerald-300" />
+                      ) : isCurrentChannel ? (
+                        <FaUsers size={18} className="text-blue-300" />
+                      ) : (
+                        <span className="text-sm font-bold text-blue-200">
+                          {getInitials(
+                            getSafeConversationName(currentConversation),
+                          )}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="break-words text-sm font-bold text-white">
+                        {getSafeConversationName(currentConversation)}
+                      </p>
+                      <span
+                        className={`mt-1 inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[9px] font-bold uppercase ${
+                          isWhatsAppConversation
+                            ? 'border-emerald-500/15 bg-emerald-500/[0.07] text-emerald-300'
+                            : 'border-blue-500/15 bg-blue-500/[0.07] text-blue-300'
+                        }`}
+                      >
+                        {isWhatsAppConversation ? (
+                          <FaWhatsapp size={9} />
+                        ) : isCurrentChannel ? (
+                          <FaUsers size={9} />
+                        ) : (
+                          <FaComments size={9} />
+                        )}
+                        {isWhatsAppConversation
+                          ? 'WhatsApp'
+                          : isCurrentChannel
+                            ? 'Canal da equipe'
+                            : 'Chat interno'}
+                      </span>
+                    </div>
+                  </div>
+                  {getSafeConversationSubtitle(currentConversation) && (
+                    <p className="mt-3 break-words text-xs leading-relaxed text-gray-400">
+                      {getSafeConversationSubtitle(currentConversation)}
+                    </p>
+                  )}
+                  {getConversationLeadId(currentConversation) &&
+                    isWhatsAppConversation && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleOpenLeadDetails(currentConversation)
+                        }
+                        className="mt-3 inline-flex items-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/[0.08] px-3 py-2 text-xs font-semibold text-blue-200 transition hover:bg-blue-500/[0.14]"
+                      >
+                        <FaInfoCircle size={11} />
+                        Abrir cadastro do lead
+                      </button>
+                    )}
+                </div>
+
+                <div className="space-y-2">
+                  <p className="px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">
+                    Atividade
+                  </p>
+                  <div className="rounded-xl border border-white/[0.06] bg-[#090c12] p-3.5">
+                    <div className="flex items-start gap-3">
+                      <FaCalendarAlt
+                        className="mt-0.5 text-gray-500"
+                        size={13}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] text-gray-500">Criada em</p>
+                        <p className="mt-1 text-xs font-medium text-gray-200">
+                          {getConversationCreatedAt(currentConversation)
+                            ? new Date(
+                                getConversationCreatedAt(currentConversation),
+                              ).toLocaleString('pt-BR', {
+                                dateStyle: 'short',
+                                timeStyle: 'short',
+                              })
+                            : 'Data não disponível'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-white/[0.06] bg-[#090c12] p-3.5">
+                    <div className="flex items-start gap-3">
+                      <FaClock className="mt-0.5 text-gray-500" size={13} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] text-gray-500">
+                          Última atividade
+                        </p>
+                        <p className="mt-1 text-xs font-medium text-gray-200">
+                          {getConversationLastActivity(currentConversation)
+                            ? new Date(
+                                getConversationLastActivity(
+                                  currentConversation,
+                                ),
+                              ).toLocaleString('pt-BR', {
+                                dateStyle: 'short',
+                                timeStyle: 'short',
+                              })
+                            : 'Nenhuma atividade registrada'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-white/[0.06] bg-[#090c12] p-3.5">
+                    <div className="flex items-start gap-3">
+                      <FaRegComments
+                        className="mt-0.5 text-gray-500"
+                        size={13}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] text-gray-500">
+                          Mensagens carregadas
+                        </p>
+                        <p className="mt-1 text-xs font-medium text-gray-200">
+                          {messages.length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {!isWhatsAppConversation && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between px-1">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">
+                        Participantes
+                      </p>
+                      <span className="text-[10px] text-gray-500">
+                        {currentParticipantCount}
+                      </span>
+                    </div>
+                    {currentParticipants.length ? (
+                      currentParticipants.map((participant) => {
+                        const participantId = getParticipantId(participant);
+                        const participantName = participant?.name || 'Usuário';
+                        const online = isUserOnline(participantId);
+                        return (
+                          <div
+                            key={participantId || participantName}
+                            className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-[#090c12] p-3"
+                          >
+                            <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/[0.07] bg-[#171c27]">
+                              {participant?.avatar ? (
+                                <img
+                                  src={participant.avatar}
+                                  alt={participantName}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-[10px] font-bold text-gray-300">
+                                  {getInitials(participantName)}
+                                </span>
+                              )}
+                              <span
+                                className={`absolute bottom-0.5 right-0.5 h-2 w-2 rounded-full border border-[#090c12] ${online ? 'bg-emerald-400' : 'bg-gray-700'}`}
+                              />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-semibold text-gray-200">
+                                {participantName}
+                                {participantId === user?._id?.toString()
+                                  ? ' (Você)'
+                                  : ''}
+                              </p>
+                              <p className="mt-1 text-[10px] text-gray-500">
+                                {getRoleLabel(participant?.role)} ·{' '}
+                                {online ? 'Online' : 'Offline'}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="rounded-xl border border-white/[0.06] bg-[#090c12] p-4 text-xs text-gray-500">
+                        Nenhum participante encontrado.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div className="rounded-xl border border-blue-500/10 bg-blue-500/[0.04] p-3">
+                  <div className="flex items-center gap-2 text-blue-200">
+                    <FaLink size={12} />
+                    <span className="text-[11px] font-semibold">
+                      Links nas mensagens
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-[10px] leading-relaxed text-gray-400">
+                    Endereços HTTP, HTTPS e links iniciados por www. são
+                    reconhecidos automaticamente e abertos em uma nova aba.
+                  </p>
+                </div>
+              </div>
+            </aside>
+          </div>
+        )}
 
         {/* PAINEL DE PARTICIPANTES */}
 
