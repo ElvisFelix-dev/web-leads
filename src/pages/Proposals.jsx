@@ -1,4 +1,3 @@
-// src/pages/Proposals.jsx
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
@@ -6,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
   BarChart3,
+  Building2,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -34,33 +34,33 @@ import api from '../service/api';
 import { approveProposal } from '../service/orchestratorService';
 
 /* ==========================================================================
-   STATUS
+   CONFIGURAÇÕES
 ========================================================================== */
 
 const STATUS_CONFIG = {
   draft: {
     label: 'Rascunho',
-    className: 'bg-slate-500/10 text-slate-300 border-slate-500/20',
+    className: 'border-slate-500/20 bg-slate-500/10 text-slate-300',
   },
   pending: {
     label: 'Pendente',
-    className: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
+    className: 'border-amber-500/20 bg-amber-500/10 text-amber-300',
   },
   accepted: {
     label: 'Aceita',
-    className: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
+    className: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300',
   },
   rejected: {
     label: 'Rejeitada',
-    className: 'bg-red-500/10 text-red-300 border-red-500/20',
+    className: 'border-red-500/20 bg-red-500/10 text-red-300',
   },
   cancelled: {
     label: 'Cancelada',
-    className: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+    className: 'border-slate-500/20 bg-slate-500/10 text-slate-400',
   },
   expired: {
     label: 'Expirada',
-    className: 'bg-orange-500/10 text-orange-300 border-orange-500/20',
+    className: 'border-orange-500/20 bg-orange-500/10 text-orange-300',
   },
 };
 
@@ -78,19 +78,25 @@ const SORT_OPTIONS = [
 
 function getId(value) {
   if (!value) return '';
+
   if (typeof value === 'string') return value;
+
   return value._id || value.id || '';
 }
 
 function getName(value, fallback = '-') {
   if (!value) return fallback;
+
   if (typeof value === 'string') return value;
 
   return value.name || value.fullName || value.title || value.email || fallback;
 }
 
 function toNumber(value) {
-  if (value === null || value === undefined || value === '') return 0;
+  if (value === null || value === undefined || value === '') {
+    return 0;
+  }
+
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : 0;
   }
@@ -102,6 +108,7 @@ function toNumber(value) {
   }
 
   const number = Number(normalized);
+
   return Number.isFinite(number) ? number : 0;
 }
 
@@ -125,6 +132,7 @@ function formatDate(value) {
   if (!value) return '-';
 
   const date = new Date(value);
+
   if (Number.isNaN(date.getTime())) return '-';
 
   return new Intl.DateTimeFormat('pt-BR', {
@@ -138,6 +146,7 @@ function formatDateTime(value) {
   if (!value) return '-';
 
   const date = new Date(value);
+
   if (Number.isNaN(date.getTime())) return '-';
 
   return new Intl.DateTimeFormat('pt-BR', {
@@ -150,7 +159,75 @@ function formatDateTime(value) {
 }
 
 /* ==========================================================================
-   RESPONSE NORMALIZATION
+   FOTOS: CORRETOR E IMÓVEL
+========================================================================== */
+
+function getImageUrl(value) {
+  if (!value) return '';
+
+  if (typeof value === 'string') return value;
+
+  if (Array.isArray(value)) {
+    const cover = value.find((item) => item?.isCover);
+
+    return getImageUrl(cover || value[0]);
+  }
+
+  if (typeof value !== 'object') return '';
+
+  return (
+    value.url ||
+    value.secure_url ||
+    value.avatarUrl ||
+    value.profileImage ||
+    value.photoURL ||
+    value.photoUrl ||
+    value.imageUrl ||
+    value.src ||
+    ''
+  );
+}
+
+function getBrokerAvatar(broker) {
+  if (!broker || typeof broker !== 'object') return '';
+
+  return (
+    getImageUrl(broker.avatar) ||
+    getImageUrl(broker.avatarUrl) ||
+    getImageUrl(broker.profileImage) ||
+    getImageUrl(broker.photoURL) ||
+    getImageUrl(broker.photoUrl) ||
+    getImageUrl(broker.imageUrl) ||
+    getImageUrl(broker.image) ||
+    getImageUrl(broker.photo) ||
+    getImageUrl(broker.picture) ||
+    getImageUrl(broker.profile?.avatar) ||
+    ''
+  );
+}
+
+function getPropertyThumbnail(property) {
+  if (!property || typeof property !== 'object') return '';
+
+  const cover = getImageUrl(property.coverImage);
+
+  if (cover) return cover;
+
+  const images = Array.isArray(property.images) ? property.images : [];
+
+  const coverImage = images.find((image) => image?.isCover);
+
+  return (
+    getImageUrl(coverImage) ||
+    getImageUrl(images[0]) ||
+    getImageUrl(property.image) ||
+    getImageUrl(property.thumbnail) ||
+    ''
+  );
+}
+
+/* ==========================================================================
+   NORMALIZAÇÃO DAS RESPOSTAS
 ========================================================================== */
 
 function normalizeListResponse(response) {
@@ -208,7 +285,7 @@ function normalizeMetricsResponse(response) {
 }
 
 /* ==========================================================================
-   MAIN COMPONENT
+   COMPONENTE PRINCIPAL
 ========================================================================== */
 
 export default function Proposals() {
@@ -218,6 +295,7 @@ export default function Proposals() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   const [metrics, setMetrics] = useState(null);
   const [loadingMetrics, setLoadingMetrics] = useState(true);
@@ -251,7 +329,9 @@ export default function Proposals() {
     isLoading: false,
   });
 
-  /* LOAD PROPOSALS */
+  /* ------------------------------------------------------------------------
+     CARREGAR PROPOSTAS
+  ------------------------------------------------------------------------ */
 
   const loadProposals = useCallback(
     async ({ silent = false, requestedPage = page } = {}) => {
@@ -296,17 +376,21 @@ export default function Proposals() {
     [page, limit, sort, search, status, startDate, endDate],
   );
 
-  /* LOAD METRICS */
+  /* ------------------------------------------------------------------------
+     CARREGAR MÉTRICAS
+  ------------------------------------------------------------------------ */
 
   const loadMetrics = useCallback(async () => {
     try {
       setLoadingMetrics(true);
 
       const params = {};
+
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
 
       const response = await api.get('/api/proposals/metrics', { params });
+
       setMetrics(normalizeMetricsResponse(response));
     } catch (err) {
       console.error('Erro ao carregar métricas:', err);
@@ -316,8 +400,6 @@ export default function Proposals() {
     }
   }, [startDate, endDate]);
 
-  /* INITIAL LOAD / FILTER LOAD */
-
   useEffect(() => {
     loadProposals();
   }, [loadProposals]);
@@ -325,8 +407,6 @@ export default function Proposals() {
   useEffect(() => {
     loadMetrics();
   }, [loadMetrics]);
-
-  /* SEARCH DEBOUNCE */
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -336,7 +416,9 @@ export default function Proposals() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  /* MODAL HANDLERS */
+  /* ------------------------------------------------------------------------
+     MODAIS
+  ------------------------------------------------------------------------ */
 
   const openModal = (type, proposal) => {
     setActionError('');
@@ -362,10 +444,13 @@ export default function Proposals() {
     });
   };
 
-  /* ACTION HANDLER */
+  /* ------------------------------------------------------------------------
+     EXECUTAR AÇÕES
+  ------------------------------------------------------------------------ */
 
   const executeAction = async (proposal, action, customComment = '') => {
     const proposalId = getId(proposal);
+
     if (!proposalId) return;
 
     const loadingKey = `${action}-${proposalId}`;
@@ -374,12 +459,12 @@ export default function Proposals() {
       setActionLoading(loadingKey);
       setModal((previous) => ({ ...previous, isLoading: true }));
       setActionError('');
+      setSuccessMessage('');
 
       let response;
 
       if (action === 'approve') {
         response = await approveProposal(proposalId, customComment);
-        console.log('Proposta aprovada com sucesso:', response);
       } else if (action === 'reject') {
         await api.patch(`/api/proposals/${proposalId}/reject`, {
           comment: customComment,
@@ -395,10 +480,15 @@ export default function Proposals() {
         loadMetrics(),
       ]);
 
+      let message =
+        action === 'approve'
+          ? 'Proposta aprovada com sucesso!'
+          : action === 'reject'
+            ? 'Proposta rejeitada com sucesso.'
+            : 'Proposta cancelada com sucesso.';
+
       if (action === 'approve' && response?.data) {
         const { sale, commission } = response.data;
-
-        let message = 'Proposta aprovada com sucesso!';
 
         if (sale?.saleNumber) {
           message += ` Venda ${sale.saleNumber} criada.`;
@@ -409,9 +499,9 @@ export default function Proposals() {
             commission.totalAmount,
           )} gerada.`;
         }
-
-        window.alert(message);
       }
+
+      setSuccessMessage(message);
 
       setModal({
         isOpen: false,
@@ -428,13 +518,14 @@ export default function Proposals() {
           'Não foi possível executar esta ação.',
       );
 
-      setModal((previous) => ({ ...previous, isLoading: false }));
+      setModal((previous) => ({
+        ...previous,
+        isLoading: false,
+      }));
     } finally {
       setActionLoading(null);
     }
   };
-
-  /* ACTIONS */
 
   const handleApprove = (proposal) => openModal('approve', proposal);
   const handleReject = (proposal) => openModal('reject', proposal);
@@ -448,7 +539,9 @@ export default function Proposals() {
     }
   };
 
-  /* FILTER HELPERS */
+  /* ------------------------------------------------------------------------
+     FILTROS
+  ------------------------------------------------------------------------ */
 
   const handleStatusChange = (value) => {
     setStatus(value);
@@ -483,7 +576,9 @@ export default function Proposals() {
     search || status || startDate || endDate || sort !== '-createdAt',
   );
 
-  /* PAGE NAVIGATION */
+  /* ------------------------------------------------------------------------
+     PAGINAÇÃO
+  ------------------------------------------------------------------------ */
 
   const goToPage = (nextPage) => {
     if (nextPage < 1 || (pagination.pages && nextPage > pagination.pages)) {
@@ -493,8 +588,6 @@ export default function Proposals() {
     setPage(nextPage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
-  /* PAGE NUMBERS */
 
   const pageNumbers = useMemo(() => {
     const pages = pagination.pages || 1;
@@ -511,26 +604,28 @@ export default function Proposals() {
     return result;
   }, [pagination.pages, pagination.page, page]);
 
-  /* RENDER */
+  /* ------------------------------------------------------------------------
+     INTERFACE
+  ------------------------------------------------------------------------ */
 
   return (
     <div className="min-h-screen bg-slate-950 p-4 text-white md:p-6">
-      <div className="mx-auto max-w-[1600px] space-y-6">
-        {/* HEADER */}
+      <div className="mx-auto max-w-[1700px] space-y-6">
+        {/* CABEÇALHO */}
 
         <header className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10">
-                <FileText size={24} className="text-blue-400" />
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/15 to-indigo-500/10 shadow-lg shadow-blue-950/20">
+              <FileText size={23} className="text-blue-400" />
+            </div>
 
-              <div>
-                <h1 className="text-2xl font-bold md:text-3xl">Propostas</h1>
-                <p className="mt-1 text-sm text-slate-400">
-                  Gerencie todas as propostas comerciais.
-                </p>
-              </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+                Propostas
+              </h1>
+              <p className="mt-1 text-sm text-slate-400">
+                Gerencie suas negociações em um só lugar.
+              </p>
             </div>
           </div>
 
@@ -544,10 +639,10 @@ export default function Proposals() {
                 ])
               }
               disabled={refreshing}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700/80 bg-slate-900 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-slate-600 hover:bg-slate-800 hover:text-white disabled:opacity-50"
             >
               <RefreshCw
-                size={17}
+                size={16}
                 className={refreshing ? 'animate-spin' : ''}
               />
               Atualizar
@@ -556,7 +651,7 @@ export default function Proposals() {
             <button
               type="button"
               onClick={() => navigate('/proposals/create')}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-semibold text-white transition hover:bg-blue-500"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-950/20 transition hover:bg-blue-500 active:scale-[0.98]"
             >
               <Plus size={18} />
               Nova proposta
@@ -564,7 +659,7 @@ export default function Proposals() {
           </div>
         </header>
 
-        {/* ERRORS */}
+        {/* NOTIFICAÇÕES */}
 
         {error && (
           <AlertBox type="error" message={error} onClose={() => setError('')} />
@@ -578,15 +673,23 @@ export default function Proposals() {
           />
         )}
 
-        {/* METRICS */}
+        {successMessage && (
+          <AlertBox
+            type="success"
+            message={successMessage}
+            onClose={() => setSuccessMessage('')}
+          />
+        )}
+
+        {/* MÉTRICAS */}
 
         <MetricsGrid metrics={metrics} loading={loadingMetrics} />
 
-        {/* SEARCH + FILTERS */}
+        {/* BUSCA E FILTROS */}
 
-        <section className="rounded-2xl border border-slate-800 bg-slate-900 p-4 md:p-5">
+        <section className="rounded-2xl border border-slate-800/80 bg-slate-900/80 p-4 shadow-xl shadow-black/5 md:p-5">
           <div className="flex flex-col gap-3 lg:flex-row">
-            <div className="relative flex-1">
+            <div className="relative min-w-0 flex-1">
               <Search
                 size={18}
                 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
@@ -596,15 +699,15 @@ export default function Proposals() {
                 type="text"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Buscar por cliente, proposta ou imóvel..."
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 py-3 pl-11 pr-4 text-white outline-none placeholder:text-slate-600 focus:border-blue-500"
+                placeholder="Buscar cliente, proposta ou imóvel..."
+                className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-3 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-blue-500/70 focus:ring-2 focus:ring-blue-500/10"
               />
             </div>
 
             <select
               value={status}
               onChange={(event) => handleStatusChange(event.target.value)}
-              className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500"
+              className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-200 outline-none transition focus:border-blue-500/70"
             >
               <option value="">Todos os status</option>
 
@@ -618,10 +721,10 @@ export default function Proposals() {
             <button
               type="button"
               onClick={() => setShowFilters((current) => !current)}
-              className={`inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 transition ${
+              className={`inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition ${
                 showFilters
                   ? 'border-blue-500/30 bg-blue-500/10 text-blue-300'
-                  : 'border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800'
+                  : 'border-slate-800 bg-slate-950 text-slate-300 hover:bg-slate-800'
               }`}
             >
               <Filter size={17} />
@@ -660,7 +763,7 @@ export default function Proposals() {
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="w-full rounded-xl border border-slate-700 px-4 py-3 text-slate-300 transition hover:bg-slate-800"
+                  className="w-full rounded-xl border border-slate-700 px-4 py-3 text-sm text-slate-300 transition hover:bg-slate-800"
                 >
                   Limpar filtros
                 </button>
@@ -669,7 +772,7 @@ export default function Proposals() {
           )}
         </section>
 
-        {/* RESULT SUMMARY */}
+        {/* RESUMO DOS RESULTADOS */}
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-slate-400">
@@ -689,7 +792,7 @@ export default function Proposals() {
                 setLimit(Number(event.target.value));
                 setPage(1);
               }}
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none"
+              className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-blue-500/70"
             >
               <option value={10}>10</option>
               <option value={20}>20</option>
@@ -701,7 +804,7 @@ export default function Proposals() {
           </div>
         </div>
 
-        {/* CONTENT */}
+        {/* CONTEÚDO */}
 
         {loading ? (
           <LoadingState />
@@ -713,7 +816,7 @@ export default function Proposals() {
           />
         ) : (
           <>
-            <div className="hidden overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 lg:block">
+            <div className="hidden overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900 shadow-xl shadow-black/5 lg:block">
               <ProposalTable
                 proposals={proposals}
                 actionLoading={actionLoading}
@@ -745,7 +848,7 @@ export default function Proposals() {
         )}
       </div>
 
-      {/* ACTION MODAL */}
+      {/* MODAL DE AÇÃO */}
 
       {modal.isOpen && (
         <ActionModal
@@ -761,7 +864,7 @@ export default function Proposals() {
 }
 
 /* ==========================================================================
-   ACTION MODAL
+   MODAL DE AÇÃO
 ========================================================================== */
 
 function ActionModal({ type, proposal, isLoading, onConfirm, onCancel }) {
@@ -769,66 +872,72 @@ function ActionModal({ type, proposal, isLoading, onConfirm, onCancel }) {
 
   const configs = {
     approve: {
-      title: 'Aprovar Proposta',
-      icon: <Zap size={24} className="text-emerald-400" />,
+      title: 'Aprovar proposta',
+      icon: <Zap size={22} className="text-emerald-400" />,
       description: (
-        <>
-          <p className="text-slate-300">
-            Você está prestes a{' '}
-            <strong className="text-emerald-400">aprovar</strong> esta proposta.
-          </p>
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+          <p className="text-sm font-medium text-emerald-300">Esta ação irá:</p>
 
-          <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3">
-            <p className="text-sm text-emerald-300">Esta ação irá:</p>
-
-            <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-300">
-              <li>Aprovar a proposta</li>
-              <li>Criar a venda automaticamente</li>
-              <li>Gerar a comissão</li>
-              <li>Atualizar a oportunidade para WON</li>
-            </ul>
-          </div>
-        </>
+          <ul className="mt-3 space-y-2 text-sm text-slate-300">
+            {[
+              'Aprovar a proposta comercial',
+              'Criar a venda automaticamente',
+              'Gerar a comissão correspondente',
+              'Atualizar a oportunidade para WON',
+            ].map((item) => (
+              <li key={item} className="flex items-start gap-2">
+                <CheckCircle2
+                  size={16}
+                  className="mt-0.5 shrink-0 text-emerald-400"
+                />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
       ),
-      confirmLabel: 'Aprovar',
+      confirmLabel: 'Aprovar proposta',
       confirmClass: 'bg-emerald-600 hover:bg-emerald-500',
       showComment: false,
     },
 
     reject: {
-      title: 'Rejeitar Proposta',
-      icon: <X size={24} className="text-red-400" />,
+      title: 'Rejeitar proposta',
+      icon: <X size={22} className="text-red-400" />,
       description: (
-        <p className="text-slate-300">
-          Você está prestes a <strong className="text-red-400">rejeitar</strong>{' '}
-          esta proposta. Esta ação não pode ser desfeita.
+        <p className="text-sm leading-6 text-slate-300">
+          Confirme a rejeição desta proposta. Se desejar, informe o motivo para
+          manter um registro da decisão.
         </p>
       ),
-      confirmLabel: 'Rejeitar',
+      confirmLabel: 'Rejeitar proposta',
       confirmClass: 'bg-red-600 hover:bg-red-500',
       showComment: true,
     },
 
     cancel: {
-      title: 'Cancelar Proposta',
-      icon: <XCircle size={24} className="text-orange-400" />,
+      title: 'Cancelar proposta',
+      icon: <XCircle size={22} className="text-orange-400" />,
       description: (
-        <p className="text-slate-300">
-          Você está prestes a{' '}
-          <strong className="text-orange-400">cancelar</strong> esta proposta.
-          Esta ação não pode ser desfeita.
+        <p className="text-sm leading-6 text-slate-300">
+          Você está prestes a cancelar esta proposta. Informe um motivo opcional
+          para registrar a decisão.
         </p>
       ),
-      confirmLabel: 'Cancelar',
+      confirmLabel: 'Cancelar proposta',
       confirmClass: 'bg-orange-600 hover:bg-orange-500',
       showComment: true,
     },
   };
 
   const config = configs[type] || configs.approve;
-  const proposalId = getId(proposal);
+
   const lead = proposal?.lead || proposal?.leadSnapshot;
   const property = proposal?.property || proposal?.propertySnapshot;
+  const broker = proposal?.broker || proposal?.brokerSnapshot;
+
+  const proposalId = getId(proposal);
+
   const proposalPrice =
     proposal?.values?.proposalPrice || proposal?.proposalPrice || 0;
 
@@ -839,23 +948,31 @@ function ActionModal({ type, proposal, isLoading, onConfirm, onCancel }) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-md"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !isLoading) {
           onCancel();
         }
       }}
     >
-      <div className="my-auto w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
-        {/* HEADER */}
-
+      <form
+        onSubmit={handleSubmit}
+        className="my-auto w-full max-w-lg overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900 shadow-2xl shadow-black/50"
+      >
         <div className="flex items-center justify-between border-b border-slate-800 p-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-800">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-700 bg-slate-800">
               {config.icon}
             </div>
 
-            <h3 className="text-lg font-semibold text-white">{config.title}</h3>
+            <div>
+              <h3 className="text-lg font-semibold text-white">
+                {config.title}
+              </h3>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Proposta #{String(proposalId).slice(-6)}
+              </p>
+            </div>
           </div>
 
           <button
@@ -863,96 +980,124 @@ function ActionModal({ type, proposal, isLoading, onConfirm, onCancel }) {
             onClick={onCancel}
             disabled={isLoading}
             aria-label="Fechar modal"
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-800 hover:text-white disabled:opacity-50"
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-800 hover:text-white disabled:opacity-50"
           >
-            <X size={20} />
+            <X size={19} />
           </button>
         </div>
 
-        {/* BODY */}
-
         <div className="space-y-4 p-5">
-          <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-xs uppercase text-slate-500">Cliente</p>
-                <p className="mt-1 text-sm font-medium text-slate-200">
-                  {getName(lead)}
+          <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/60">
+            <div className="grid grid-cols-2 gap-4 p-4">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Cliente
+                </p>
+                <p className="mt-1 truncate text-sm font-medium text-slate-200">
+                  {getName(lead, 'Não informado')}
                 </p>
               </div>
 
               <div>
-                <p className="text-xs uppercase text-slate-500">Valor</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Valor
+                </p>
                 <p className="mt-1 text-sm font-bold text-emerald-400">
                   {formatCurrency(proposalPrice)}
                 </p>
               </div>
+            </div>
 
-              <div className="col-span-2">
-                <p className="text-xs uppercase text-slate-500">Imóvel</p>
-                <p className="mt-1 text-sm font-medium text-slate-200">
+            <div className="flex items-center gap-3 border-t border-slate-800 p-4">
+              <PropertyThumbnail
+                src={getPropertyThumbnail(property)}
+                name={getName(property, 'Imóvel')}
+              />
+
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Imóvel
+                </p>
+                <p className="mt-1 truncate text-sm font-medium text-slate-200">
                   {getName(property, 'Imóvel não informado')}
                 </p>
-              </div>
-
-              <div className="col-span-2">
-                <p className="text-xs uppercase text-slate-500">Proposta</p>
-                <p className="mt-1 text-sm text-slate-400">
-                  #{String(proposalId).slice(-6)}
-                </p>
+                {property?.code && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Código {property.code}
+                  </p>
+                )}
               </div>
             </div>
+
+            {broker && (
+              <div className="flex items-center gap-3 border-t border-slate-800 p-4">
+                <BrokerAvatar
+                  name={getName(broker, 'Corretor')}
+                  src={getBrokerAvatar(broker)}
+                />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Corretor responsável
+                  </p>
+                  <p className="mt-1 truncate text-sm text-slate-200">
+                    {getName(broker, 'Não atribuído')}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {config.description}
 
           {config.showComment && (
             <div>
-              <label className="mb-2 block text-sm text-slate-400">
-                Motivo <span className="text-slate-600">(opcional)</span>
+              <label
+                htmlFor="proposal-action-comment"
+                className="mb-2 block text-sm font-medium text-slate-300"
+              >
+                Motivo{' '}
+                <span className="font-normal text-slate-500">(opcional)</span>
               </label>
 
               <textarea
+                id="proposal-action-comment"
                 value={comment}
                 onChange={(event) => setComment(event.target.value)}
                 placeholder="Descreva o motivo desta ação..."
                 rows={3}
                 disabled={isLoading}
-                className="w-full resize-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-600 focus:border-blue-500 disabled:opacity-60"
+                className="w-full resize-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-blue-500/70 focus:ring-2 focus:ring-blue-500/10 disabled:opacity-60"
               />
             </div>
           )}
         </div>
 
-        {/* FOOTER */}
-
-        <div className="flex flex-col-reverse gap-3 border-t border-slate-800 p-5 sm:flex-row">
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-800 bg-slate-950/30 p-5 sm:flex-row">
           <button
             type="button"
             onClick={onCancel}
             disabled={isLoading}
-            className="flex-1 rounded-xl border border-slate-700 px-4 py-2.5 text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
+            className="flex-1 rounded-xl border border-slate-700 px-4 py-3 text-sm font-medium text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
           >
             Voltar
           </button>
 
           <button
-            type="button"
-            onClick={handleSubmit}
+            type="submit"
             disabled={isLoading}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${config.confirmClass}`}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${config.confirmClass}`}
           >
-            {isLoading && <Loader2 size={18} className="animate-spin" />}
+            {isLoading && <Loader2 size={17} className="animate-spin" />}
             {isLoading ? 'Processando...' : config.confirmLabel}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
 
 /* ==========================================================================
-   METRICS GRID
+   MÉTRICAS
 ========================================================================== */
 
 function MetricsGrid({ metrics, loading }) {
@@ -1011,35 +1156,35 @@ function MetricsGrid({ metrics, loading }) {
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
       {cards.map((card) => {
         const Icon = card.icon;
 
         return (
           <div
             key={card.label}
-            className="rounded-2xl border border-slate-800 bg-slate-900 p-4 md:p-5"
+            className="group rounded-2xl border border-slate-800/80 bg-slate-900 p-4 transition duration-200 hover:border-slate-700 hover:bg-slate-900/90 md:p-5"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-slate-500">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 md:text-xs">
                   {card.label}
                 </p>
 
                 {loading ? (
-                  <div className="mt-2 h-7 w-24 animate-pulse rounded-lg bg-slate-800" />
+                  <div className="mt-3 h-7 w-24 animate-pulse rounded-lg bg-slate-800" />
                 ) : (
-                  <p className="mt-1 text-lg font-bold text-white md:text-xl">
+                  <p className="mt-2 break-words text-lg font-bold tracking-tight text-white md:text-xl">
                     {card.value}
                   </p>
                 )}
 
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-2 text-[11px] text-slate-500 md:text-xs">
                   {card.description}
                 </p>
               </div>
 
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10 transition group-hover:bg-blue-500/15 md:h-10 md:w-10">
                 <Icon size={18} className="text-blue-400" />
               </div>
             </div>
@@ -1051,7 +1196,7 @@ function MetricsGrid({ metrics, loading }) {
 }
 
 /* ==========================================================================
-   TABLE
+   TABELA DE PROPOSTAS
 ========================================================================== */
 
 function ProposalTable({
@@ -1061,29 +1206,31 @@ function ProposalTable({
   onReject,
   onCancel,
 }) {
+  const headers = [
+    'Proposta',
+    'Cliente',
+    'Imóvel',
+    'Corretor',
+    'Valor',
+    'Status',
+    'Criada em',
+  ];
+
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1100px]">
+      <table className="w-full min-w-[1320px] border-separate border-spacing-0">
         <thead>
-          <tr className="border-b border-slate-800 text-left">
-            {[
-              'Proposta',
-              'Cliente',
-              'Imóvel',
-              'Corretor',
-              'Valor',
-              'Status',
-              'Criada em',
-            ].map((label) => (
+          <tr>
+            {headers.map((label) => (
               <th
                 key={label}
-                className="px-5 py-4 text-xs font-semibold uppercase text-slate-500"
+                className="border-b border-slate-800 bg-slate-900 px-5 py-4 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500"
               >
                 {label}
               </th>
             ))}
 
-            <th className="px-5 py-4 text-right text-xs font-semibold uppercase text-slate-500">
+            <th className="sticky right-0 z-[2] w-[76px] border-b border-slate-800 bg-slate-900 px-4 py-4 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
               Ações
             </th>
           </tr>
@@ -1107,7 +1254,7 @@ function ProposalTable({
 }
 
 /* ==========================================================================
-   TABLE ROW
+   LINHA DA TABELA
 ========================================================================== */
 
 function ProposalRow({
@@ -1120,87 +1267,123 @@ function ProposalRow({
   const proposalId = getId(proposal);
   const lead = proposal.lead || proposal.leadSnapshot;
   const property = proposal.property || proposal.propertySnapshot;
-  const broker = proposal.broker;
+  const broker = proposal.broker || proposal.brokerSnapshot;
+
   const proposalPrice =
     proposal.values?.proposalPrice || proposal.proposalPrice || 0;
+
   const status = proposal.status || 'draft';
 
   return (
-    <tr className="border-b border-slate-800/80 transition hover:bg-slate-800/30">
-      <td className="px-5 py-4">
-        <div>
-          <Link
-            to={`/proposals/${proposalId}`}
-            className="text-sm font-semibold text-white transition hover:text-blue-400"
-          >
-            Proposta #{String(proposalId).slice(-6)}
-          </Link>
+    <tr className="group transition-colors duration-200 hover:bg-blue-500/[0.035]">
+      <td className="whitespace-nowrap border-b border-slate-800/70 px-5 py-4 align-middle">
+        <Link
+          to={`/proposals/${proposalId}`}
+          className="text-sm font-semibold text-slate-100 transition hover:text-blue-400"
+        >
+          #{String(proposalId).slice(-6)}
+        </Link>
 
-          <p className="mt-1 text-xs text-slate-500">
-            Atualizada {formatDateTime(proposal.updatedAt)}
-          </p>
-        </div>
+        <p className="mt-1.5 text-xs text-slate-500">
+          Atualizada {formatDateTime(proposal.updatedAt || proposal.createdAt)}
+        </p>
       </td>
 
-      <td className="px-5 py-4">
-        <div className="flex items-center gap-3">
+      <td className="border-b border-slate-800/70 px-5 py-4 align-middle">
+        <div className="flex min-w-[175px] items-center gap-3">
           <Avatar name={getName(lead)} />
 
           <div className="min-w-0">
             <p className="max-w-[180px] truncate text-sm font-medium text-slate-200">
-              {getName(lead)}
+              {getName(lead, 'Cliente não informado')}
             </p>
 
             {lead?.phone && (
               <p className="mt-1 text-xs text-slate-500">{lead.phone}</p>
             )}
+
+            {lead?.email && (
+              <p className="mt-1 max-w-[180px] truncate text-xs text-slate-600">
+                {lead.email}
+              </p>
+            )}
           </div>
         </div>
       </td>
 
-      <td className="px-5 py-4">
-        <div className="max-w-[210px]">
-          <p className="truncate text-sm font-medium text-slate-200">
-            {getName(property, 'Imóvel')}
-          </p>
+      <td className="border-b border-slate-800/70 px-5 py-4 align-middle">
+        <div className="flex min-w-[240px] max-w-[290px] items-center gap-3">
+          <PropertyThumbnail
+            src={getPropertyThumbnail(property)}
+            name={getName(property, 'Imóvel')}
+          />
 
-          {property?.code && (
-            <p className="mt-1 text-xs text-slate-500">
-              Código: {property.code}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-slate-200">
+              {getName(property, 'Imóvel não informado')}
             </p>
-          )}
+
+            {property?.code && (
+              <p className="mt-1 text-xs text-slate-500">
+                Código <span className="text-slate-400">{property.code}</span>
+              </p>
+            )}
+
+            {(property?.location?.district || property?.district) && (
+              <p className="mt-1 truncate text-xs text-slate-500">
+                {property?.location?.district || property?.district}
+                {property?.location?.city ? `, ${property.location.city}` : ''}
+              </p>
+            )}
+          </div>
         </div>
       </td>
 
-      <td className="px-5 py-4">
-        <div className="flex items-center gap-2">
-          <User size={15} className="text-slate-500" />
-          <span className="text-sm text-slate-300">
-            {getName(broker, 'Não atribuído')}
-          </span>
+      <td className="border-b border-slate-800/70 px-5 py-4 align-middle">
+        <div className="flex min-w-[170px] items-center gap-2.5">
+          <BrokerAvatar
+            name={getName(broker, 'Não atribuído')}
+            src={getBrokerAvatar(broker)}
+          />
+
+          <div className="min-w-0">
+            <p className="max-w-[150px] truncate text-sm font-medium text-slate-200">
+              {getName(broker, 'Não atribuído')}
+            </p>
+
+            {broker?.email && (
+              <p className="mt-1 max-w-[150px] truncate text-xs text-slate-500">
+                {broker.email}
+              </p>
+            )}
+          </div>
         </div>
       </td>
 
-      <td className="px-5 py-4">
-        <p className="text-sm font-semibold text-emerald-400">
+      <td className="whitespace-nowrap border-b border-slate-800/70 px-5 py-4 align-middle">
+        <p className="text-sm font-semibold tabular-nums text-emerald-400">
           {formatCurrency(proposalPrice)}
         </p>
+        <p className="mt-1 text-[11px] text-slate-500">Valor proposto</p>
       </td>
 
-      <td className="px-5 py-4">
+      <td className="whitespace-nowrap border-b border-slate-800/70 px-5 py-4 align-middle">
         <StatusBadge status={status} />
       </td>
 
-      <td className="px-5 py-4">
+      <td className="whitespace-nowrap border-b border-slate-800/70 px-5 py-4 align-middle">
         <p className="text-sm text-slate-300">
           {formatDate(proposal.createdAt)}
         </p>
+        <p className="mt-1 text-xs text-slate-600">
+          {proposal.updatedAt
+            ? 'Atualizada ' + formatDate(proposal.updatedAt)
+            : 'Sem atualizações'}
+        </p>
       </td>
 
-      {/* MENU DE AÇÕES */}
-
-      <td className="px-5 py-4">
-        <div className="flex justify-end">
+      <td className="sticky right-0 z-[1] w-[76px] border-b border-slate-800/70 bg-slate-900 px-4 py-4 text-center align-middle transition-colors group-hover:bg-[#101c30]">
+        <div className="flex items-center justify-center">
           <ProposalActionsDropdown
             proposal={proposal}
             actionLoading={actionLoading}
@@ -1215,8 +1398,8 @@ function ProposalRow({
 }
 
 /* ==========================================================================
-   PROPOSAL ACTIONS DROPDOWN
-   Renderizado em portal para evitar cortes pelo overflow da tabela.
+   DROPDOWN DE AÇÕES
+   Portal + medição real + alinhamento pela borda direita do botão.
 ========================================================================== */
 
 function ProposalActionsDropdown({
@@ -1249,42 +1432,60 @@ function ProposalActionsDropdown({
 
   const updatePosition = useCallback(() => {
     const trigger = triggerRef.current;
+
     if (!trigger) return;
 
     const rect = trigger.getBoundingClientRect();
 
-    const menuWidth = 240;
-    const estimatedMenuHeight = 300;
-    const spacing = 8;
-    const viewportPadding = 8;
+    const padding = 12;
+    const gap = 8;
+    const menu = menuRef.current;
 
-    const right = Math.max(viewportPadding, window.innerWidth - rect.right);
+    const menuWidth = Math.min(
+      menu?.offsetWidth || 248,
+      window.innerWidth - padding * 2,
+    );
 
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const shouldOpenAbove =
-      spaceBelow < estimatedMenuHeight + spacing &&
-      rect.top > estimatedMenuHeight;
+    const menuHeight = menu?.offsetHeight || 280;
 
-    let top = shouldOpenAbove
-      ? rect.top - estimatedMenuHeight - spacing
-      : rect.bottom + spacing;
+    let left = rect.right - menuWidth;
+
+    left = Math.max(
+      padding,
+      Math.min(left, window.innerWidth - menuWidth - padding),
+    );
+
+    const spaceBelow = window.innerHeight - rect.bottom - padding;
+    const spaceAbove = rect.top - padding;
+
+    const openAbove =
+      spaceBelow < Math.min(menuHeight, 280) + gap && spaceAbove > spaceBelow;
+
+    const availableHeight = openAbove ? spaceAbove : spaceBelow;
+    const maxHeight = Math.max(120, availableHeight - gap);
+
+    const visibleHeight = Math.min(menuHeight, maxHeight);
+
+    let top = openAbove ? rect.top - visibleHeight - gap : rect.bottom + gap;
 
     top = Math.max(
-      viewportPadding,
-      Math.min(top, window.innerHeight - estimatedMenuHeight - viewportPadding),
+      padding,
+      Math.min(top, window.innerHeight - padding - visibleHeight),
     );
 
     setPosition({
       top,
-      right: Math.min(right, window.innerWidth - menuWidth - viewportPadding),
-      maxHeight: Math.max(140, window.innerHeight - top - viewportPadding),
+      left,
+      maxHeight,
     });
   }, []);
 
   useEffect(() => {
     if (!isOpen) return undefined;
 
-    updatePosition();
+    const frame = requestAnimationFrame(() => {
+      updatePosition();
+    });
 
     const handlePointerDown = (event) => {
       const clickedTrigger = triggerRef.current?.contains(event.target);
@@ -1302,9 +1503,7 @@ function ProposalActionsDropdown({
       }
     };
 
-    const handleViewportChange = () => {
-      updatePosition();
-    };
+    const handleViewportChange = () => updatePosition();
 
     document.addEventListener('pointerdown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
@@ -1312,6 +1511,8 @@ function ProposalActionsDropdown({
     window.addEventListener('scroll', handleViewportChange, true);
 
     return () => {
+      cancelAnimationFrame(frame);
+
       document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', handleViewportChange);
@@ -1325,7 +1526,7 @@ function ProposalActionsDropdown({
       return;
     }
 
-    updatePosition();
+    setPosition(null);
     setIsOpen(true);
   };
 
@@ -1339,30 +1540,32 @@ function ProposalActionsDropdown({
     'text-sm text-slate-300 transition-colors hover:bg-slate-800 ' +
     'hover:text-white disabled:cursor-not-allowed disabled:opacity-50';
 
-  const menu = isOpen && position && (
+  const menu = isOpen && (
     <div
       ref={menuRef}
       role="menu"
       aria-label={`Ações da proposta ${String(proposalId).slice(-6)}`}
       style={{
         position: 'fixed',
-        top: position.top,
-        right: position.right,
-        maxHeight: position.maxHeight,
-        width: 240,
+        top: position?.top ?? -1000,
+        left: position?.left ?? -1000,
+        width: 'min(248px, calc(100vw - 24px))',
+        maxHeight: position?.maxHeight ?? 'min(420px, 70vh)',
+        visibility: position ? 'visible' : 'hidden',
         zIndex: 9999,
       }}
-      className="overflow-y-auto rounded-xl border border-slate-700/80 bg-slate-900 p-1.5 shadow-2xl shadow-black/40 ring-1 ring-white/5"
+      className="overflow-y-auto overscroll-contain rounded-2xl border border-slate-700/80 bg-slate-900/95 p-1.5 shadow-2xl shadow-black/50 ring-1 ring-white/[0.06] backdrop-blur-xl"
     >
-      <div className="border-b border-slate-800 px-3 py-2">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-          Proposta #{String(proposalId).slice(-6)}
+      <div className="border-b border-slate-800/90 px-3 py-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+          Gerenciar proposta
+        </p>
+        <p className="mt-1 text-sm font-semibold text-white">
+          #{String(proposalId).slice(-6)}
         </p>
       </div>
 
-      {/* NAVEGAÇÃO */}
-
-      <div className="py-1">
+      <div className="space-y-0.5 py-1.5">
         <Link
           to={`/proposals/${proposalId}`}
           role="menuitem"
@@ -1386,13 +1589,11 @@ function ProposalActionsDropdown({
         )}
       </div>
 
-      {/* AÇÕES DE STATUS */}
-
       {(canApprove || canReject || canCancel) && (
         <>
           <div className="mx-2 border-t border-slate-800" />
 
-          <div className="py-1">
+          <div className="space-y-0.5 py-1.5">
             {canApprove && (
               <button
                 type="button"
@@ -1401,7 +1602,7 @@ function ProposalActionsDropdown({
                 onClick={() => handleAction(onApprove)}
                 className={`${menuItemClass} text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300`}
               >
-                <Zap size={16} className="shrink-0" />
+                <CheckCircle2 size={16} className="shrink-0" />
                 <span>Aprovar proposta</span>
               </button>
             )}
@@ -1446,7 +1647,7 @@ function ProposalActionsDropdown({
         aria-haspopup="menu"
         aria-expanded={isOpen}
         onClick={toggleMenu}
-        className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all duration-200 ${
+        className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${
           isOpen
             ? 'border-blue-500/40 bg-blue-500/10 text-blue-300'
             : 'border-transparent text-slate-400 hover:border-slate-700 hover:bg-slate-800 hover:text-white'
@@ -1467,7 +1668,7 @@ function ProposalActionsDropdown({
 }
 
 /* ==========================================================================
-   MOBILE CARD
+   CARD MOBILE
 ========================================================================== */
 
 function ProposalCard({
@@ -1480,8 +1681,11 @@ function ProposalCard({
   const proposalId = getId(proposal);
   const lead = proposal.lead || proposal.leadSnapshot;
   const property = proposal.property || proposal.propertySnapshot;
+  const broker = proposal.broker || proposal.brokerSnapshot;
+
   const proposalPrice =
     proposal.values?.proposalPrice || proposal.proposalPrice || 0;
+
   const status = proposal.status || 'draft';
 
   const canApprove = status === 'pending';
@@ -1490,17 +1694,17 @@ function ProposalCard({
   const canEdit = status === 'draft';
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-      <div className="flex items-start justify-between gap-3">
+    <article className="overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900 shadow-lg shadow-black/5">
+      <div className="flex items-start justify-between gap-3 p-4">
         <div className="flex min-w-0 items-center gap-3">
           <Avatar name={getName(lead)} />
 
           <div className="min-w-0">
             <Link
               to={`/proposals/${proposalId}`}
-              className="text-sm font-semibold text-white hover:text-blue-400"
+              className="block truncate text-sm font-semibold text-white transition hover:text-blue-400"
             >
-              {getName(lead, 'Cliente')}
+              {getName(lead, 'Cliente não informado')}
             </Link>
 
             <p className="mt-1 text-xs text-slate-500">
@@ -1512,21 +1716,65 @@ function ProposalCard({
         <StatusBadge status={status} />
       </div>
 
-      <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950 p-3">
-        <p className="text-xs uppercase text-slate-500">Imóvel</p>
+      {/* IMÓVEL */}
 
-        <p className="mt-1 text-sm font-medium text-slate-200">
-          {getName(property, 'Imóvel')}
+      <div className="mx-4 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+        <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+          Imóvel da proposta
         </p>
 
-        {property?.code && (
-          <p className="mt-1 text-xs text-slate-500">Código: {property.code}</p>
-        )}
+        <div className="flex items-center gap-3">
+          <PropertyThumbnail
+            src={getPropertyThumbnail(property)}
+            name={getName(property, 'Imóvel')}
+          />
+
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-slate-100">
+              {getName(property, 'Imóvel não informado')}
+            </p>
+
+            {property?.code && (
+              <p className="mt-1 text-xs text-slate-500">
+                Código {property.code}
+              </p>
+            )}
+
+            {(property?.location?.district || property?.district) && (
+              <p className="mt-1 truncate text-xs text-slate-500">
+                {property?.location?.district || property?.district}
+                {property?.location?.city ? `, ${property.location.city}` : ''}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4">
+      {/* CORRETOR */}
+
+      {broker && (
+        <div className="mx-4 mt-3 flex items-center gap-2.5 border-b border-slate-800 pb-3">
+          <BrokerAvatar
+            name={getName(broker, 'Corretor')}
+            src={getBrokerAvatar(broker)}
+          />
+
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-wider text-slate-500">
+              Corretor responsável
+            </p>
+            <p className="mt-0.5 truncate text-sm font-medium text-slate-300">
+              {getName(broker, 'Não atribuído')}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* VALOR E DATA */}
+
+      <div className="grid grid-cols-2 gap-4 p-4">
         <div>
-          <p className="text-xs text-slate-500">Valor</p>
+          <p className="text-xs text-slate-500">Valor proposto</p>
           <p className="mt-1 text-sm font-bold text-emerald-400">
             {formatCurrency(proposalPrice)}
           </p>
@@ -1540,10 +1788,12 @@ function ProposalCard({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-800 pt-4">
+      {/* AÇÕES */}
+
+      <div className="flex flex-wrap gap-2 border-t border-slate-800 bg-slate-950/30 p-4">
         <Link
           to={`/proposals/${proposalId}`}
-          className="inline-flex min-w-[100px] flex-1 items-center justify-center gap-2 rounded-xl bg-slate-800 px-3 py-2.5 text-sm text-slate-200 transition hover:bg-slate-700"
+          className="inline-flex min-w-[90px] flex-1 items-center justify-center gap-2 rounded-xl bg-slate-800 px-3 py-2.5 text-sm text-slate-200 transition hover:bg-slate-700"
         >
           <Eye size={16} />
           Ver
@@ -1552,7 +1802,7 @@ function ProposalCard({
         {canEdit && (
           <Link
             to={`/proposals/${proposalId}/edit`}
-            className="inline-flex min-w-[100px] flex-1 items-center justify-center gap-2 rounded-xl border border-slate-700 px-3 py-2.5 text-sm text-slate-300 transition hover:bg-slate-800"
+            className="inline-flex min-w-[90px] flex-1 items-center justify-center gap-2 rounded-xl border border-slate-700 px-3 py-2.5 text-sm text-slate-300 transition hover:bg-slate-800"
           >
             <Edit3 size={16} />
             Editar
@@ -1561,40 +1811,100 @@ function ProposalCard({
 
         {canApprove && (
           <ActionButton
-            title="Aprovar (gera venda e comissão)"
+            title="Aprovar proposta"
             loading={actionLoading === `approve-${proposalId}`}
             onClick={() => onApprove(proposal)}
             icon={<Zap size={16} />}
-            className="min-w-[100px] flex-1 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10"
+            className="min-w-[90px] flex-1 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10"
           />
         )}
 
         {canReject && (
           <ActionButton
-            title="Rejeitar"
+            title="Rejeitar proposta"
             loading={actionLoading === `reject-${proposalId}`}
             onClick={() => onReject(proposal)}
             icon={<X size={16} />}
-            className="min-w-[100px] flex-1 border border-red-500/20 text-red-400 hover:bg-red-500/10"
+            className="min-w-[90px] flex-1 border border-red-500/20 text-red-400 hover:bg-red-500/10"
           />
         )}
 
         {canCancel && (
           <ActionButton
-            title="Cancelar"
+            title="Cancelar proposta"
             loading={actionLoading === `cancel-${proposalId}`}
             onClick={() => onCancel(proposal)}
             icon={<XCircle size={16} />}
-            className="min-w-[100px] flex-1 border border-orange-500/20 text-orange-400 hover:bg-orange-500/10"
+            className="min-w-[90px] flex-1 border border-orange-500/20 text-orange-400 hover:bg-orange-500/10"
           />
         )}
       </div>
+    </article>
+  );
+}
+
+/* ==========================================================================
+   MINIATURA DO IMÓVEL
+========================================================================== */
+
+function PropertyThumbnail({ src, name }) {
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [src]);
+
+  return (
+    <div className="relative h-[58px] w-[76px] shrink-0 overflow-hidden rounded-xl border border-slate-700/80 bg-slate-800 shadow-sm">
+      {src && !imageError ? (
+        <img
+          src={src}
+          alt={name}
+          loading="lazy"
+          onError={() => setImageError(true)}
+          className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950">
+          <Building2 size={23} className="text-slate-500" />
+        </div>
+      )}
+
+      <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/5" />
     </div>
   );
 }
 
 /* ==========================================================================
-   STATUS BADGE
+   AVATAR DO CORRETOR
+========================================================================== */
+
+function BrokerAvatar({ name, src }) {
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [src]);
+
+  if (!src || imageError) {
+    return <Avatar name={name} />;
+  }
+
+  return (
+    <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-slate-700 bg-slate-800 ring-2 ring-slate-800">
+      <img
+        src={src}
+        alt={`Foto de ${name}`}
+        loading="lazy"
+        onError={() => setImageError(true)}
+        className="h-full w-full object-cover"
+      />
+    </div>
+  );
+}
+
+/* ==========================================================================
+   STATUS
 ========================================================================== */
 
 function StatusBadge({ status }) {
@@ -1611,10 +1921,12 @@ function StatusBadge({ status }) {
 }
 
 /* ==========================================================================
-   AVATAR
+   AVATAR COM INICIAIS
 ========================================================================== */
 
-function Avatar({ name }) {
+function Avatar({ name, src }) {
+  const [imageError, setImageError] = useState(false);
+
   const initials = String(name || 'U')
     .trim()
     .split(/\s+/)
@@ -1623,15 +1935,31 @@ function Avatar({ name }) {
     .join('')
     .toUpperCase();
 
+  useEffect(() => {
+    setImageError(false);
+  }, [src]);
+
   return (
-    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10">
-      <span className="text-xs font-bold text-blue-300">{initials}</span>
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/15 to-indigo-500/10">
+      {src && !imageError ? (
+        <img
+          src={src}
+          alt={name || 'Avatar'}
+          loading="lazy"
+          onError={() => setImageError(true)}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <span className="text-xs font-bold tracking-wide text-blue-300">
+          {initials || 'U'}
+        </span>
+      )}
     </div>
   );
 }
 
 /* ==========================================================================
-   ACTION BUTTON
+   BOTÃO DE AÇÃO MOBILE
 ========================================================================== */
 
 function ActionButton({ title, icon, loading, onClick, className = '' }) {
@@ -1642,7 +1970,7 @@ function ActionButton({ title, icon, loading, onClick, className = '' }) {
       aria-label={title}
       onClick={onClick}
       disabled={loading}
-      className={`inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3 transition disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 transition disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
     >
       {loading ? <Loader2 size={16} className="animate-spin" /> : icon}
     </button>
@@ -1650,19 +1978,21 @@ function ActionButton({ title, icon, loading, onClick, className = '' }) {
 }
 
 /* ==========================================================================
-   FILTER INPUT
+   INPUTS DE FILTRO
 ========================================================================== */
 
 function FilterInput({ label, type = 'text', value, onChange, options = [] }) {
   return (
     <div>
-      <label className="mb-2 block text-xs text-slate-500">{label}</label>
+      <label className="mb-2 block text-xs font-medium text-slate-400">
+        {label}
+      </label>
 
       {type === 'select' ? (
         <select
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
+          className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500/70"
         >
           {options.map((option) => (
             <option key={option.value} value={option.value}>
@@ -1681,7 +2011,7 @@ function FilterInput({ label, type = 'text', value, onChange, options = [] }) {
             type={type}
             value={value}
             onChange={(event) => onChange(event.target.value)}
-            className="w-full rounded-xl border border-slate-700 bg-slate-950 py-3 pl-11 pr-4 text-sm text-white outline-none focus:border-blue-500"
+            className="w-full rounded-xl border border-slate-800 bg-slate-950 py-3 pl-11 pr-4 text-sm text-white outline-none focus:border-blue-500/70"
           />
         </div>
       )}
@@ -1690,7 +2020,7 @@ function FilterInput({ label, type = 'text', value, onChange, options = [] }) {
 }
 
 /* ==========================================================================
-   PAGINATION
+   PAGINAÇÃO
 ========================================================================== */
 
 function Pagination({ pagination, pageNumbers, onPageChange }) {
@@ -1701,8 +2031,9 @@ function Pagination({ pagination, pageNumbers, onPageChange }) {
   return (
     <div className="flex flex-col gap-4 pt-2 sm:flex-row sm:items-center sm:justify-between">
       <p className="text-sm text-slate-500">
-        Página <span className="text-slate-300">{pagination.page}</span> de{' '}
-        <span className="text-slate-300">{pagination.pages}</span>
+        Página{' '}
+        <span className="font-medium text-slate-300">{pagination.page}</span> de{' '}
+        <span className="font-medium text-slate-300">{pagination.pages}</span>
       </p>
 
       <div className="flex items-center gap-1">
@@ -1711,7 +2042,7 @@ function Pagination({ pagination, pageNumbers, onPageChange }) {
           aria-label="Página anterior"
           disabled={!pagination.hasPreviousPage}
           onClick={() => onPageChange(pagination.page - 1)}
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-800 text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
         >
           <ChevronLeft size={17} />
         </button>
@@ -1722,9 +2053,9 @@ function Pagination({ pagination, pageNumbers, onPageChange }) {
             type="button"
             aria-current={number === pagination.page ? 'page' : undefined}
             onClick={() => onPageChange(number)}
-            className={`h-9 w-9 rounded-lg text-sm font-medium transition ${
+            className={`h-9 w-9 rounded-xl text-sm font-medium transition ${
               number === pagination.page
-                ? 'bg-blue-600 text-white'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-950/20'
                 : 'text-slate-400 hover:bg-slate-800 hover:text-white'
             }`}
           >
@@ -1737,7 +2068,7 @@ function Pagination({ pagination, pageNumbers, onPageChange }) {
           aria-label="Próxima página"
           disabled={!pagination.hasNextPage}
           onClick={() => onPageChange(pagination.page + 1)}
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-800 text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
         >
           <ChevronRight size={17} />
         </button>
@@ -1753,28 +2084,38 @@ function Pagination({ pagination, pageNumbers, onPageChange }) {
 function LoadingState() {
   return (
     <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-slate-800 bg-slate-900 p-16">
-      <Loader2 size={32} className="animate-spin text-blue-500" />
-      <p className="text-sm text-slate-500">Carregando propostas...</p>
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10">
+        <Loader2 size={27} className="animate-spin text-blue-400" />
+      </div>
+
+      <div className="text-center">
+        <p className="text-sm font-medium text-slate-200">
+          Carregando propostas
+        </p>
+        <p className="mt-1 text-xs text-slate-500">
+          Estamos atualizando suas informações.
+        </p>
+      </div>
     </div>
   );
 }
 
 /* ==========================================================================
-   EMPTY
+   ESTADO VAZIO
 ========================================================================== */
 
 function EmptyState({ hasFilters, onClear, onCreate }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-800 bg-slate-900 p-12 text-center md:p-16">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-800">
-        <FileText size={28} className="text-slate-500" />
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-700 bg-slate-800/80">
+        <FileText size={27} className="text-slate-500" />
       </div>
 
       <h3 className="mt-5 text-lg font-semibold text-white">
         Nenhuma proposta encontrada
       </h3>
 
-      <p className="mt-2 max-w-md text-sm text-slate-500">
+      <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
         {hasFilters
           ? 'Tente ajustar ou limpar os filtros para encontrar outras propostas.'
           : 'Ainda não existem propostas cadastradas.'}
@@ -1785,7 +2126,7 @@ function EmptyState({ hasFilters, onClear, onCreate }) {
           <button
             type="button"
             onClick={onClear}
-            className="rounded-xl border border-slate-700 px-4 py-2.5 text-slate-300 transition hover:bg-slate-800"
+            className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm text-slate-300 transition hover:bg-slate-800"
           >
             Limpar filtros
           </button>
@@ -1794,7 +2135,7 @@ function EmptyState({ hasFilters, onClear, onCreate }) {
         <button
           type="button"
           onClick={onCreate}
-          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-medium text-white transition hover:bg-blue-500"
+          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500"
         >
           <Plus size={17} />
           Nova proposta
@@ -1805,28 +2146,29 @@ function EmptyState({ hasFilters, onClear, onCreate }) {
 }
 
 /* ==========================================================================
-   ALERT
+   ALERTAS E NOTIFICAÇÕES
 ========================================================================== */
 
 function AlertBox({ type = 'error', message, onClose }) {
   const isError = type === 'error';
+  const isSuccess = type === 'success';
+
+  const Icon = isError ? AlertCircle : isSuccess ? CheckCircle2 : Send;
+
+  const styles = isError
+    ? 'border-red-500/20 bg-red-500/5 text-red-300'
+    : isSuccess
+      ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-300'
+      : 'border-blue-500/20 bg-blue-500/5 text-blue-300';
 
   return (
     <div
-      role="alert"
-      className={`flex items-start gap-3 rounded-xl border p-4 ${
-        isError
-          ? 'border-red-500/20 bg-red-500/10 text-red-300'
-          : 'border-blue-500/20 bg-blue-500/10 text-blue-300'
-      }`}
+      role={isError ? 'alert' : 'status'}
+      className={`flex items-start gap-3 rounded-xl border p-4 ${styles}`}
     >
-      {isError ? (
-        <AlertCircle size={20} className="mt-0.5 shrink-0" />
-      ) : (
-        <Send size={20} className="mt-0.5 shrink-0" />
-      )}
+      <Icon size={19} className="mt-0.5 shrink-0" />
 
-      <p className="flex-1 text-sm">{message}</p>
+      <p className="flex-1 text-sm leading-6">{message}</p>
 
       {onClose && (
         <button
