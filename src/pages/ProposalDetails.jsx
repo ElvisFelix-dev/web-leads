@@ -30,7 +30,7 @@ import {
   Ruler,
   Home,
   Image as ImageIcon,
-  ExternalLink,
+  Briefcase,
 } from 'lucide-react';
 
 import api from '../service/api';
@@ -49,7 +49,6 @@ export default function ProposalDetails() {
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-
   const [confirmAction, setConfirmAction] = useState(null);
 
   /*
@@ -61,12 +60,12 @@ export default function ProposalDetails() {
   const getId = useCallback((value) => {
     if (!value) return '';
 
-    if (typeof value === 'string') {
-      return value;
+    if (typeof value === 'string' || typeof value === 'number') {
+      return String(value);
     }
 
     if (typeof value === 'object') {
-      return value._id || value.id || '';
+      return String(value._id || value.id || value.propertyId || '');
     }
 
     return '';
@@ -75,48 +74,50 @@ export default function ProposalDetails() {
   const getName = useCallback((value, fallback = '-') => {
     if (!value) return fallback;
 
-    if (typeof value === 'string') {
-      return value;
+    if (typeof value === 'string') return value;
+
+    if (typeof value === 'object') {
+      return (
+        value.name ||
+        value.fullName ||
+        value.firstName ||
+        value.title ||
+        value.propertyName ||
+        value.description ||
+        value.companyName ||
+        fallback
+      );
     }
 
-    return (
-      value.name ||
-      value.fullName ||
-      value.title ||
-      value.propertyName ||
-      value.description ||
-      value.companyName ||
-      fallback
-    );
+    return fallback;
   }, []);
 
   const toNumber = useCallback((value) => {
-    if (value === null || value === undefined || value === '') {
-      return 0;
-    }
+    if (value === null || value === undefined || value === '') return 0;
 
     if (typeof value === 'number') {
       return Number.isFinite(value) ? value : 0;
     }
 
-    let normalized = String(value).replace(/\s/g, '').replace(/R\$/gi, '');
+    let normalized = String(value)
+      .trim()
+      .replace(/\s/g, '')
+      .replace(/R\$/gi, '');
 
     if (normalized.includes(',')) {
       normalized = normalized.replace(/\./g, '').replace(',', '.');
     }
 
     const number = Number(normalized);
-
     return Number.isFinite(number) ? number : 0;
   }, []);
 
   const formatCurrency = useCallback(
-    (value) => {
-      return new Intl.NumberFormat('pt-BR', {
+    (value) =>
+      new Intl.NumberFormat('pt-BR', {
         style: 'currency',
         currency: 'BRL',
-      }).format(toNumber(value));
-    },
+      }).format(toNumber(value)),
     [toNumber],
   );
 
@@ -136,9 +137,7 @@ export default function ProposalDetails() {
 
     const date = new Date(value);
 
-    if (Number.isNaN(date.getTime())) {
-      return '-';
-    }
+    if (Number.isNaN(date.getTime())) return '-';
 
     return new Intl.DateTimeFormat('pt-BR', {
       day: '2-digit',
@@ -155,6 +154,8 @@ export default function ProposalDetails() {
     return String(value)
       .trim()
       .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/\s+/g, '_')
       .replace(/-/g, '_');
   }, []);
@@ -171,19 +172,19 @@ export default function ProposalDetails() {
       return null;
     }
 
-    // Extrai o ID do imóvel de qualquer lugar que possa estar
-    let propertyId = null;
-
-    if (typeof propertyReference === 'string') {
-      propertyId = propertyReference;
-    } else if (typeof propertyReference === 'object') {
-      propertyId =
-        propertyReference._id ||
-        propertyReference.id ||
-        propertyReference.propertyId;
-    }
+    const propertyId =
+      typeof propertyReference === 'string'
+        ? propertyReference
+        : propertyReference?._id ||
+          propertyReference?.id ||
+          propertyReference?.propertyId;
 
     if (!propertyId) {
+      if (typeof propertyReference === 'object') {
+        setProperty(propertyReference);
+        return propertyReference;
+      }
+
       setProperty(null);
       return null;
     }
@@ -191,15 +192,9 @@ export default function ProposalDetails() {
     try {
       setPropertyLoading(true);
 
-      /*
-       * SEMPRE busca o imóvel completo via API
-       * Isso garante que teremos todos os dados
-       */
       const response = await api.get(`/api/properties/${propertyId}`);
-
       const responseData = response?.data;
 
-      // Tenta extrair os dados do imóvel de diferentes formatos de resposta
       const propertyData =
         responseData?.data?.property ||
         responseData?.data ||
@@ -219,6 +214,13 @@ export default function ProposalDetails() {
       return null;
     } catch (err) {
       console.error('Erro ao carregar imóvel da proposta:', err);
+
+      // Mantém os dados parciais, caso o imóvel já tenha vindo populado.
+      if (typeof propertyReference === 'object') {
+        setProperty(propertyReference);
+        return propertyReference;
+      }
+
       setProperty(null);
       return null;
     } finally {
@@ -250,30 +252,7 @@ export default function ProposalDetails() {
         setError('');
 
         const response = await api.get(`/api/proposals/${id}`);
-
         const responseData = response?.data;
-
-        /*
-         * Compatibilidade com diferentes formatos:
-         *
-         * {
-         *   success: true,
-         *   data: {...}
-         * }
-         *
-         * {
-         *   success: true,
-         *   data: {
-         *     proposal: {...}
-         *   }
-         * }
-         *
-         * {
-         *   proposal: {...}
-         * }
-         *
-         * {...}
-         */
 
         const proposalData =
           responseData?.data?.proposal ||
@@ -290,15 +269,6 @@ export default function ProposalDetails() {
 
         setProposal(proposalData);
 
-        /*
-         * ================================================================
-         * IMÓVEL
-         * ================================================================
-         *
-         * Primeiro tentamos descobrir se o imóvel já veio populado.
-         */
-
-        // Verifica se o imóvel está em qualquer lugar possível
         const proposalProperty =
           proposalData.property ||
           proposalData.propertyId ||
@@ -341,8 +311,50 @@ export default function ProposalDetails() {
   |--------------------------------------------------------------------------
   */
 
-  const lead = useMemo(() => {
-    return proposal?.lead || proposal?.client || null;
+  const lead = useMemo(
+    () => proposal?.lead || proposal?.client || null,
+    [proposal],
+  );
+
+  /*
+  |--------------------------------------------------------------------------
+  | PROPOSAL OWNER
+  |--------------------------------------------------------------------------
+  */
+
+  const proposalOwner = useMemo(() => {
+    const candidates = [
+      proposal?.createdBy,
+      proposal?.broker,
+      proposal?.user,
+      proposal?.createdByUser,
+      proposal?.responsible,
+      proposal?.assignedTo,
+      proposal?.owner,
+    ];
+
+    return (
+      candidates.find(
+        (item) =>
+          item &&
+          typeof item === 'object' &&
+          !Array.isArray(item) &&
+          (item.name ||
+            item.fullName ||
+            item.email ||
+            item.phone ||
+            item.avatar ||
+            item.avatarUrl ||
+            item.position ||
+            item.role ||
+            item._id ||
+            item.id),
+      ) ||
+      candidates.find(
+        (item) => typeof item === 'string' && item.trim().length > 0,
+      ) ||
+      null
+    );
   }, [proposal]);
 
   /*
@@ -352,13 +364,6 @@ export default function ProposalDetails() {
   */
 
   const propertyData = useMemo(() => {
-    /*
-     * Prioridade:
-     *
-     * 1. imóvel carregado diretamente via API (completo)
-     * 2. imóvel populado dentro da proposta (parcial)
-     */
-
     const rawProperty =
       property ||
       (proposal?.property && typeof proposal.property === 'object'
@@ -380,7 +385,6 @@ export default function ProposalDetails() {
         bathrooms: 0,
         parkingSpaces: 0,
         location: '-',
-        address: null,
         neighborhood: '',
         city: '',
         state: '',
@@ -390,12 +394,6 @@ export default function ProposalDetails() {
         mainImage: '',
       };
     }
-
-    const address =
-      rawProperty.address ||
-      rawProperty.location?.address ||
-      rawProperty.endereco ||
-      null;
 
     const images = Array.isArray(rawProperty.images)
       ? rawProperty.images
@@ -407,67 +405,17 @@ export default function ProposalDetails() {
             ? rawProperty.media
             : [];
 
-    const title =
-      rawProperty.title ||
-      rawProperty.name ||
-      rawProperty.propertyName ||
-      rawProperty.reference ||
-      rawProperty.code ||
-      'Imóvel';
-
-    const price =
-      rawProperty.price ??
-      rawProperty.salePrice ??
-      rawProperty.sellingPrice ??
-      rawProperty.value ??
-      rawProperty.propertyPrice ??
-      0;
-
-    const area =
-      rawProperty.area ??
-      rawProperty.totalArea ??
-      rawProperty.privateArea ??
-      rawProperty.builtArea ??
-      rawProperty.areaTotal ??
-      0;
-
-    const bedrooms =
-      rawProperty.bedrooms ??
-      rawProperty.dormitories ??
-      rawProperty.rooms ??
-      rawProperty.quartos ??
-      0;
-
-    const suites =
-      rawProperty.suites ?? rawProperty.suiteCount ?? rawProperty.suite ?? 0;
-
-    const bathrooms =
-      rawProperty.bathrooms ??
-      rawProperty.bathroomCount ??
-      rawProperty.banheiros ??
-      0;
-
-    const parkingSpaces =
-      rawProperty.parkingSpaces ??
-      rawProperty.garages ??
-      rawProperty.parking ??
-      rawProperty.vacancies ??
-      rawProperty.vagas ??
-      0;
-
-    const mainImage =
-      rawProperty.mainImage ||
-      rawProperty.coverImage ||
-      rawProperty.thumbnail ||
-      rawProperty.image ||
-      '';
-
     return {
       ...rawProperty,
-
       id: getId(rawProperty),
 
-      title,
+      title:
+        rawProperty.title ||
+        rawProperty.name ||
+        rawProperty.propertyName ||
+        rawProperty.reference ||
+        rawProperty.code ||
+        'Imóvel',
 
       code:
         rawProperty.code ||
@@ -492,19 +440,57 @@ export default function ProposalDetails() {
 
       status: rawProperty.status || rawProperty.propertyStatus || '-',
 
-      price: toNumber(price),
+      price: toNumber(
+        rawProperty.price ??
+          rawProperty.salePrice ??
+          rawProperty.sellingPrice ??
+          rawProperty.value ??
+          rawProperty.propertyPrice ??
+          0,
+      ),
 
-      area: toNumber(area),
+      area: toNumber(
+        rawProperty.area ??
+          rawProperty.totalArea ??
+          rawProperty.privateArea ??
+          rawProperty.builtArea ??
+          rawProperty.areaTotal ??
+          0,
+      ),
 
-      bedrooms: toNumber(bedrooms),
+      bedrooms: toNumber(
+        rawProperty.bedrooms ??
+          rawProperty.dormitories ??
+          rawProperty.rooms ??
+          rawProperty.quartos ??
+          0,
+      ),
 
-      suites: toNumber(suites),
+      suites: toNumber(
+        rawProperty.suites ?? rawProperty.suiteCount ?? rawProperty.suite ?? 0,
+      ),
 
-      bathrooms: toNumber(bathrooms),
+      bathrooms: toNumber(
+        rawProperty.bathrooms ??
+          rawProperty.bathroomCount ??
+          rawProperty.banheiros ??
+          0,
+      ),
 
-      parkingSpaces: toNumber(parkingSpaces),
+      parkingSpaces: toNumber(
+        rawProperty.parkingSpaces ??
+          rawProperty.garages ??
+          rawProperty.parking ??
+          rawProperty.vacancies ??
+          rawProperty.vagas ??
+          0,
+      ),
 
-      address,
+      address:
+        rawProperty.address ||
+        rawProperty.location?.address ||
+        rawProperty.endereco ||
+        null,
 
       location: getPropertyLocation(rawProperty),
 
@@ -541,7 +527,12 @@ export default function ProposalDetails() {
 
       images,
 
-      mainImage,
+      mainImage:
+        rawProperty.mainImage ||
+        rawProperty.coverImage ||
+        rawProperty.thumbnail ||
+        rawProperty.image ||
+        '',
     };
   }, [property, proposal, getId, toNumber]);
 
@@ -554,9 +545,7 @@ export default function ProposalDetails() {
   const getImageUrl = useCallback((image) => {
     if (!image) return '';
 
-    if (typeof image === 'string') {
-      return image;
-    }
+    if (typeof image === 'string') return image;
 
     return (
       image?.url ||
@@ -586,9 +575,10 @@ export default function ProposalDetails() {
   |--------------------------------------------------------------------------
   */
 
-  const values = useMemo(() => {
-    return proposal?.values || proposal?.financial || proposal?.amounts || {};
-  }, [proposal]);
+  const values = useMemo(
+    () => proposal?.values || proposal?.financial || proposal?.amounts || {},
+    [proposal],
+  );
 
   const propertyPrice = toNumber(
     values.propertyPrice || proposal?.propertyPrice || propertyData.price || 0,
@@ -603,7 +593,6 @@ export default function ProposalDetails() {
   );
 
   const financing = toNumber(values.financing || proposal?.financing || 0);
-
   const fgts = toNumber(values.fgts || proposal?.fgts || 0);
 
   const installments = toNumber(
@@ -615,9 +604,7 @@ export default function ProposalDetails() {
   );
 
   const totalPayment = downPayment + financing + fgts;
-
   const balance = Math.max(proposalPrice - totalPayment, 0);
-
   const discount = Math.max(propertyPrice - proposalPrice, 0);
 
   const discountPercentage =
@@ -675,9 +662,7 @@ export default function ProposalDetails() {
 
       setSuccess('Proposta enviada para aprovação.');
 
-      await loadProposal({
-        silent: true,
-      });
+      await loadProposal({ silent: true });
     } catch (err) {
       console.error('Erro ao enviar proposta:', err);
 
@@ -702,9 +687,7 @@ export default function ProposalDetails() {
 
       setSuccess('Proposta cancelada com sucesso.');
 
-      await loadProposal({
-        silent: true,
-      });
+      await loadProposal({ silent: true });
     } catch (err) {
       console.error('Erro ao cancelar proposta:', err);
 
@@ -729,9 +712,7 @@ export default function ProposalDetails() {
 
       setSuccess('Proposta excluída com sucesso.');
 
-      setTimeout(() => {
-        navigate('/proposals');
-      }, 700);
+      setTimeout(() => navigate('/proposals'), 700);
     } catch (err) {
       console.error('Erro ao excluir proposta:', err);
 
@@ -751,15 +732,9 @@ export default function ProposalDetails() {
 
     if (confirmAction.type === 'submit') {
       await handleSubmit();
-      return;
-    }
-
-    if (confirmAction.type === 'cancel') {
+    } else if (confirmAction.type === 'cancel') {
       await handleCancel();
-      return;
-    }
-
-    if (confirmAction.type === 'delete') {
+    } else if (confirmAction.type === 'delete') {
       await handleDelete();
     }
   };
@@ -772,10 +747,9 @@ export default function ProposalDetails() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-slate-950">
         <div className="flex flex-col items-center gap-4 text-slate-400">
           <Loader2 size={34} className="animate-spin text-blue-500" />
-
           <p>Carregando proposta...</p>
         </div>
       </div>
@@ -790,63 +764,36 @@ export default function ProposalDetails() {
 
   if (!proposal) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white p-6">
-        <div className="max-w-5xl mx-auto">
+      <div className="min-h-screen bg-slate-950 p-6 text-white">
+        <div className="mx-auto max-w-5xl">
           <button
+            type="button"
             onClick={() => navigate('/proposals')}
-            className="
-              flex
-              items-center
-              gap-2
-              text-slate-400
-              hover:text-white
-              transition
-              mb-6
-            "
+            className="mb-6 flex items-center gap-2 text-slate-400 transition hover:text-white"
           >
             <ArrowLeft size={18} />
             Voltar para propostas
           </button>
 
-          <div
-            className="
-              bg-slate-900
-              border
-              border-red-500/20
-              rounded-2xl
-              p-8
-            "
-          >
+          <div className="rounded-2xl border border-red-500/20 bg-slate-900 p-8">
             <div className="flex items-start gap-3 text-red-300">
-              <AlertCircle size={22} className="shrink-0 mt-0.5" />
+              <AlertCircle size={22} className="mt-0.5 shrink-0" />
 
               <div>
                 <h2 className="font-semibold text-white">
                   Não foi possível carregar a proposta
                 </h2>
 
-                <p className="text-sm text-slate-400 mt-1">
+                <p className="mt-1 text-sm text-slate-400">
                   {error || 'Proposta não encontrada.'}
                 </p>
               </div>
             </div>
 
             <button
+              type="button"
               onClick={() => loadProposal()}
-              className="
-                mt-6
-                flex
-                items-center
-                gap-2
-                px-4
-                py-2.5
-                rounded-xl
-                bg-blue-600
-                hover:bg-blue-500
-                transition
-                text-sm
-                font-medium
-              "
+              className="mt-6 flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium transition hover:bg-blue-500"
             >
               <RefreshCw size={16} />
               Tentar novamente
@@ -864,56 +811,34 @@ export default function ProposalDetails() {
   */
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* ==========================================================
-            HEADER
-        ========================================================== */}
+    <div className="min-h-screen bg-slate-950 p-4 text-white md:p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        {/* HEADER */}
 
-        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-5">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <button
+              type="button"
               onClick={() => navigate('/proposals')}
-              className="
-                flex
-                items-center
-                gap-2
-                text-slate-400
-                hover:text-white
-                transition
-                mb-4
-              "
+              className="mb-4 flex items-center gap-2 text-slate-400 transition hover:text-white"
             >
               <ArrowLeft size={18} />
               Voltar para propostas
             </button>
 
             <div className="flex items-start gap-4">
-              <div
-                className="
-                  w-12
-                  h-12
-                  rounded-xl
-                  bg-blue-500/10
-                  border
-                  border-blue-500/20
-                  flex
-                  items-center
-                  justify-center
-                  shrink-0
-                "
-              >
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10">
                 <FileText size={24} className="text-blue-400" />
               </div>
 
               <div>
                 <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="text-2xl md:text-3xl font-bold">Proposta</h1>
+                  <h1 className="text-2xl font-bold md:text-3xl">Proposta</h1>
 
                   <StatusBadge status={status} config={statusConfig} />
                 </div>
 
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-slate-400">
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-400">
                   <span className="flex items-center gap-1.5">
                     <Hash size={14} />
                     {getId(proposal)}
@@ -930,40 +855,20 @@ export default function ProposalDetails() {
             </div>
           </div>
 
-          {/* ACTIONS */}
+          {/* HEADER ACTIONS */}
 
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() =>
-                loadProposal({
-                  silent: true,
-                })
-              }
+              onClick={() => loadProposal({ silent: true })}
               disabled={refreshing || actionLoading}
-              className="
-                flex
-                items-center
-                justify-center
-                gap-2
-                px-3
-                py-2.5
-                rounded-xl
-                border
-                border-slate-700
-                bg-slate-900
-                hover:bg-slate-800
-                text-slate-300
-                transition
-                disabled:opacity-50
-              "
               title="Atualizar"
+              className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
             >
               <RefreshCw
                 size={17}
                 className={refreshing ? 'animate-spin' : ''}
               />
-
               <span className="hidden sm:inline">Atualizar</span>
             </button>
 
@@ -972,22 +877,7 @@ export default function ProposalDetails() {
                 type="button"
                 onClick={() => navigate(`/proposals/${id}/edit`)}
                 disabled={actionLoading}
-                className="
-                  flex
-                  items-center
-                  justify-center
-                  gap-2
-                  px-4
-                  py-2.5
-                  rounded-xl
-                  border
-                  border-slate-700
-                  bg-slate-900
-                  hover:bg-slate-800
-                  text-slate-200
-                  transition
-                  disabled:opacity-50
-                "
+                className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
               >
                 <Pencil size={17} />
                 Editar
@@ -1007,21 +897,7 @@ export default function ProposalDetails() {
                   })
                 }
                 disabled={actionLoading}
-                className="
-                  flex
-                  items-center
-                  justify-center
-                  gap-2
-                  px-4
-                  py-2.5
-                  rounded-xl
-                  bg-blue-600
-                  hover:bg-blue-500
-                  text-white
-                  font-medium
-                  transition
-                  disabled:opacity-50
-                "
+                className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
               >
                 <Send size={17} />
                 Enviar para aprovação
@@ -1030,9 +906,7 @@ export default function ProposalDetails() {
           </div>
         </div>
 
-        {/* ==========================================================
-            ALERTS
-        ========================================================== */}
+        {/* ALERTS */}
 
         {error && (
           <Alert type="error" message={error} onClose={() => setError('')} />
@@ -1046,21 +920,14 @@ export default function ProposalDetails() {
           />
         )}
 
-        {/* ==========================================================
-            STATUS BANNER
-        ========================================================== */}
+        {/* STATUS BANNER */}
 
-        <div
-          className={`
-            rounded-2xl
-            border
-            p-5
-            ${statusConfig.container}
-          `}
-        >
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className={`rounded-2xl border p-5 ${statusConfig.container}`}>
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex items-start gap-3">
-              <div className="mt-0.5">{statusConfig.icon}</div>
+              <div className={`mt-0.5 ${statusConfig.text}`}>
+                {statusConfig.icon}
+              </div>
 
               <div>
                 <p className="text-xs uppercase tracking-wide opacity-70">
@@ -1068,17 +935,12 @@ export default function ProposalDetails() {
                 </p>
 
                 <p
-                  className={`
-                    text-lg
-                    font-semibold
-                    mt-1
-                    ${statusConfig.text}
-                  `}
+                  className={`mt-1 text-lg font-semibold ${statusConfig.text}`}
                 >
                   {statusConfig.label}
                 </p>
 
-                <p className="text-sm text-slate-400 mt-1">
+                <p className="mt-1 text-sm text-slate-400">
                   {statusConfig.description}
                 </p>
               </div>
@@ -1086,34 +948,26 @@ export default function ProposalDetails() {
 
             <div className="text-left md:text-right">
               <p className="text-xs text-slate-500">Valor da proposta</p>
-
-              <p className="text-2xl font-bold text-emerald-400 mt-1">
+              <p className="mt-1 text-2xl font-bold text-emerald-400">
                 {formatCurrency(proposalPrice)}
               </p>
             </div>
           </div>
         </div>
 
-        {/* ==========================================================
-            CLIENT + PROPERTY
-        ========================================================== */}
+        {/* CLIENT + PROPERTY */}
 
-        <div className="grid lg:grid-cols-2 gap-6">
-          {/* ========================================================
-              CLIENT
-          ======================================================== */}
-
+        <div className="grid gap-6 lg:grid-cols-2">
           <Card title="Cliente / Lead" icon={<User size={18} />}>
             <div className="space-y-5">
               <div>
-                <p className="text-xs text-slate-500 mb-1">Nome</p>
-
+                <p className="mb-1 text-xs text-slate-500">Nome</p>
                 <p className="text-lg font-semibold text-white">
                   {getName(lead, 'Cliente não informado')}
                 </p>
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <Info
                   label="E-mail"
                   value={lead?.email}
@@ -1122,7 +976,7 @@ export default function ProposalDetails() {
 
                 <Info
                   label="Telefone"
-                  value={lead?.phone}
+                  value={lead?.phone || lead?.telefone || lead?.mobile}
                   icon={<Phone size={15} />}
                 />
 
@@ -1144,15 +998,7 @@ export default function ProposalDetails() {
                 <button
                   type="button"
                   onClick={() => navigate(`/lead-detail/${getId(lead)}`)}
-                  className="
-                    inline-flex
-                    items-center
-                    gap-2
-                    text-sm
-                    text-blue-400
-                    hover:text-blue-300
-                    transition
-                  "
+                  className="inline-flex items-center gap-2 text-sm text-blue-400 transition hover:text-blue-300"
                 >
                   Ver detalhes do lead
                   <ChevronRight size={15} />
@@ -1161,62 +1007,30 @@ export default function ProposalDetails() {
             </div>
           </Card>
 
-          {/* ========================================================
-              PROPERTY
-          ======================================================== */}
-
           <Card title="Imóvel" icon={<Building2 size={18} />}>
             {propertyLoading ? (
-              <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-400">
+              <div className="flex flex-col items-center justify-center gap-3 py-12 text-slate-400">
                 <Loader2 size={28} className="animate-spin text-blue-400" />
-
                 <p className="text-sm">Carregando informações do imóvel...</p>
               </div>
             ) : (
               <div className="space-y-5">
-                {/* PROPERTY IMAGE */}
-
                 {propertyMainImage && (
-                  <div
-                    className="
-                      relative
-                      aspect-[16/9]
-                      rounded-2xl
-                      overflow-hidden
-                      border
-                      border-slate-800
-                      bg-slate-950
-                    "
-                  >
+                  <div className="relative aspect-[16/9] overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
                     <img
                       src={propertyMainImage}
                       alt={propertyData.title}
-                      className="
-                        w-full
-                        h-full
-                        object-cover
-                      "
+                      className="h-full w-full object-cover"
                       loading="lazy"
                     />
 
-                    <div
-                      className="
-                        absolute
-                        inset-x-0
-                        bottom-0
-                        p-4
-                        bg-gradient-to-t
-                        from-black/80
-                        via-black/30
-                        to-transparent
-                      "
-                    >
-                      <p className="text-white font-semibold">
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-4">
+                      <p className="font-semibold text-white">
                         {propertyData.title}
                       </p>
 
                       {propertyData.code && (
-                        <p className="text-xs text-slate-300 mt-1">
+                        <p className="mt-1 text-xs text-slate-300">
                           Código: {propertyData.code}
                         </p>
                       )}
@@ -1224,37 +1038,22 @@ export default function ProposalDetails() {
                   </div>
                 )}
 
-                {/* PROPERTY HEADER */}
-
                 <div className="flex items-start gap-4">
-                  <div
-                    className="
-                      w-12
-                      h-12
-                      rounded-xl
-                      bg-blue-500/10
-                      border
-                      border-blue-500/20
-                      flex
-                      items-center
-                      justify-center
-                      shrink-0
-                    "
-                  >
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10">
                     <Building2 size={22} className="text-blue-400" />
                   </div>
 
                   <div className="min-w-0">
-                    <p className="text-xs text-slate-500 mb-1">
+                    <p className="mb-1 text-xs text-slate-500">
                       Imóvel relacionado
                     </p>
 
-                    <p className="text-lg font-semibold text-white break-words">
+                    <p className="break-words text-lg font-semibold text-white">
                       {propertyData.title}
                     </p>
 
                     {propertyData.code && (
-                      <p className="text-sm text-slate-400 mt-1">
+                      <p className="mt-1 text-sm text-slate-400">
                         Código:{' '}
                         <span className="text-slate-300">
                           {propertyData.code}
@@ -1264,39 +1063,23 @@ export default function ProposalDetails() {
                   </div>
                 </div>
 
-                {/* PROPERTY PRICE */}
-
-                <div
-                  className="
-                    rounded-xl
-                    border
-                    border-emerald-500/20
-                    bg-emerald-500/5
-                    p-4
-                  "
-                >
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
                   <p className="text-xs text-slate-500">
                     Valor atual do imóvel
                   </p>
-
-                  <p className="text-2xl font-bold text-emerald-400 mt-1">
+                  <p className="mt-1 text-2xl font-bold text-emerald-400">
                     {formatCurrency(propertyData.price || propertyPrice)}
                   </p>
                 </div>
 
-                {/* PROPERTY DETAILS */}
-
-                <div className="grid sm:grid-cols-2 gap-4">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <Info
                     label="Tipo"
                     value={propertyData.type}
                     icon={<Home size={15} />}
                   />
-
                   <Info label="Finalidade" value={propertyData.purpose} />
-
                   <Info label="Status" value={propertyData.status} />
-
                   <Info
                     label="Código"
                     value={propertyData.code || '-'}
@@ -1304,9 +1087,7 @@ export default function ProposalDetails() {
                   />
                 </div>
 
-                {/* PROPERTY CHARACTERISTICS */}
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <PropertyMetric
                     icon={<Ruler size={16} />}
                     label="Área"
@@ -1320,35 +1101,21 @@ export default function ProposalDetails() {
                   <PropertyMetric
                     icon={<BedDouble size={16} />}
                     label="Quartos"
-                    value={
-                      propertyData.bedrooms > 0
-                        ? formatNumber(propertyData.bedrooms)
-                        : '-'
-                    }
+                    value={formatNumber(propertyData.bedrooms)}
                   />
 
                   <PropertyMetric
                     icon={<Bath size={16} />}
                     label="Banheiros"
-                    value={
-                      propertyData.bathrooms > 0
-                        ? formatNumber(propertyData.bathrooms)
-                        : '-'
-                    }
+                    value={formatNumber(propertyData.bathrooms)}
                   />
 
                   <PropertyMetric
                     icon={<Car size={16} />}
                     label="Vagas"
-                    value={
-                      propertyData.parkingSpaces > 0
-                        ? formatNumber(propertyData.parkingSpaces)
-                        : '-'
-                    }
+                    value={formatNumber(propertyData.parkingSpaces)}
                   />
                 </div>
-
-                {/* SUITES */}
 
                 {propertyData.suites > 0 && (
                   <Info
@@ -1357,73 +1124,43 @@ export default function ProposalDetails() {
                   />
                 )}
 
-                {/* LOCATION */}
-
-                <div
-                  className="
-                    rounded-xl
-                    border
-                    border-slate-800
-                    bg-slate-950
-                    p-4
-                  "
-                >
-                  <p className="text-xs text-slate-500 mb-2 flex items-center gap-1.5">
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  <p className="mb-2 flex items-center gap-1.5 text-xs text-slate-500">
                     <MapPin size={14} />
                     Localização
                   </p>
-
-                  <p className="text-sm text-slate-200 leading-6">
+                  <p className="text-sm leading-6 text-slate-200">
                     {propertyData.location}
                   </p>
                 </div>
-
-                {/* ADDRESS DETAILS */}
 
                 {(propertyData.neighborhood ||
                   propertyData.city ||
                   propertyData.state ||
                   propertyData.zipCode) && (
-                  <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <Info label="Bairro" value={propertyData.neighborhood} />
-
                     <Info label="Cidade" value={propertyData.city} />
-
                     <Info label="Estado" value={propertyData.state} />
-
                     <Info label="CEP" value={propertyData.zipCode} />
                   </div>
                 )}
 
-                {/* DESCRIPTION */}
-
                 {propertyData.description && (
                   <div>
-                    <p className="text-xs text-slate-500 mb-2">Descrição</p>
-
-                    <div
-                      className="
-                        rounded-xl
-                        border
-                        border-slate-800
-                        bg-slate-950
-                        p-4
-                      "
-                    >
-                      <p className="text-sm text-slate-300 leading-7 whitespace-pre-wrap">
+                    <p className="mb-2 text-xs text-slate-500">Descrição</p>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                      <p className="whitespace-pre-wrap text-sm leading-7 text-slate-300">
                         {propertyData.description}
                       </p>
                     </div>
                   </div>
                 )}
 
-                {/* IMAGE GALLERY */}
-
                 {propertyData.images.length > 0 && (
                   <div>
-                    <div className="flex items-center gap-2 mb-3">
+                    <div className="mb-3 flex items-center gap-2">
                       <ImageIcon size={16} className="text-blue-400" />
-
                       <p className="text-xs text-slate-500">
                         Imagens do imóvel
                       </p>
@@ -1432,34 +1169,17 @@ export default function ProposalDetails() {
                     <div className="grid grid-cols-3 gap-2">
                       {propertyData.images.slice(0, 6).map((image, index) => {
                         const imageUrl = getImageUrl(image);
-
-                        if (!imageUrl) {
-                          return null;
-                        }
+                        if (!imageUrl) return null;
 
                         return (
                           <div
                             key={`${imageUrl}-${index}`}
-                            className="
-                                  aspect-[4/3]
-                                  rounded-xl
-                                  overflow-hidden
-                                  border
-                                  border-slate-800
-                                  bg-slate-950
-                                "
+                            className="aspect-[4/3] overflow-hidden rounded-xl border border-slate-800 bg-slate-950"
                           >
                             <img
                               src={imageUrl}
                               alt={`Imóvel - imagem ${index + 1}`}
-                              className="
-                                    w-full
-                                    h-full
-                                    object-cover
-                                    hover:scale-105
-                                    transition
-                                    duration-300
-                                  "
+                              className="h-full w-full object-cover transition duration-300 hover:scale-105"
                               loading="lazy"
                             />
                           </div>
@@ -1469,21 +1189,11 @@ export default function ProposalDetails() {
                   </div>
                 )}
 
-                {/* PROPERTY DETAILS BUTTON */}
-
                 {propertyData.id ? (
                   <button
                     type="button"
                     onClick={() => navigate(`/properties/${propertyData.id}`)}
-                    className="
-                      inline-flex
-                      items-center
-                      gap-2
-                      text-sm
-                      text-blue-400
-                      hover:text-blue-300
-                      transition
-                    "
+                    className="inline-flex items-center gap-2 text-sm text-blue-400 transition hover:text-blue-300"
                   >
                     Ver detalhes completos do imóvel
                     <ChevronRight size={15} />
@@ -1499,37 +1209,30 @@ export default function ProposalDetails() {
           </Card>
         </div>
 
-        {/* ==========================================================
-            FINANCIAL
-        ========================================================== */}
+        {/* FINANCIAL */}
 
-        <div className="grid lg:grid-cols-3 gap-6">
+        <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <Card title="Valores da proposta" icon={<DollarSign size={18} />}>
-              <div className="grid sm:grid-cols-2 gap-5">
+              <div className="grid gap-5 sm:grid-cols-2">
                 <FinancialBox
                   label="Valor do imóvel"
                   value={formatCurrency(propertyPrice)}
                 />
-
                 <FinancialBox
                   label="Valor da proposta"
                   value={formatCurrency(proposalPrice)}
                   highlight
                 />
-
                 <FinancialBox
                   label="Entrada"
                   value={formatCurrency(downPayment)}
                 />
-
                 <FinancialBox
                   label="Financiamento"
                   value={formatCurrency(financing)}
                 />
-
                 <FinancialBox label="FGTS" value={formatCurrency(fgts)} />
-
                 <FinancialBox
                   label="Saldo restante"
                   value={formatCurrency(balance)}
@@ -1537,31 +1240,20 @@ export default function ProposalDetails() {
               </div>
 
               {discount > 0 && (
-                <div
-                  className="
-                    mt-6
-                    rounded-xl
-                    border
-                    border-amber-500/20
-                    bg-amber-500/10
-                    p-4
-                  "
-                >
+                <div className="mt-6 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-xs text-amber-400 uppercase tracking-wide">
+                      <p className="text-xs uppercase tracking-wide text-amber-400">
                         Desconto solicitado
                       </p>
-
-                      <p className="text-lg font-semibold text-amber-300 mt-1">
+                      <p className="mt-1 text-lg font-semibold text-amber-300">
                         {formatCurrency(discount)}
                       </p>
                     </div>
 
                     <div className="text-right">
                       <p className="text-xs text-slate-500">Percentual</p>
-
-                      <p className="text-sm font-semibold text-amber-300 mt-1">
+                      <p className="mt-1 text-sm font-semibold text-amber-300">
                         {discountPercentage.toFixed(2)}%
                       </p>
                     </div>
@@ -1577,20 +1269,16 @@ export default function ProposalDetails() {
                 label="Valor do imóvel"
                 value={formatCurrency(propertyPrice)}
               />
-
               <SummaryRow
                 label="Proposta"
                 value={formatCurrency(proposalPrice)}
                 highlight
               />
-
               <SummaryRow label="Entrada" value={formatCurrency(downPayment)} />
-
               <SummaryRow
                 label="Financiamento"
                 value={formatCurrency(financing)}
               />
-
               <SummaryRow label="FGTS" value={formatCurrency(fgts)} />
 
               <div className="border-t border-slate-800 pt-4">
@@ -1611,29 +1299,24 @@ export default function ProposalDetails() {
           </Card>
         </div>
 
-        {/* ==========================================================
-            PAYMENT CONDITIONS
-        ========================================================== */}
+        {/* PAYMENT CONDITIONS */}
 
         <Card title="Condições de pagamento" icon={<CreditCard size={18} />}>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             <Info
               label="Forma de pagamento"
               value={formatPaymentMethod(proposal?.paymentMethod)}
             />
-
             <Info
               label="Parcelas"
               value={installments > 0 ? `${installments}x` : '-'}
             />
-
             <Info
               label="Valor da parcela"
               value={
                 installmentValue > 0 ? formatCurrency(installmentValue) : '-'
               }
             />
-
             <Info
               label="Validade"
               value={
@@ -1643,48 +1326,33 @@ export default function ProposalDetails() {
           </div>
         </Card>
 
-        {/* ==========================================================
-            MESSAGE
-        ========================================================== */}
+        {/* CLIENT MESSAGE */}
 
         {proposal?.clientMessage && (
           <Card title="Mensagem para o cliente" icon={<FileText size={18} />}>
-            <div
-              className="
-                rounded-xl
-                border
-                border-slate-800
-                bg-slate-950
-                p-5
-              "
-            >
-              <p className="text-sm leading-7 text-slate-300 whitespace-pre-wrap">
+            <div className="rounded-xl border border-slate-800 bg-slate-950 p-5">
+              <p className="whitespace-pre-wrap text-sm leading-7 text-slate-300">
                 {proposal.clientMessage}
               </p>
             </div>
           </Card>
         )}
 
-        {/* ==========================================================
-            DATES
-        ========================================================== */}
+        {/* DATES */}
 
         <Card title="Informações da proposta" icon={<CalendarDays size={18} />}>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             <Info label="Criada em" value={formatDate(proposal.createdAt)} />
-
             <Info
               label="Atualizada em"
               value={formatDate(proposal.updatedAt)}
             />
-
             <Info
               label="Validade"
               value={
                 proposal.validityDays ? `${proposal.validityDays} dias` : '-'
               }
             />
-
             <Info
               label="Válida até"
               value={getExpirationDate(
@@ -1695,77 +1363,22 @@ export default function ProposalDetails() {
           </div>
         </Card>
 
-        {/* ==========================================================
-            AUDIT / USER
-        ========================================================== */}
+        {/* RESPONSIBLE BROKER */}
 
-        {(proposal.createdBy || proposal.broker || proposal.user) && (
+        {proposalOwner && (
           <Card title="Responsável pela proposta" icon={<User size={18} />}>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-              <Info
-                label="Criada por"
-                value={getName(
-                  proposal.createdBy || proposal.broker || proposal.user,
-                  '-',
-                )}
-              />
-
-              <Info
-                label="E-mail"
-                value={
-                  (proposal.createdBy || proposal.broker || proposal.user)
-                    ?.email
-                }
-              />
-
-              <Info
-                label="Telefone"
-                value={
-                  (proposal.createdBy || proposal.broker || proposal.user)
-                    ?.phone
-                }
-              />
-
-              <Info
-                label="Cargo"
-                value={
-                  (proposal.createdBy || proposal.broker || proposal.user)
-                    ?.position
-                }
-              />
-            </div>
+            <BrokerProfile broker={proposalOwner} getName={getName} />
           </Card>
         )}
 
-        {/* ==========================================================
-            FOOTER ACTIONS
-        ========================================================== */}
+        {/* FOOTER ACTIONS */}
 
-        <div
-          className="
-            border-t
-            border-slate-800
-            pt-6
-            flex
-            flex-col
-            sm:flex-row
-            sm:items-center
-            sm:justify-between
-            gap-4
-          "
-        >
+        <div className="flex flex-col gap-4 border-t border-slate-800 pt-6 sm:flex-row sm:items-center sm:justify-between">
           <button
             type="button"
             onClick={() => navigate('/proposals')}
             disabled={actionLoading}
-            className="
-              flex
-              items-center
-              gap-2
-              text-slate-400
-              hover:text-white
-              transition
-            "
+            className="flex items-center gap-2 text-slate-400 transition hover:text-white"
           >
             <ArrowLeft size={18} />
             Voltar para propostas
@@ -1786,22 +1399,7 @@ export default function ProposalDetails() {
                   })
                 }
                 disabled={actionLoading}
-                className="
-                  flex
-                  items-center
-                  justify-center
-                  gap-2
-                  px-4
-                  py-2.5
-                  rounded-xl
-                  border
-                  border-red-500/20
-                  bg-red-500/5
-                  text-red-400
-                  hover:bg-red-500/10
-                  transition
-                  disabled:opacity-50
-                "
+                className="flex items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-2.5 text-red-400 transition hover:bg-red-500/10 disabled:opacity-50"
               >
                 <Trash2 size={17} />
                 Excluir
@@ -1821,22 +1419,7 @@ export default function ProposalDetails() {
                   })
                 }
                 disabled={actionLoading}
-                className="
-                  flex
-                  items-center
-                  justify-center
-                  gap-2
-                  px-4
-                  py-2.5
-                  rounded-xl
-                  border
-                  border-slate-700
-                  bg-slate-900
-                  hover:bg-slate-800
-                  text-slate-300
-                  transition
-                  disabled:opacity-50
-                "
+                className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
               >
                 <XCircle size={17} />
                 Cancelar
@@ -1848,22 +1431,7 @@ export default function ProposalDetails() {
                 type="button"
                 onClick={() => navigate(`/proposals/${id}/edit`)}
                 disabled={actionLoading}
-                className="
-                  flex
-                  items-center
-                  justify-center
-                  gap-2
-                  px-5
-                  py-2.5
-                  rounded-xl
-                  border
-                  border-slate-700
-                  bg-slate-900
-                  hover:bg-slate-800
-                  text-white
-                  transition
-                  disabled:opacity-50
-                "
+                className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-5 py-2.5 text-white transition hover:bg-slate-800 disabled:opacity-50"
               >
                 <Pencil size={17} />
                 Editar proposta
@@ -1882,21 +1450,7 @@ export default function ProposalDetails() {
                   })
                 }
                 disabled={actionLoading}
-                className="
-                  flex
-                  items-center
-                  justify-center
-                  gap-2
-                  px-5
-                  py-2.5
-                  rounded-xl
-                  bg-blue-600
-                  hover:bg-blue-500
-                  text-white
-                  font-medium
-                  transition
-                  disabled:opacity-50
-                "
+                className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
               >
                 <Send size={17} />
                 Enviar para aprovação
@@ -1906,22 +1460,271 @@ export default function ProposalDetails() {
         </div>
       </div>
 
-      {/* ============================================================
-          CONFIRM MODAL
-      ============================================================ */}
+      {/* CONFIRM MODAL */}
 
       {confirmAction && (
         <ConfirmModal
           action={confirmAction}
           loading={actionLoading}
           onCancel={() => {
-            if (!actionLoading) {
-              setConfirmAction(null);
-            }
+            if (!actionLoading) setConfirmAction(null);
           }}
           onConfirm={executeConfirmedAction}
         />
       )}
+    </div>
+  );
+}
+
+/*
+|--------------------------------------------------------------------------
+| BROKER PROFILE
+|--------------------------------------------------------------------------
+*/
+
+function BrokerProfile({ broker, getName }) {
+  const [imageError, setImageError] = useState(false);
+
+  const getField = (...values) =>
+    values.find(
+      (value) =>
+        value !== null && value !== undefined && String(value).trim() !== '',
+    );
+
+  const getImageUrl = (value) => {
+    if (typeof value === 'string') return value;
+
+    if (value && typeof value === 'object') {
+      return value.url || value.secure_url || value.src || '';
+    }
+
+    return '';
+  };
+
+  const name =
+    getName(broker, '') ||
+    (typeof broker === 'string' ? broker : '') ||
+    'Responsável não identificado';
+
+  const avatar = getImageUrl(
+    getField(
+      broker?.avatar,
+      broker?.avatarUrl,
+      broker?.photoURL,
+      broker?.photoUrl,
+      broker?.profileImage,
+      broker?.profilePicture,
+      broker?.picture,
+      broker?.photo,
+      broker?.image,
+      broker?.profile?.avatar,
+      broker?.profile?.photo,
+    ),
+  );
+
+  const email = getField(
+    broker?.email,
+    broker?.workEmail,
+    broker?.contact?.email,
+  );
+
+  const phone = getField(
+    broker?.phone,
+    broker?.telefone,
+    broker?.mobile,
+    broker?.cellphone,
+    broker?.celular,
+    broker?.whatsapp,
+    broker?.contact?.phone,
+  );
+
+  const position = getField(
+    broker?.position,
+    broker?.jobTitle,
+    broker?.cargo,
+    broker?.professionalTitle,
+    broker?.department,
+    broker?.profile?.position,
+  );
+
+  const role = getField(broker?.role, broker?.userRole);
+
+  const roleLabels = {
+    admin: 'Administrador',
+    administrator: 'Administrador',
+    broker: 'Corretor de imóveis',
+    realtor: 'Corretor de imóveis',
+    manager: 'Gestor',
+    gestor: 'Gestor',
+  };
+
+  const jobTitle =
+    position ||
+    (role
+      ? roleLabels[String(role).toLowerCase()] || role
+      : 'Equipe comercial');
+
+  const initials = String(name)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+
+  const phoneLink = phone ? String(phone).replace(/[^\d+]/g, '') : '';
+
+  useEffect(() => {
+    setImageError(false);
+  }, [avatar]);
+
+  return (
+    <div className="space-y-5">
+      {/* PROFILE HEADER */}
+
+      <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950/30 p-5 sm:p-6">
+        <div className="pointer-events-none absolute right-0 top-0 h-32 w-32 rounded-full bg-blue-500/5 blur-3xl" />
+
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
+          <div className="relative shrink-0 self-start">
+            {avatar && !imageError ? (
+              <img
+                src={avatar}
+                alt={`Foto de ${name}`}
+                onError={() => setImageError(true)}
+                className="h-20 w-20 rounded-2xl border border-blue-400/20 object-cover shadow-lg shadow-black/20"
+                loading="lazy"
+              />
+            ) : (
+              <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-blue-400/20 bg-gradient-to-br from-blue-500/20 to-indigo-500/10 text-2xl font-bold text-blue-300 shadow-lg shadow-black/20">
+                {initials || <User size={28} />}
+              </div>
+            )}
+
+            <span
+              className="absolute -bottom-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full border-4 border-slate-900 bg-emerald-500"
+              title="Responsável pela proposta"
+            >
+              <CheckCircle2 size={12} className="text-white" />
+            </span>
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-blue-400">
+              Corretor responsável
+            </p>
+
+            <h3 className="break-words text-xl font-bold tracking-tight text-white sm:text-2xl">
+              {name}
+            </h3>
+
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1.5 text-xs font-medium text-blue-300">
+                <Briefcase size={13} />
+                {jobTitle}
+              </span>
+
+              {role && (
+                <span className="rounded-full border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs text-slate-400">
+                  {roleLabels[String(role).toLowerCase()] || role}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* CONTACT DETAILS */}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <ContactItem
+          icon={<Mail size={17} />}
+          label="E-mail profissional"
+          value={email}
+          href={email ? `mailto:${email}` : ''}
+          color="blue"
+          emptyMessage="E-mail não informado"
+        />
+
+        <ContactItem
+          icon={<Phone size={17} />}
+          label="Telefone / WhatsApp"
+          value={phone}
+          href={phoneLink ? `tel:${phoneLink}` : ''}
+          color="emerald"
+          emptyMessage="Telefone não informado"
+        />
+
+        <div className="flex min-w-0 items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/70 p-4 transition hover:border-slate-700 sm:col-span-2">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-violet-500/20 bg-violet-500/10 text-violet-400">
+            <Briefcase size={17} />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-slate-500">Cargo / função</p>
+            <p className="mt-1 break-words text-sm font-medium text-slate-200">
+              {jobTitle}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/*
+|--------------------------------------------------------------------------
+| CONTACT ITEM
+|--------------------------------------------------------------------------
+*/
+
+function ContactItem({
+  icon,
+  label,
+  value,
+  href,
+  color = 'blue',
+  emptyMessage,
+}) {
+  const colors = {
+    blue: 'border-blue-500/20 bg-blue-500/10 text-blue-400 hover:text-blue-300',
+    emerald:
+      'border-emerald-500/20 bg-emerald-500/10 text-emerald-400 hover:text-emerald-300',
+  };
+
+  return (
+    <div className="flex min-w-0 items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/70 p-4 transition hover:border-slate-700">
+      <div
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${colors[color]}`}
+      >
+        {icon}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-slate-500">{label}</p>
+
+        {value ? (
+          href ? (
+            <a
+              href={href}
+              className={`mt-1 block break-all text-sm font-medium text-slate-200 transition ${
+                color === 'emerald'
+                  ? 'hover:text-emerald-400'
+                  : 'hover:text-blue-400'
+              }`}
+            >
+              {value}
+            </a>
+          ) : (
+            <p className="mt-1 break-words text-sm font-medium text-slate-200">
+              {value}
+            </p>
+          )
+        ) : (
+          <p className="mt-1 text-sm text-slate-500">{emptyMessage}</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -1934,20 +1737,9 @@ export default function ProposalDetails() {
 
 function Card({ title, icon, children }) {
   return (
-    <section
-      className="
-        bg-slate-900
-        border
-        border-slate-800
-        rounded-2xl
-        shadow-lg
-        p-5
-        md:p-6
-      "
-    >
-      <div className="flex items-center gap-2 mb-6">
+    <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg md:p-6">
+      <div className="mb-6 flex items-center gap-2">
         {icon && <div className="text-blue-400">{icon}</div>}
-
         <h2 className="text-lg font-semibold text-white">{title}</h2>
       </div>
 
@@ -1965,12 +1757,12 @@ function Card({ title, icon, children }) {
 function Info({ label, value, icon }) {
   return (
     <div className="min-w-0">
-      <p className="text-xs text-slate-500 mb-1 flex items-center gap-1.5">
+      <p className="mb-1 flex items-center gap-1.5 text-xs text-slate-500">
         {icon}
         {label}
       </p>
 
-      <p className="text-sm text-slate-200 font-medium break-words">
+      <p className="break-words text-sm font-medium text-slate-200">
         {value || '-'}
       </p>
     </div>
@@ -1985,22 +1777,13 @@ function Info({ label, value, icon }) {
 
 function PropertyMetric({ icon, label, value }) {
   return (
-    <div
-      className="
-        rounded-xl
-        border
-        border-slate-800
-        bg-slate-950
-        p-3
-      "
-    >
+    <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
       <div className="flex items-center gap-2 text-slate-500">
         {icon}
-
         <span className="text-[11px]">{label}</span>
       </div>
 
-      <p className="text-sm font-semibold text-slate-200 mt-1">{value}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-200">{value}</p>
     </div>
   );
 }
@@ -2014,26 +1797,18 @@ function PropertyMetric({ icon, label, value }) {
 function FinancialBox({ label, value, highlight = false }) {
   return (
     <div
-      className={`
-        rounded-xl
-        border
-        p-4
-        ${
-          highlight
-            ? 'border-emerald-500/20 bg-emerald-500/5'
-            : 'border-slate-800 bg-slate-950'
-        }
-      `}
+      className={`rounded-xl border p-4 ${
+        highlight
+          ? 'border-emerald-500/20 bg-emerald-500/5'
+          : 'border-slate-800 bg-slate-950'
+      }`}
     >
       <p className="text-xs text-slate-500">{label}</p>
 
       <p
-        className={`
-          text-lg
-          font-semibold
-          mt-1
-          ${highlight ? 'text-emerald-400' : 'text-slate-100'}
-        `}
+        className={`mt-1 text-lg font-semibold ${
+          highlight ? 'text-emerald-400' : 'text-slate-100'
+        }`}
       >
         {value}
       </p>
@@ -2071,21 +1846,10 @@ function SummaryRow({ label, value, highlight = false }) {
 |--------------------------------------------------------------------------
 */
 
-function StatusBadge({ status, config }) {
+function StatusBadge({ config }) {
   return (
     <span
-      className={`
-        inline-flex
-        items-center
-        gap-1.5
-        px-3
-        py-1.5
-        rounded-full
-        text-xs
-        font-semibold
-        border
-        ${config.badge}
-      `}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${config.badge}`}
     >
       {config.iconSmall}
       {config.label}
@@ -2104,26 +1868,17 @@ function Alert({ type, message, onClose }) {
 
   return (
     <div
-      className={`
-        flex
-        items-start
-        justify-between
-        gap-4
-        rounded-xl
-        border
-        p-4
-        ${
-          isError
-            ? 'bg-red-500/10 border-red-500/20 text-red-300'
-            : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
-        }
-      `}
+      className={`flex items-start justify-between gap-4 rounded-xl border p-4 ${
+        isError
+          ? 'border-red-500/20 bg-red-500/10 text-red-300'
+          : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+      }`}
     >
       <div className="flex items-start gap-3">
         {isError ? (
-          <AlertCircle size={20} className="shrink-0 mt-0.5" />
+          <AlertCircle size={20} className="mt-0.5 shrink-0" />
         ) : (
-          <CheckCircle2 size={20} className="shrink-0 mt-0.5" />
+          <CheckCircle2 size={20} className="mt-0.5 shrink-0" />
         )}
 
         <p className="text-sm">{message}</p>
@@ -2132,7 +1887,8 @@ function Alert({ type, message, onClose }) {
       <button
         type="button"
         onClick={onClose}
-        className="opacity-60 hover:opacity-100 transition"
+        aria-label="Fechar mensagem"
+        className="opacity-60 transition hover:opacity-100"
       >
         <XCircle size={17} />
       </button>
@@ -2148,47 +1904,15 @@ function Alert({ type, message, onClose }) {
 
 function ConfirmModal({ action, loading, onCancel, onConfirm }) {
   return (
-    <div
-      className="
-        fixed
-        inset-0
-        z-50
-        flex
-        items-center
-        justify-center
-        bg-black/70
-        backdrop-blur-sm
-        p-4
-      "
-    >
-      <div
-        className="
-          w-full
-          max-w-md
-          bg-slate-900
-          border
-          border-slate-800
-          rounded-2xl
-          shadow-2xl
-          p-6
-        "
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
         <div className="flex items-start gap-4">
           <div
-            className={`
-              w-11
-              h-11
-              rounded-xl
-              flex
-              items-center
-              justify-center
-              shrink-0
-              ${
-                action.danger
-                  ? 'bg-red-500/10 text-red-400'
-                  : 'bg-blue-500/10 text-blue-400'
-              }
-            `}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+              action.danger
+                ? 'bg-red-500/10 text-red-400'
+                : 'bg-blue-500/10 text-blue-400'
+            }`}
           >
             {action.danger ? <AlertCircle size={22} /> : <Send size={21} />}
           </div>
@@ -2196,29 +1920,18 @@ function ConfirmModal({ action, loading, onCancel, onConfirm }) {
           <div>
             <h3 className="text-lg font-semibold text-white">{action.title}</h3>
 
-            <p className="text-sm text-slate-400 mt-2 leading-6">
+            <p className="mt-2 text-sm leading-6 text-slate-400">
               {action.message}
             </p>
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 mt-7">
+        <div className="mt-7 flex justify-end gap-3">
           <button
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="
-              px-4
-              py-2.5
-              rounded-xl
-              border
-              border-slate-700
-              bg-slate-950
-              text-slate-300
-              hover:bg-slate-800
-              transition
-              disabled:opacity-50
-            "
+            className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
           >
             Voltar
           </button>
@@ -2227,26 +1940,13 @@ function ConfirmModal({ action, loading, onCancel, onConfirm }) {
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className={`
-              flex
-              items-center
-              gap-2
-              px-4
-              py-2.5
-              rounded-xl
-              text-white
-              font-medium
-              transition
-              disabled:opacity-50
-              ${
-                action.danger
-                  ? 'bg-red-600 hover:bg-red-500'
-                  : 'bg-blue-600 hover:bg-blue-500'
-              }
-            `}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 font-medium text-white transition disabled:opacity-50 ${
+              action.danger
+                ? 'bg-red-600 hover:bg-red-500'
+                : 'bg-blue-600 hover:bg-blue-500'
+            }`}
           >
             {loading && <Loader2 size={16} className="animate-spin" />}
-
             {action.confirmLabel}
           </button>
         </div>
@@ -2272,7 +1972,6 @@ function getStatusConfig(status) {
       icon: <FileText size={22} />,
       iconSmall: <FileText size={13} />,
     },
-
     rascunho: {
       label: 'Rascunho',
       description: 'A proposta ainda está sendo preparada e pode ser editada.',
@@ -2282,7 +1981,6 @@ function getStatusConfig(status) {
       icon: <FileText size={22} />,
       iconSmall: <FileText size={13} />,
     },
-
     submitted: {
       label: 'Enviada',
       description: 'A proposta foi enviada e aguarda análise.',
@@ -2292,7 +1990,6 @@ function getStatusConfig(status) {
       icon: <Send size={22} />,
       iconSmall: <Send size={13} />,
     },
-
     enviada: {
       label: 'Enviada',
       description: 'A proposta foi enviada e aguarda análise.',
@@ -2302,7 +1999,6 @@ function getStatusConfig(status) {
       icon: <Send size={22} />,
       iconSmall: <Send size={13} />,
     },
-
     pending: {
       label: 'Pendente',
       description: 'A proposta aguarda análise ou aprovação.',
@@ -2312,7 +2008,6 @@ function getStatusConfig(status) {
       icon: <Clock3 size={22} />,
       iconSmall: <Clock3 size={13} />,
     },
-
     under_review: {
       label: 'Em análise',
       description: 'A proposta está sendo analisada.',
@@ -2322,7 +2017,6 @@ function getStatusConfig(status) {
       icon: <Clock3 size={22} />,
       iconSmall: <Clock3 size={13} />,
     },
-
     em_analise: {
       label: 'Em análise',
       description: 'A proposta está sendo analisada.',
@@ -2332,7 +2026,6 @@ function getStatusConfig(status) {
       icon: <Clock3 size={22} />,
       iconSmall: <Clock3 size={13} />,
     },
-
     approved: {
       label: 'Aprovada',
       description: 'A proposta foi aprovada.',
@@ -2342,7 +2035,6 @@ function getStatusConfig(status) {
       icon: <CheckCircle2 size={22} />,
       iconSmall: <CheckCircle2 size={13} />,
     },
-
     aprovada: {
       label: 'Aprovada',
       description: 'A proposta foi aprovada.',
@@ -2352,7 +2044,6 @@ function getStatusConfig(status) {
       icon: <CheckCircle2 size={22} />,
       iconSmall: <CheckCircle2 size={13} />,
     },
-
     accepted: {
       label: 'Aceita',
       description: 'O cliente aceitou a proposta.',
@@ -2362,7 +2053,6 @@ function getStatusConfig(status) {
       icon: <CheckCircle2 size={22} />,
       iconSmall: <CheckCircle2 size={13} />,
     },
-
     rejected: {
       label: 'Recusada',
       description: 'A proposta foi recusada.',
@@ -2372,7 +2062,6 @@ function getStatusConfig(status) {
       icon: <XCircle size={22} />,
       iconSmall: <XCircle size={13} />,
     },
-
     recusada: {
       label: 'Recusada',
       description: 'A proposta foi recusada.',
@@ -2382,7 +2071,6 @@ function getStatusConfig(status) {
       icon: <XCircle size={22} />,
       iconSmall: <XCircle size={13} />,
     },
-
     cancelled: {
       label: 'Cancelada',
       description: 'A proposta foi cancelada.',
@@ -2392,7 +2080,6 @@ function getStatusConfig(status) {
       icon: <XCircle size={22} />,
       iconSmall: <XCircle size={13} />,
     },
-
     canceled: {
       label: 'Cancelada',
       description: 'A proposta foi cancelada.',
@@ -2402,7 +2089,6 @@ function getStatusConfig(status) {
       icon: <XCircle size={22} />,
       iconSmall: <XCircle size={13} />,
     },
-
     cancelada: {
       label: 'Cancelada',
       description: 'A proposta foi cancelada.',
@@ -2412,7 +2098,6 @@ function getStatusConfig(status) {
       icon: <XCircle size={22} />,
       iconSmall: <XCircle size={13} />,
     },
-
     completed: {
       label: 'Concluída',
       description: 'A negociação relacionada à proposta foi concluída.',
@@ -2422,7 +2107,6 @@ function getStatusConfig(status) {
       icon: <CheckCircle2 size={22} />,
       iconSmall: <CheckCircle2 size={13} />,
     },
-
     concluida: {
       label: 'Concluída',
       description: 'A negociação relacionada à proposta foi concluída.',
@@ -2474,37 +2158,25 @@ function formatPaymentMethod(value) {
 */
 
 function getPropertyLocation(property) {
-  if (!property) {
-    return '-';
-  }
+  if (!property) return '-';
 
   const address =
     property.address || property.location?.address || property.endereco;
 
-  if (typeof address === 'string') {
-    return address;
-  }
+  if (typeof address === 'string') return address;
 
   if (address && typeof address === 'object') {
     const parts = [
       address.street || address.logradouro || address.rua || address.address,
-
       address.number || address.numero,
-
       address.complement,
-
       address.neighborhood || address.bairro,
-
       address.city || address.cidade,
-
       address.state || address.estado || address.uf,
-
       address.zipCode || address.cep,
     ].filter(Boolean);
 
-    if (parts.length) {
-      return parts.join(', ');
-    }
+    if (parts.length) return parts.join(', ');
   }
 
   const location = property.location;
@@ -2512,15 +2184,11 @@ function getPropertyLocation(property) {
   if (location && typeof location === 'object') {
     const parts = [
       location.neighborhood || location.bairro,
-
       location.city || location.cidade,
-
       location.state || location.estado || location.uf,
     ].filter(Boolean);
 
-    if (parts.length) {
-      return parts.join(', ');
-    }
+    if (parts.length) return parts.join(', ');
   }
 
   return (
@@ -2528,7 +2196,7 @@ function getPropertyLocation(property) {
     property.bairro ||
     property.city ||
     property.cidade ||
-    property.location ||
+    (typeof property.location === 'string' ? property.location : '') ||
     '-'
   );
 }
@@ -2540,15 +2208,11 @@ function getPropertyLocation(property) {
 */
 
 function getExpirationDate(createdAt, validityDays) {
-  if (!createdAt || !validityDays) {
-    return '-';
-  }
+  if (!createdAt || !validityDays) return '-';
 
   const date = new Date(createdAt);
 
-  if (Number.isNaN(date.getTime())) {
-    return '-';
-  }
+  if (Number.isNaN(date.getTime())) return '-';
 
   date.setDate(date.getDate() + Number(validityDays));
 
