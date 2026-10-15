@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+
 import { useNavigate } from 'react-router-dom';
 
 import {
@@ -18,53 +19,78 @@ import {
 } from 'lucide-react';
 
 import { createOpportunity } from '../service/opportunityService';
+
 import api from '../service/api';
+import { UserContext } from '../context/UserContext';
 
 /**
+
  * =========================================================
+
  * CONSTANTS
+
  * =========================================================
+
  */
 
 const STAGES = [
   {
     value: 'nova',
+
     label: 'Nova',
   },
+
   {
     value: 'qualificacao',
+
     label: 'Qualificação',
   },
+
   {
     value: 'imovel_definido',
+
     label: 'Imóvel definido',
   },
+
   {
     value: 'visita_realizada',
+
     label: 'Visita realizada',
   },
+
   {
     value: 'interesse_confirmado',
+
     label: 'Interesse confirmado',
   },
+
   {
     value: 'proposta_solicitada',
+
     label: 'Proposta solicitada',
   },
+
   {
     value: 'proposta_enviada',
+
     label: 'Proposta enviada',
   },
+
   {
     value: 'negociacao',
+
     label: 'Negociação',
   },
+
   {
     value: 'ganha',
+
     label: 'Ganha',
   },
+
   {
     value: 'perdida',
+
     label: 'Perdida',
   },
 ];
@@ -72,10 +98,13 @@ const STAGES = [
 const TYPES = [
   {
     value: 'venda',
+
     label: 'Venda',
   },
+
   {
     value: 'locacao',
+
     label: 'Locação',
   },
 ];
@@ -83,17 +112,25 @@ const TYPES = [
 const TEMPERATURES = [
   {
     value: 'frio',
+
     label: 'Frio',
+
     icon: '🔵',
   },
+
   {
     value: 'morno',
+
     label: 'Morno',
+
     icon: '🟡',
   },
+
   {
     value: 'quente',
+
     label: 'Quente',
+
     icon: '🔥',
   },
 ];
@@ -101,26 +138,37 @@ const TEMPERATURES = [
 const PRIORITIES = [
   {
     value: 'baixa',
+
     label: 'Baixa',
   },
+
   {
     value: 'media',
+
     label: 'Média',
   },
+
   {
     value: 'alta',
+
     label: 'Alta',
   },
+
   {
     value: 'urgente',
+
     label: 'Urgente',
   },
 ];
 
 /**
+
  * =========================================================
+
  * HELPERS
+
  * =========================================================
+
  */
 
 function formatCurrencyInput(value) {
@@ -130,6 +178,7 @@ function formatCurrencyInput(value) {
 
   const numericValue = String(value)
     .replace(/\D/g, '')
+
     .replace(/^0+(?=\d)/, '');
 
   if (!numericValue) {
@@ -140,6 +189,7 @@ function formatCurrencyInput(value) {
 
   return new Intl.NumberFormat('pt-BR', {
     minimumFractionDigits: 2,
+
     maximumFractionDigits: 2,
   }).format(number);
 }
@@ -166,7 +216,9 @@ function getApiError(error) {
 
     if (typeof errors === 'object') {
       return Object.values(errors)
+
         .map((item) => item?.message || item)
+
         .join(' ');
     }
   }
@@ -179,11 +231,17 @@ function getApiError(error) {
 }
 
 /**
+
  * =========================================================
+
  * EXTRACT ARRAY
+
  *
+
  * Aceita diferentes formatos de resposta da API.
+
  * =========================================================
+
  */
 
 function extractArray(response, keys = []) {
@@ -225,9 +283,13 @@ function extractArray(response, keys = []) {
 }
 
 /**
+
  * =========================================================
+
  * GET PROPERTY NAME
+
  * =========================================================
+
  */
 
 function getPropertyName(property) {
@@ -245,9 +307,13 @@ function getPropertyName(property) {
 }
 
 /**
+
  * =========================================================
+
  * GET PROPERTY PRICE
+
  * =========================================================
+
  */
 
 function getPropertyPrice(property) {
@@ -275,14 +341,19 @@ function getPropertyPrice(property) {
 
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
+
     currency: 'BRL',
   }).format(numericPrice);
 }
 
 /**
+
  * =========================================================
+
  * GET PROPERTY IMAGE
+
  * =========================================================
+
  */
 
 function getPropertyImage(property) {
@@ -308,9 +379,13 @@ function getPropertyImage(property) {
 }
 
 /**
+
  * =========================================================
+
  * GET BROKER INITIALS
+
  * =========================================================
+
  */
 
 function getInitials(name = '') {
@@ -328,18 +403,34 @@ function getInitials(name = '') {
 }
 
 /**
+
  * =========================================================
+
  * COMPONENT
+
  * =========================================================
+
  */
 
 export default function OpportunityCreate() {
   const navigate = useNavigate();
+  const { user } = useContext(UserContext);
+
+  const currentUserId = user?._id || user?.id;
+  const userRole = String(user?.role || '').toLowerCase();
+  const isAdmin =
+    ['admin', 'administrator', 'superadmin', 'super_admin'].includes(
+      userRole,
+    ) || user?.isAdmin === true;
 
   /**
+
    * =======================================================
+
    * STATE
+
    * =======================================================
+
    */
 
   const [loading, setLoading] = useState(false);
@@ -361,9 +452,13 @@ export default function OpportunityCreate() {
   const [brokers, setBrokers] = useState([]);
 
   /**
+
    * =======================================================
+
    * FORM
+
    * =======================================================
+
    */
 
   const [form, setForm] = useState({
@@ -401,21 +496,33 @@ export default function OpportunityCreate() {
   });
 
   /**
+
    * =======================================================
+
    * LOAD DATA
+
    * =======================================================
+
    */
 
   useEffect(() => {
     loadLeads();
     loadProperties();
-    loadBrokers();
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+    loadBrokers();
+  }, [user, isAdmin, currentUserId]);
+
   /**
+
    * =======================================================
+
    * LOAD LEADS
+
    * =======================================================
+
    */
 
   const loadLeads = async () => {
@@ -439,15 +546,25 @@ export default function OpportunityCreate() {
   };
 
   /**
+
    * =======================================================
+
    * LOAD PROPERTIES
+
    *
+
    * IMPORTANTE:
+
    *
+
    * A API de imóveis pode retornar paginação.
+
    *
+
    * Tentamos carregar até 100 imóveis.
+
    * =======================================================
+
    */
 
   const loadProperties = async () => {
@@ -457,6 +574,7 @@ export default function OpportunityCreate() {
       const response = await api.get('/api/properties', {
         params: {
           page: 1,
+
           limit: 100,
         },
       });
@@ -483,27 +601,45 @@ export default function OpportunityCreate() {
   };
 
   /**
+
    * =======================================================
+
    * LOAD BROKERS
+
    * =======================================================
+
    */
 
   const loadBrokers = async () => {
     try {
       setLoadingBrokers(true);
 
+      // Corretores só podem atribuir a oportunidade ao próprio usuário.
+      if (!isAdmin) {
+        if (!currentUserId) {
+          setBrokers([]);
+          setError('Não foi possível identificar o usuário autenticado.');
+          return;
+        }
+
+        const currentBroker = {
+          ...user,
+          _id: currentUserId,
+          name: user?.name || user?.fullName || user?.username || 'Meu usuário',
+        };
+
+        setBrokers([currentBroker]);
+        setForm((prev) => ({ ...prev, assignedTo: String(currentUserId) }));
+        return;
+      }
+
+      // Administradores podem escolher qualquer corretor cadastrado.
       const response = await api.get('/api/brokers');
-
-      console.log('👤 RESPOSTA DOS CORRETORES:', response.data);
-
       const data = extractArray(response, ['brokers', 'users', 'items']);
-
-      console.log('👤 CORRETORES EXTRAÍDOS:', data);
 
       setBrokers(data);
     } catch (error) {
       console.error('Erro ao carregar corretores:', error);
-
       setError(
         (current) =>
           current ||
@@ -516,14 +652,19 @@ export default function OpportunityCreate() {
   };
 
   /**
+
    * =======================================================
+
    * FORM CHANGE
+
    * =======================================================
+
    */
 
   const handleChange = (field, value) => {
     setForm((prev) => ({
       ...prev,
+
       [field]: value,
     }));
 
@@ -543,9 +684,13 @@ export default function OpportunityCreate() {
   };
 
   /**
+
    * =======================================================
+
    * LEAD CHANGE
+
    * =======================================================
+
    */
 
   const handleLeadChange = (leadId) => {
@@ -577,9 +722,13 @@ export default function OpportunityCreate() {
   };
 
   /**
+
    * =======================================================
+
    * VALIDATION
+
    * =======================================================
+
    */
 
   const validate = () => {
@@ -627,9 +776,13 @@ export default function OpportunityCreate() {
   };
 
   /**
+
    * =======================================================
+
    * SUBMIT
+
    * =======================================================
+
    */
 
   const handleSubmit = async (event) => {
@@ -640,6 +793,7 @@ export default function OpportunityCreate() {
     if (!validate()) {
       window.scrollTo({
         top: 0,
+
         behavior: 'smooth',
       });
 
@@ -658,7 +812,7 @@ export default function OpportunityCreate() {
 
         property: form.property || null,
 
-        assignedTo: form.assignedTo,
+        assignedTo: isAdmin ? form.assignedTo : String(currentUserId || ''),
 
         type: form.type,
 
@@ -691,6 +845,7 @@ export default function OpportunityCreate() {
 
       if (opportunityId) {
         navigate(`/opportunities/${opportunityId}`);
+
         return;
       }
 
@@ -702,6 +857,7 @@ export default function OpportunityCreate() {
 
       window.scrollTo({
         top: 0,
+
         behavior: 'smooth',
       });
     } finally {
@@ -710,9 +866,13 @@ export default function OpportunityCreate() {
   };
 
   /**
+
    * =======================================================
+
    * SELECTED LEAD
+
    * =======================================================
+
    */
 
   const selectedLead = useMemo(() => {
@@ -720,9 +880,13 @@ export default function OpportunityCreate() {
   }, [leads, form.lead]);
 
   /**
+
    * =======================================================
+
    * SELECTED PROPERTY
+
    * =======================================================
+
    */
 
   const selectedProperty = useMemo(() => {
@@ -732,9 +896,13 @@ export default function OpportunityCreate() {
   }, [properties, form.property]);
 
   /**
+
    * =======================================================
+
    * SELECTED BROKER
+
    * =======================================================
+
    */
 
   const selectedBroker = useMemo(() => {
@@ -744,9 +912,13 @@ export default function OpportunityCreate() {
   }, [brokers, form.assignedTo]);
 
   /**
+
    * =======================================================
+
    * RENDER
+
    * =======================================================
+
    */
 
   return (
@@ -757,16 +929,27 @@ export default function OpportunityCreate() {
         <div className="mb-6">
           <button
             type="button"
+
             onClick={() => navigate('/opportunities')}
+
             className="
+
               mb-5
+
               inline-flex
+
               items-center
+
               gap-2
+
               text-sm
+
               text-gray-400
+
               transition
+
               hover:text-white
+
             "
           >
             <ArrowLeft className="h-4 w-4" />
@@ -776,13 +959,21 @@ export default function OpportunityCreate() {
           <div className="flex items-center gap-3">
             <div
               className="
+
                 flex
+
                 h-12
+
                 w-12
+
                 items-center
+
                 justify-center
+
                 rounded-2xl
+
                 bg-indigo-500/10
+
               "
             >
               <Target className="h-6 w-6 text-indigo-400" />
@@ -803,18 +994,31 @@ export default function OpportunityCreate() {
         {error && (
           <div
             className="
+
               mb-6
+
               flex
+
               items-start
+
               gap-3
+
               rounded-xl
+
               border
+
               border-red-500/20
+
               bg-red-500/10
+
               px-4
+
               py-3
+
               text-sm
+
               text-red-300
+
             "
           >
             <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
@@ -832,18 +1036,28 @@ export default function OpportunityCreate() {
 
           <section
             className="
+
               mb-5
+
               rounded-2xl
+
               border
+
               border-white/10
+
               bg-gray-900/70
+
               p-5
+
               sm:p-6
+
             "
           >
             <SectionHeader
               icon={<Target className="h-5 w-5" />}
+
               title="Identificação"
+
               description="Informações principais da oportunidade."
             />
 
@@ -851,9 +1065,13 @@ export default function OpportunityCreate() {
               <Field label="Título" required error={fieldErrors.title}>
                 <input
                   type="text"
+
                   value={form.title}
+
                   onChange={(e) => handleChange('title', e.target.value)}
+
                   placeholder="Ex.: Compra de apartamento para família"
+
                   className={inputClass(fieldErrors.title)}
                 />
               </Field>
@@ -861,23 +1079,41 @@ export default function OpportunityCreate() {
               <Field label="Descrição" hint="Opcional">
                 <textarea
                   value={form.description}
+
                   onChange={(e) => handleChange('description', e.target.value)}
+
                   rows={4}
+
                   placeholder="Descreva o contexto desta oportunidade..."
+
                   className="
+
                     w-full
+
                     rounded-xl
+
                     border
+
                     border-white/10
+
                     bg-gray-950
+
                     px-4
+
                     py-3
+
                     text-sm
+
                     text-white
+
                     outline-none
+
                     transition
+
                     placeholder:text-gray-600
+
                     focus:border-indigo-500/50
+
                   "
                 />
               </Field>
@@ -888,18 +1124,28 @@ export default function OpportunityCreate() {
 
           <section
             className="
+
               mb-5
+
               rounded-2xl
+
               border
+
               border-white/10
+
               bg-gray-900/70
+
               p-5
+
               sm:p-6
+
             "
           >
             <SectionHeader
               icon={<User className="h-5 w-5" />}
+
               title="Relacionamentos"
+
               description="Defina o lead, imóvel e corretor responsável."
             />
 
@@ -909,8 +1155,11 @@ export default function OpportunityCreate() {
               <Field label="Lead" required error={fieldErrors.lead}>
                 <Select
                   value={form.lead}
+
                   onChange={(e) => handleLeadChange(e.target.value)}
+
                   loading={loadingLeads}
+
                   error={fieldErrors.lead}
                 >
                   <option value="">Selecione o lead</option>
@@ -927,15 +1176,25 @@ export default function OpportunityCreate() {
                 {selectedLead && (
                   <div
                     className="
+
                       mt-2
+
                       rounded-lg
+
                       border
+
                       border-white/5
+
                       bg-gray-950/60
+
                       px-3
+
                       py-2
+
                       text-xs
+
                       text-gray-500
+
                     "
                   >
                     {selectedLead.email || 'Sem e-mail'}
@@ -954,25 +1213,36 @@ export default function OpportunityCreate() {
               <Field label="Imóvel" hint="Opcional">
                 <PropertySelect
                   value={form.property}
+
                   onChange={(value) => handleChange('property', value)}
+
                   properties={properties}
+
                   loading={loadingProperties}
                 />
 
                 {selectedProperty && (
                   <div
                     className="
+
                       mt-3
+
                       overflow-hidden
+
                       rounded-xl
+
                       border
+
                       border-white/5
+
                       bg-gray-950/60
+
                     "
                   >
                     <div className="flex items-center gap-3 p-3">
                       <PropertyThumbnail
                         property={selectedProperty}
+
                         size="small"
                       />
 
@@ -1000,15 +1270,23 @@ export default function OpportunityCreate() {
 
               <Field
                 label="Corretor responsável"
+
                 required
+
                 error={fieldErrors.assignedTo}
               >
                 <BrokerSelect
                   value={form.assignedTo}
+
                   onChange={(value) => handleChange('assignedTo', value)}
+
                   brokers={brokers}
+
                   loading={loadingBrokers}
+
                   error={fieldErrors.assignedTo}
+
+                  disabled={!isAdmin}
                 />
               </Field>
             </div>
@@ -1018,18 +1296,28 @@ export default function OpportunityCreate() {
 
           <section
             className="
+
               mb-5
+
               rounded-2xl
+
               border
+
               border-white/10
+
               bg-gray-900/70
+
               p-5
+
               sm:p-6
+
             "
           >
             <SectionHeader
               icon={<Target className="h-5 w-5" />}
+
               title="Negócio"
+
               description="Configure o estágio e a prioridade comercial."
             />
 
@@ -1037,6 +1325,7 @@ export default function OpportunityCreate() {
               <Field label="Tipo" required>
                 <Select
                   value={form.type}
+
                   onChange={(e) => handleChange('type', e.target.value)}
                 >
                   {TYPES.map((item) => (
@@ -1050,7 +1339,9 @@ export default function OpportunityCreate() {
               <Field label="Estágio" required error={fieldErrors.stage}>
                 <Select
                   value={form.stage}
+
                   onChange={(e) => handleChange('stage', e.target.value)}
+
                   error={fieldErrors.stage}
                 >
                   {STAGES.map((item) => (
@@ -1064,6 +1355,7 @@ export default function OpportunityCreate() {
               <Field label="Temperatura" required>
                 <Select
                   value={form.temperature}
+
                   onChange={(e) => handleChange('temperature', e.target.value)}
                 >
                   {TEMPERATURES.map((item) => (
@@ -1077,6 +1369,7 @@ export default function OpportunityCreate() {
               <Field label="Prioridade" required>
                 <Select
                   value={form.priority}
+
                   onChange={(e) => handleChange('priority', e.target.value)}
                 >
                   {PRIORITIES.map((item) => (
@@ -1093,18 +1386,28 @@ export default function OpportunityCreate() {
 
           <section
             className="
+
               mb-5
+
               rounded-2xl
+
               border
+
               border-white/10
+
               bg-gray-900/70
+
               p-5
+
               sm:p-6
+
             "
           >
             <SectionHeader
               icon={<DollarSign className="h-5 w-5" />}
+
               title="Valores"
+
               description="Defina os valores e a probabilidade de fechamento."
             />
 
@@ -1112,7 +1415,9 @@ export default function OpportunityCreate() {
               <Field label="Valor estimado" hint="Opcional">
                 <MoneyInput
                   value={form.estimatedValue}
+
                   onChange={(value) => handleChange('estimatedValue', value)}
+
                   placeholder="0,00"
                 />
               </Field>
@@ -1120,9 +1425,11 @@ export default function OpportunityCreate() {
               <Field label="Valor esperado de fechamento" hint="Opcional">
                 <MoneyInput
                   value={form.expectedClosingValue}
+
                   onChange={(value) =>
                     handleChange('expectedClosingValue', value)
                   }
+
                   placeholder="0,00"
                 />
               </Field>
@@ -1131,24 +1438,37 @@ export default function OpportunityCreate() {
                 <div className="relative">
                   <input
                     type="number"
+
                     min="0"
+
                     max="100"
+
                     value={form.probability}
+
                     onChange={(e) =>
                       handleChange('probability', e.target.value)
                     }
+
                     className={inputClass(fieldErrors.probability) + ' pr-10'}
                   />
 
                   <span
                     className="
+
                       pointer-events-none
+
                       absolute
+
                       right-3
+
                       top-1/2
+
                       -translate-y-1/2
+
                       text-sm
+
                       text-gray-500
+
                     "
                   >
                     %
@@ -1162,18 +1482,28 @@ export default function OpportunityCreate() {
 
           <section
             className="
+
               mb-5
+
               rounded-2xl
+
               border
+
               border-white/10
+
               bg-gray-900/70
+
               p-5
+
               sm:p-6
+
             "
           >
             <SectionHeader
               icon={<Calendar className="h-5 w-5" />}
+
               title="Planejamento"
+
               description="Defina quando o negócio deve avançar."
             />
 
@@ -1181,6 +1511,7 @@ export default function OpportunityCreate() {
               <Field label="Previsão de fechamento" hint="Opcional">
                 <DateInput
                   value={form.expectedClosingDate}
+
                   onChange={(value) =>
                     handleChange('expectedClosingDate', value)
                   }
@@ -1190,9 +1521,13 @@ export default function OpportunityCreate() {
               <Field label="Próxima ação" hint="Opcional">
                 <input
                   type="text"
+
                   value={form.nextAction}
+
                   onChange={(e) => handleChange('nextAction', e.target.value)}
+
                   placeholder="Ex.: Ligar para confirmar visita"
+
                   className={inputClass()}
                 />
               </Field>
@@ -1200,6 +1535,7 @@ export default function OpportunityCreate() {
               <Field label="Data da próxima ação" hint="Opcional">
                 <DateTimeInput
                   value={form.nextActionAt}
+
                   onChange={(value) => handleChange('nextActionAt', value)}
                 />
               </Field>
@@ -1210,41 +1546,69 @@ export default function OpportunityCreate() {
 
           <section
             className="
+
               mb-6
+
               rounded-2xl
+
               border
+
               border-white/10
+
               bg-gray-900/70
+
               p-5
+
               sm:p-6
+
             "
           >
             <SectionHeader
               icon={<FileText className="h-5 w-5" />}
+
               title="Observações"
+
               description="Registre informações importantes sobre o negócio."
             />
 
             <div className="mt-6">
               <textarea
                 value={form.notes}
+
                 onChange={(e) => handleChange('notes', e.target.value)}
+
                 rows={6}
+
                 placeholder="Observações internas da oportunidade..."
+
                 className="
+
                   w-full
+
                   rounded-xl
+
                   border
+
                   border-white/10
+
                   bg-gray-950
+
                   px-4
+
                   py-3
+
                   text-sm
+
                   text-white
+
                   outline-none
+
                   transition
+
                   placeholder:text-gray-600
+
                   focus:border-indigo-500/50
+
                 "
               />
             </div>
@@ -1254,35 +1618,62 @@ export default function OpportunityCreate() {
 
           <div
             className="
+
               flex
+
               flex-col-reverse
+
               gap-3
+
               sm:flex-row
+
               sm:justify-end
+
             "
           >
             <button
               type="button"
+
               onClick={() => navigate('/opportunities')}
+
               disabled={loading}
+
               className="
+
                 inline-flex
+
                 items-center
+
                 justify-center
+
                 rounded-xl
+
                 border
+
                 border-white/10
+
                 bg-gray-900
+
                 px-5
+
                 py-3
+
                 text-sm
+
                 font-semibold
+
                 text-gray-300
+
                 transition
+
                 hover:bg-gray-800
+
                 hover:text-white
+
                 disabled:cursor-not-allowed
+
                 disabled:opacity-50
+
               "
             >
               Cancelar
@@ -1290,25 +1681,45 @@ export default function OpportunityCreate() {
 
             <button
               type="submit"
+
               disabled={loading}
+
               className="
+
                 inline-flex
+
                 items-center
+
                 justify-center
+
                 gap-2
+
                 rounded-xl
+
                 bg-indigo-500
+
                 px-6
+
                 py-3
+
                 text-sm
+
                 font-semibold
+
                 text-white
+
                 shadow-lg
+
                 shadow-indigo-500/20
+
                 transition
+
                 hover:bg-indigo-400
+
                 disabled:cursor-not-allowed
+
                 disabled:opacity-50
+
               "
             >
               {loading ? (
@@ -1331,19 +1742,30 @@ export default function OpportunityCreate() {
 }
 
 /**
+
  * =========================================================
+
  * BROKER SELECT
+
  * =========================================================
+
  */
 
 function BrokerSelect({
   value,
+
   onChange,
+
   brokers = [],
+
   loading = false,
+
   error = '',
+
+  disabled = false,
 }) {
   const [open, setOpen] = useState(false);
+
   const [search, setSearch] = useState('');
 
   const containerRef = useRef(null);
@@ -1385,7 +1807,9 @@ function BrokerSelect({
 
   const handleSelect = (broker) => {
     onChange(broker._id);
+
     setOpen(false);
+
     setSearch('');
   };
 
@@ -1393,25 +1817,45 @@ function BrokerSelect({
     <div ref={containerRef} className="relative">
       <button
         type="button"
-        onClick={() => !loading && setOpen((prev) => !prev)}
-        disabled={loading}
+
+        onClick={() => !loading && !disabled && setOpen((prev) => !prev)}
+
+        disabled={loading || disabled}
+
         className={`
+
           flex
+
           h-11
+
           w-full
+
           items-center
+
           justify-between
+
           rounded-xl
+
           border
+
           bg-gray-950
+
           px-3
+
           text-left
+
           outline-none
+
           transition
+
           disabled:cursor-not-allowed
+
           disabled:opacity-60
+
           ${error ? 'border-red-500/40' : 'border-white/10'}
+
           ${open ? 'border-indigo-500/50' : ''}
+
         `}
       >
         {loading ? (
@@ -1441,12 +1885,19 @@ function BrokerSelect({
 
         <ChevronDown
           className={`
+
             h-4
+
             w-4
+
             shrink-0
+
             text-gray-500
+
             transition
+
             ${open ? 'rotate-180' : ''}
+
           `}
         />
       </button>
@@ -1454,17 +1905,29 @@ function BrokerSelect({
       {open && (
         <div
           className="
+
             absolute
+
             z-50
+
             mt-2
+
             w-full
+
             overflow-hidden
+
             rounded-xl
+
             border
+
             border-white/10
+
             bg-gray-900
+
             shadow-2xl
+
             shadow-black/40
+
           "
         >
           {/* SEARCH */}
@@ -1473,37 +1936,65 @@ function BrokerSelect({
             <div className="relative">
               <Search
                 className="
+
                   pointer-events-none
+
                   absolute
+
                   left-3
+
                   top-1/2
+
                   h-4
+
                   w-4
+
                   -translate-y-1/2
+
                   text-gray-500
+
                 "
               />
 
               <input
                 type="text"
+
                 value={search}
+
                 onChange={(e) => setSearch(e.target.value)}
+
                 autoFocus
+
                 placeholder="Buscar corretor..."
+
                 className="
+
                   h-10
+
                   w-full
+
                   rounded-lg
+
                   border
+
                   border-white/5
+
                   bg-gray-950
+
                   pl-9
+
                   pr-3
+
                   text-sm
+
                   text-white
+
                   outline-none
+
                   placeholder:text-gray-600
+
                   focus:border-indigo-500/40
+
                 "
               />
             </div>
@@ -1523,19 +2014,33 @@ function BrokerSelect({
                 return (
                   <button
                     key={broker._id}
+
                     type="button"
+
                     onClick={() => handleSelect(broker)}
+
                     className="
+
                       flex
+
                       w-full
+
                       items-center
+
                       gap-3
+
                       rounded-lg
+
                       px-3
+
                       py-2.5
+
                       text-left
+
                       transition
+
                       hover:bg-white/5
+
                     "
                   >
                     <BrokerAvatar broker={broker} size="medium" />
@@ -1575,15 +2080,21 @@ function BrokerSelect({
 }
 
 /**
+
  * =========================================================
+
  * BROKER AVATAR
+
  * =========================================================
+
  */
 
 function BrokerAvatar({ broker, size = 'medium' }) {
   const sizes = {
     small: 'h-8 w-8 text-[10px]',
+
     medium: 'h-10 w-10 text-xs',
+
     large: 'h-12 w-12 text-sm',
   };
 
@@ -1593,14 +2104,23 @@ function BrokerAvatar({ broker, size = 'medium' }) {
     return (
       <img
         src={broker.avatar}
+
         alt={broker.name || 'Corretor'}
+
         className={`
+
           ${className}
+
           shrink-0
+
           rounded-full
+
           border
+
           border-white/10
+
           object-cover
+
         `}
       />
     );
@@ -1609,17 +2129,29 @@ function BrokerAvatar({ broker, size = 'medium' }) {
   return (
     <div
       className={`
+
         ${className}
+
         flex
+
         shrink-0
+
         items-center
+
         justify-center
+
         rounded-full
+
         border
+
         border-indigo-400/20
+
         bg-indigo-500/10
+
         font-semibold
+
         text-indigo-300
+
       `}
     >
       {getInitials(broker?.name)}
@@ -1628,13 +2160,18 @@ function BrokerAvatar({ broker, size = 'medium' }) {
 }
 
 /**
+
  * =========================================================
+
  * PROPERTY SELECT
+
  * =========================================================
+
  */
 
 function PropertySelect({ value, onChange, properties = [], loading = false }) {
   const [open, setOpen] = useState(false);
+
   const [search, setSearch] = useState('');
 
   const containerRef = useRef(null);
@@ -1678,26 +2215,47 @@ function PropertySelect({ value, onChange, properties = [], loading = false }) {
     <div ref={containerRef} className="relative">
       <button
         type="button"
+
         onClick={() => !loading && setOpen((prev) => !prev)}
+
         disabled={loading}
+
         className={`
+
           flex
+
           h-11
+
           w-full
+
           items-center
+
           justify-between
+
           rounded-xl
+
           border
+
           border-white/10
+
           bg-gray-950
+
           px-3
+
           text-left
+
           outline-none
+
           transition
+
           hover:border-white/20
+
           disabled:cursor-not-allowed
+
           disabled:opacity-60
+
           ${open ? 'border-indigo-500/50' : ''}
+
         `}
       >
         {loading ? (
@@ -1727,12 +2285,19 @@ function PropertySelect({ value, onChange, properties = [], loading = false }) {
 
         <ChevronDown
           className={`
+
             h-4
+
             w-4
+
             shrink-0
+
             text-gray-500
+
             transition
+
             ${open ? 'rotate-180' : ''}
+
           `}
         />
       </button>
@@ -1740,17 +2305,29 @@ function PropertySelect({ value, onChange, properties = [], loading = false }) {
       {open && (
         <div
           className="
+
             absolute
+
             z-50
+
             mt-2
+
             w-full
+
             overflow-hidden
+
             rounded-xl
+
             border
+
             border-white/10
+
             bg-gray-900
+
             shadow-2xl
+
             shadow-black/40
+
           "
         >
           {/* SEARCH */}
@@ -1759,37 +2336,65 @@ function PropertySelect({ value, onChange, properties = [], loading = false }) {
             <div className="relative">
               <Search
                 className="
+
                   pointer-events-none
+
                   absolute
+
                   left-3
+
                   top-1/2
+
                   h-4
+
                   w-4
+
                   -translate-y-1/2
+
                   text-gray-500
+
                 "
               />
 
               <input
                 type="text"
+
                 value={search}
+
                 onChange={(e) => setSearch(e.target.value)}
+
                 autoFocus
+
                 placeholder="Buscar imóvel..."
+
                 className="
+
                   h-10
+
                   w-full
+
                   rounded-lg
+
                   border
+
                   border-white/5
+
                   bg-gray-950
+
                   pl-9
+
                   pr-3
+
                   text-sm
+
                   text-white
+
                   outline-none
+
                   placeholder:text-gray-600
+
                   focus:border-indigo-500/40
+
                 "
               />
             </div>
@@ -1799,37 +2404,64 @@ function PropertySelect({ value, onChange, properties = [], loading = false }) {
 
           <button
             type="button"
+
             onClick={() => {
               onChange('');
+
               setOpen(false);
+
               setSearch('');
             }}
+
             className="
+
               flex
+
               w-full
+
               items-center
+
               gap-3
+
               border-b
+
               border-white/5
+
               px-3
+
               py-3
+
               text-left
+
               text-sm
+
               text-gray-400
+
               transition
+
               hover:bg-white/5
+
               hover:text-white
+
             "
           >
             <div
               className="
+
                 flex
+
                 h-9
+
                 w-9
+
                 items-center
+
                 justify-center
+
                 rounded-lg
+
                 bg-gray-800
+
               "
             >
               <Home className="h-4 w-4" />
@@ -1855,24 +2487,39 @@ function PropertySelect({ value, onChange, properties = [], loading = false }) {
                 return (
                   <button
                     key={property._id}
+
                     type="button"
+
                     onClick={() => {
                       onChange(property._id);
 
                       setOpen(false);
+
                       setSearch('');
                     }}
+
                     className="
+
                         flex
+
                         w-full
+
                         items-center
+
                         gap-3
+
                         rounded-lg
+
                         px-3
+
                         py-2.5
+
                         text-left
+
                         transition
+
                         hover:bg-white/5
+
                       "
                   >
                     <PropertyThumbnail property={property} size="medium" />
@@ -1906,9 +2553,13 @@ function PropertySelect({ value, onChange, properties = [], loading = false }) {
 }
 
 /**
+
  * =========================================================
+
  * PROPERTY THUMBNAIL
+
  * =========================================================
+
  */
 
 function PropertyThumbnail({ property, size = 'medium' }) {
@@ -1916,7 +2567,9 @@ function PropertyThumbnail({ property, size = 'medium' }) {
 
   const sizes = {
     small: 'h-8 w-10',
+
     medium: 'h-12 w-14',
+
     large: 'h-16 w-20',
   };
 
@@ -1926,14 +2579,23 @@ function PropertyThumbnail({ property, size = 'medium' }) {
     return (
       <img
         src={image}
+
         alt={getPropertyName(property)}
+
         className={`
+
           ${className}
+
           shrink-0
+
           rounded-lg
+
           border
+
           border-white/10
+
           object-cover
+
         `}
       />
     );
@@ -1942,15 +2604,25 @@ function PropertyThumbnail({ property, size = 'medium' }) {
   return (
     <div
       className={`
+
         ${className}
+
         flex
+
         shrink-0
+
         items-center
+
         justify-center
+
         rounded-lg
+
         border
+
         border-white/5
+
         bg-gray-800
+
       `}
     >
       <Home className="h-4 w-4 text-gray-600" />
@@ -1959,9 +2631,13 @@ function PropertyThumbnail({ property, size = 'medium' }) {
 }
 
 /**
+
  * =========================================================
+
  * SECTION HEADER
+
  * =========================================================
+
  */
 
 function SectionHeader({ icon, title, description }) {
@@ -1969,15 +2645,25 @@ function SectionHeader({ icon, title, description }) {
     <div className="flex items-start gap-3">
       <div
         className="
+
           flex
+
           h-10
+
           w-10
+
           shrink-0
+
           items-center
+
           justify-center
+
           rounded-xl
+
           bg-indigo-500/10
+
           text-indigo-400
+
         "
       >
         {icon}
@@ -1993,9 +2679,13 @@ function SectionHeader({ icon, title, description }) {
 }
 
 /**
+
  * =========================================================
+
  * FIELD
+
  * =========================================================
+
  */
 
 function Field({ label, required = false, hint = '', error = '', children }) {
@@ -2019,9 +2709,13 @@ function Field({ label, required = false, hint = '', error = '', children }) {
 }
 
 /**
+
  * =========================================================
+
  * SELECT
+
  * =========================================================
+
  */
 
 function Select({ value, onChange, children, loading = false, error = '' }) {
@@ -2029,25 +2723,45 @@ function Select({ value, onChange, children, loading = false, error = '' }) {
     <div className="relative">
       <select
         value={value}
+
         onChange={onChange}
+
         disabled={loading}
+
         className={`
+
           h-11
+
           w-full
+
           appearance-none
+
           rounded-xl
+
           border
+
           bg-gray-950
+
           px-3
+
           pr-10
+
           text-sm
+
           text-gray-300
+
           outline-none
+
           transition
+
           focus:border-indigo-500/50
+
           disabled:cursor-not-allowed
+
           disabled:opacity-60
+
           ${error ? 'border-red-500/40' : 'border-white/10'}
+
         `}
       >
         {children}
@@ -2056,28 +2770,47 @@ function Select({ value, onChange, children, loading = false, error = '' }) {
       {loading ? (
         <Loader2
           className="
+
             pointer-events-none
+
             absolute
+
             right-3
+
             top-1/2
+
             h-4
+
             w-4
+
             -translate-y-1/2
+
             animate-spin
+
             text-gray-500
+
           "
         />
       ) : (
         <ChevronDown
           className="
+
             pointer-events-none
+
             absolute
+
             right-3
+
             top-1/2
+
             h-4
+
             w-4
+
             -translate-y-1/2
+
             text-gray-500
+
           "
         />
       )}
@@ -2086,9 +2819,13 @@ function Select({ value, onChange, children, loading = false, error = '' }) {
 }
 
 /**
+
  * =========================================================
+
  * MONEY INPUT
+
  * =========================================================
+
  */
 
 function MoneyInput({ value, onChange, placeholder = '0,00' }) {
@@ -2096,13 +2833,21 @@ function MoneyInput({ value, onChange, placeholder = '0,00' }) {
     <div className="relative">
       <span
         className="
+
           pointer-events-none
+
           absolute
+
           left-3
+
           top-1/2
+
           -translate-y-1/2
+
           text-sm
+
           text-gray-600
+
         "
       >
         R$
@@ -2110,25 +2855,45 @@ function MoneyInput({ value, onChange, placeholder = '0,00' }) {
 
       <input
         type="text"
+
         inputMode="decimal"
+
         value={value}
+
         onChange={(e) => onChange(formatCurrencyInput(e.target.value))}
+
         placeholder={placeholder}
+
         className="
+
           h-11
+
           w-full
+
           rounded-xl
+
           border
+
           border-white/10
+
           bg-gray-950
+
           pl-10
+
           pr-3
+
           text-sm
+
           text-white
+
           outline-none
+
           transition
+
           placeholder:text-gray-600
+
           focus:border-indigo-500/50
+
         "
       />
     </div>
@@ -2136,9 +2901,13 @@ function MoneyInput({ value, onChange, placeholder = '0,00' }) {
 }
 
 /**
+
  * =========================================================
+
  * DATE INPUT
+
  * =========================================================
+
  */
 
 function DateInput({ value, onChange }) {
@@ -2146,35 +2915,61 @@ function DateInput({ value, onChange }) {
     <div className="relative">
       <Calendar
         className="
+
           pointer-events-none
+
           absolute
+
           left-3
+
           top-1/2
+
           h-4
+
           w-4
+
           -translate-y-1/2
+
           text-gray-500
+
         "
       />
 
       <input
         type="date"
+
         value={value}
+
         onChange={(e) => onChange(e.target.value)}
+
         className="
+
           h-11
+
           w-full
+
           rounded-xl
+
           border
+
           border-white/10
+
           bg-gray-950
+
           px-3
+
           pl-10
+
           text-sm
+
           text-gray-300
+
           outline-none
+
           transition
+
           focus:border-indigo-500/50
+
         "
       />
     </div>
@@ -2182,9 +2977,13 @@ function DateInput({ value, onChange }) {
 }
 
 /**
+
  * =========================================================
+
  * DATETIME INPUT
+
  * =========================================================
+
  */
 
 function DateTimeInput({ value, onChange }) {
@@ -2192,35 +2991,61 @@ function DateTimeInput({ value, onChange }) {
     <div className="relative">
       <Calendar
         className="
+
           pointer-events-none
+
           absolute
+
           left-3
+
           top-1/2
+
           h-4
+
           w-4
+
           -translate-y-1/2
+
           text-gray-500
+
         "
       />
 
       <input
         type="datetime-local"
+
         value={value}
+
         onChange={(e) => onChange(e.target.value)}
+
         className="
+
           h-11
+
           w-full
+
           rounded-xl
+
           border
+
           border-white/10
+
           bg-gray-950
+
           px-3
+
           pl-10
+
           text-sm
+
           text-gray-300
+
           outline-none
+
           transition
+
           focus:border-indigo-500/50
+
         "
       />
     </div>
@@ -2228,25 +3053,43 @@ function DateTimeInput({ value, onChange }) {
 }
 
 /**
+
  * =========================================================
+
  * INPUT CLASS
+
  * =========================================================
+
  */
 
 function inputClass(error = '') {
   return `
+
     h-11
+
     w-full
+
     rounded-xl
+
     border
+
     bg-gray-950
+
     px-4
+
     text-sm
+
     text-white
+
     outline-none
+
     transition
+
     placeholder:text-gray-600
+
     focus:border-indigo-500/50
+
     ${error ? 'border-red-500/40' : 'border-white/10'}
+
   `;
 }
