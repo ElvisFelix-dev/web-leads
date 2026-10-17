@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import QRCode from 'qrcode';
 import {
   FaWhatsapp,
@@ -10,6 +11,7 @@ import {
   FaShieldAlt,
   FaQrcode,
   FaArrowRight,
+  FaArrowLeft,
   FaClock,
   FaWifi,
 } from 'react-icons/fa';
@@ -38,13 +40,19 @@ const STEPS = [
   },
 ];
 
-const ACCENT = {
-  border: 'border-blue-500/20',
-  background: 'bg-blue-500/[0.08]',
-  text: 'text-blue-400',
-};
-
 export default function WhatsAppQrCode() {
+  const navigate = useNavigate();
+
+  const handleBack = useCallback(() => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+
+    // Destino de segurança quando a página é aberta diretamente.
+    navigate('/dashboard');
+  }, [navigate]);
+
   const [qrCode, setQrCode] = useState('');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
@@ -215,11 +223,22 @@ export default function WhatsAppQrCode() {
         {/* Header */}
         <header className="mb-8 flex flex-col gap-5 border-b border-white/[0.07] pb-7 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3.5">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-blue-500/25 bg-blue-600/10 shadow-[0_0_35px_rgba(59,130,246,0.12)]">
+            <button
+              type="button"
+              onClick={handleBack}
+              aria-label="Voltar para a página anterior"
+              title="Voltar"
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm font-medium text-slate-300 transition hover:border-blue-400/30 hover:bg-blue-500/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+            >
+              <FaArrowLeft className="text-xs" />
+              <span>Voltar</span>
+            </button>
+
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-blue-500/25 bg-blue-600/10 shadow-[0_0_35px_rgba(59,130,246,0.12)]">
               <FaWhatsapp className="text-[27px] text-blue-400" />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <p className="text-lg font-bold tracking-tight text-white">
                 Leads <span className="text-blue-400">Na Mão</span>
               </p>
