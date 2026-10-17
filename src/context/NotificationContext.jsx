@@ -18,7 +18,9 @@ export const useNotifications = () => {
   const context = useContext(NotificationContext);
 
   if (!context) {
-    throw new Error('useNotifications deve ser usado dentro de NotificationProvider.');
+    throw new Error(
+      'useNotifications deve ser usado dentro de NotificationProvider.',
+    );
   }
 
   return context;
@@ -44,7 +46,10 @@ export function NotificationProvider({ children }) {
       setUnreadCount(count);
       return count;
     } catch (error) {
-      console.error('[Notifications] Não foi possível carregar o contador:', error);
+      console.error(
+        '[Notifications] Não foi possível carregar o contador:',
+        error,
+      );
       return null;
     }
   }, [user?._id]);
@@ -62,6 +67,12 @@ export function NotificationProvider({ children }) {
 
   useEffect(() => {
     if (!socket || !user?._id) return undefined;
+
+    // ✅ Entrar na sala correta de notificações (admins ou broker_{id})
+    socket.emit('join_notifications', {
+      role: user.role,
+      userId: user._id,
+    });
 
     const handleNewNotification = (notification) => {
       if (!notification || typeof notification !== 'object') return;
@@ -83,7 +94,8 @@ export function NotificationProvider({ children }) {
       setUnreadCount((previous) => previous + 1);
 
       const title = notification.title || 'Nova notificação';
-      const message = notification.message || 'Você recebeu uma atualização no CRM.';
+      const message =
+        notification.message || 'Você recebeu uma atualização no CRM.';
       toast.info(
         <button
           type="button"
@@ -95,7 +107,9 @@ export function NotificationProvider({ children }) {
         >
           <span className="block font-semibold">{title}</span>
           <span className="mt-1 block text-sm">{message}</span>
-          <span className="mt-2 block text-xs opacity-70">Clique para abrir</span>
+          <span className="mt-2 block text-xs opacity-70">
+            Clique para abrir
+          </span>
         </button>,
         { autoClose: 6500, toastId: id || undefined },
       );
@@ -106,7 +120,7 @@ export function NotificationProvider({ children }) {
     return () => {
       socket.off('notification:new', handleNewNotification);
     };
-  }, [socket, user?._id, navigate]);
+  }, [socket, user?._id, user?.role, navigate]);
 
   const value = {
     unreadCount,
