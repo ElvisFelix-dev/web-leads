@@ -23,6 +23,7 @@ import {
   TrendingUp,
   Users,
   Handshake,
+  Percent,
   Building2,
   BriefcaseBusiness,
   Copy,
@@ -403,8 +404,48 @@ export default function BrokerDetails() {
           </div>
         </section>
 
-        {/* Cards de estatísticas */}
-        <BrokerStats stats={stats} />
+        {/* INDICADORES */}
+        <section className="mt-7">
+          <SectionHeading
+            eyebrow="Visão geral"
+            title="Indicadores de desempenho"
+            description="Acompanhe os principais resultados deste corretor."
+          />
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Metric
+              icon={<Users size={19} />}
+              title="Leads recebidos"
+              value={formatNumber(stats.leads ?? 0)}
+              description="Volume de leads registrados"
+              accent="blue"
+            />
+
+            <Metric
+              icon={<CalendarCheck size={19} />}
+              title="Visitas realizadas"
+              value={formatNumber(stats.visits ?? 0)}
+              description="Atividade comercial"
+              accent="violet"
+            />
+
+            <Metric
+              icon={<Handshake size={19} />}
+              title="Negócios fechados"
+              value={formatNumber(stats.deals ?? 0)}
+              description="Vendas concluídas registradas no CRM"
+              accent="emerald"
+            />
+
+            <Metric
+              icon={<DollarSign size={19} />}
+              title="Receita"
+              value={formatMoney(stats.revenue ?? 0)}
+              description="Valor total das vendas concluídas"
+              accent="amber"
+            />
+          </div>
+        </section>
 
         {/* GRÁFICO */}
         <section className="mt-8">
@@ -447,16 +488,72 @@ export default function BrokerDetails() {
               icon={<TrendingUp size={18} />}
             >
               <Info
-                icon={<TrendingUp size={17} />}
-                label="Taxa de conversão"
-                value={`${formatNumber(stats.conversionRate)}%`}
+                icon={<Users size={17} />}
+                label="Leads recebidos"
+                value={formatNumber(stats.leads ?? 0)}
               />
 
               <Info
-                icon={<Target size={17} />}
-                label="Meta mensal"
-                value={formatNumber(settings.monthlyGoal)}
+                icon={<CalendarCheck size={17} />}
+                label="Visitas realizadas"
+                value={formatNumber(stats.visits ?? 0)}
               />
+
+              <Info
+                icon={<Handshake size={17} />}
+                label="Negócios fechados"
+                value={formatNumber(stats.deals ?? 0)}
+              />
+
+              <Info
+                icon={<DollarSign size={17} />}
+                label="Receita gerada"
+                value={formatCurrency(stats.revenue ?? 0)}
+              />
+
+              <Info
+                icon={<Percent size={17} />}
+                label="Taxa de conversão"
+                value={`${formatNumber(stats.conversionRate ?? 0)}%`}
+              />
+
+              <div className="space-y-2 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <Target size={17} />
+                    <span className="text-xs">Meta mensal de negócios</span>
+                  </div>
+                  <span className="text-xs font-semibold text-white">
+                    {formatNumber(stats.dealsThisMonth ?? 0)} /{' '}
+                    {formatNumber(
+                      stats.monthlyGoal ?? settings.monthlyGoal ?? 0,
+                    )}
+                  </span>
+                </div>
+
+                <div
+                  className="h-2 overflow-hidden rounded-full bg-slate-800"
+                  role="progressbar"
+                  aria-label="Progresso da meta mensal de negócios"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.min(
+                    100,
+                    Math.max(0, Number(stats.goalProgress) || 0),
+                  )}
+                >
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-500"
+                    style={{
+                      width: `${Math.min(100, Math.max(0, Number(stats.goalProgress) || 0))}%`,
+                    }}
+                  />
+                </div>
+
+                <p className="text-right text-xs text-slate-500">
+                  {formatNumber(stats.goalProgress ?? 0)}% da meta atingida
+                </p>
+              </div>
 
               <Info
                 icon={<Award size={17} />}
@@ -866,6 +963,14 @@ function formatNumber(value) {
   return new Intl.NumberFormat('pt-BR', {
     maximumFractionDigits: 2,
   }).format(Number.isFinite(number) ? number : 0);
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    maximumFractionDigits: 2,
+  }).format(Number(value) || 0);
 }
 
 function formatMoney(value) {

@@ -1,4 +1,3 @@
-// src/components/dashboard/AdminStats.jsx
 import {
   Users,
   Home,
@@ -18,6 +17,10 @@ export default function AdminStats({ stats = {}, loading = false }) {
   const totalLeads = stats?.leads ?? 0;
   const leadsDistribuidos = stats?.leadsDistribuidos ?? 0;
   const leadsPendentes = stats?.leadsPendentes ?? 0;
+
+  // Compatibilidade com nomes usados por diferentes versões do backend.
+  const totalVisitas =
+    stats?.visitas ?? stats?.visits ?? stats?.totalVisitas ?? 0;
 
   // Taxa de distribuição
   const distribuicaoPercentual =
@@ -89,7 +92,7 @@ export default function AdminStats({ stats = {}, loading = false }) {
     {
       id: 'visitas',
       title: 'Visitas',
-      value: stats.visitas || 0,
+      value: totalVisitas,
       icon: CalendarCheck,
       color: 'from-purple-600/20 to-purple-900/20',
       iconColor: 'text-purple-400',
@@ -151,7 +154,7 @@ export default function AdminStats({ stats = {}, loading = false }) {
   }
 
   // Sem dados
-  if (Object.keys(stats).length === 0 || totalLeads === 0) {
+  if (Object.keys(stats).length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[200px] bg-slate-900 border border-slate-800 rounded-2xl p-10">
         <AlertCircle size={48} className="text-slate-600 mb-4" />
