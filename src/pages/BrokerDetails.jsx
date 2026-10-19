@@ -32,6 +32,7 @@ import { toast } from 'react-toastify';
 
 import BrokerPerformanceChart from '../components/brokerDashboard/BrokerPerformanceChart';
 import BrokerLatestLeads from '../components/brokerDashboard/BrokerLatestLeads';
+import BrokerStats from '../components/brokerDashboard/BrokerStats';
 
 import api from '../service/api';
 
@@ -402,48 +403,8 @@ export default function BrokerDetails() {
           </div>
         </section>
 
-        {/* INDICADORES */}
-        <section className="mt-7">
-          <SectionHeading
-            eyebrow="Visão geral"
-            title="Indicadores de desempenho"
-            description="Acompanhe os principais resultados deste corretor."
-          />
-
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Metric
-              icon={<Users size={19} />}
-              title="Leads recebidos"
-              value={formatNumber(stats.leads)}
-              description="Volume de leads registrados"
-              accent="blue"
-            />
-
-            <Metric
-              icon={<CalendarCheck size={19} />}
-              title="Visitas realizadas"
-              value={formatNumber(stats.visits)}
-              description="Atividade comercial"
-              accent="violet"
-            />
-
-            <Metric
-              icon={<Handshake size={19} />}
-              title="Negócios fechados"
-              value={formatNumber(stats.deals)}
-              description="Conversões registradas"
-              accent="emerald"
-            />
-
-            <Metric
-              icon={<DollarSign size={19} />}
-              title="Receita"
-              value={formatMoney(stats.revenue)}
-              description="Valor informado pelo sistema"
-              accent="amber"
-            />
-          </div>
-        </section>
+        {/* Cards de estatísticas */}
+        <BrokerStats stats={stats} />
 
         {/* GRÁFICO */}
         <section className="mt-8">
