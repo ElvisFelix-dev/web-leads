@@ -25,6 +25,8 @@ import {
   FaLink,
   FaCalendarAlt,
   FaRegComments,
+  FaMicrophone,
+  FaStop,
 } from 'react-icons/fa';
 
 import { GifPicker } from 'gif-picker-react';
@@ -32,6 +34,7 @@ import { Klipy } from 'gif-picker-react/providers/klipy';
 
 import { useChat } from '../context/ChatContext';
 import { UserContext } from '../context/UserContext';
+import api from '../service/api';
 
 const EMOJIS = [
   '😀',
@@ -139,6 +142,10 @@ export default function ChatPage() {
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [sending, setSending] = useState(false);
   const [creatingConversation, setCreatingConversation] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [mediaError, setMediaError] = useState('');
 
   const messagesContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -147,6 +154,11 @@ export default function ChatPage() {
   const typingTimeoutRef = useRef(null);
   const initialScrollConversationRef = useRef(null);
   const previousMessagesCountRef = useRef(0);
+  const fileInputRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const recordingStreamRef = useRef(null);
+  const recordingTimerRef = useRef(null);
 
   // ============================================================
   // FORMATADORES E HELPERS
@@ -875,6 +887,213 @@ export default function ChatPage() {
       setSending(false);
     }
   };
+
+  // ============================================================
+  // UPLOAD DE ARQUIVOS, IMAGENS, ÁUDIO E VÍDEO
+  // O backend recebe o arquivo em POST /api/chat/media.
+  // Áudios são convertidos para OGG/Opus no backend.
+  // ============================================================
+
+  const formatFileSize = (bytes = 0) => {
+    if (!Number(bytes)) return '0 KB';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const index = Math.min(
+      Math.floor(Math.log(bytes) / Math.log(1024)),
+      units.length - 1,
+    );
+    return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+  };
+
+  const uploadAndSendMedia = async (file) => {
+    if (!file || !currentConversation?._id || sending || uploadingMedia) return;
+    setMediaError('');
+
+    const MAX_FILE_SIZE = 50 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      setMediaError('O arquivo ultrapassa o limite de 50 MB.');
+      return;
+    }
+
+    const originalMime = String(
+      file.type || 'application/octet-stream',
+    ).toLowerCase();
+    const inferredMime = originalMime || 'application/octet-stream';
+    const mediaKind = inferredMime.startsWith('audio/')
+      ? 'audio'
+      : inferredMime.startsWith('video/')
+        ? 'video'
+        : inferredMime.startsWith('image/')
+          ? 'image'
+          : 'file';
+    const conversationId = currentConversation._id;
+    const isWhatsApp = currentConversation.channel === 'whatsapp';
+
+    const formData = new FormData();
+    formData.append('file', file, file.name || `${mediaKind}-${Date.now()}`);
+
+    try {
+      setUploadingMedia(true);
+      const response = await api.post('/api/chat/media', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000,
+      });
+      const uploaded = response?.data?.data || response?.data;
+      const url = uploaded?.url;
+      if (!url)
+        throw new Error('O servidor não retornou o endereço do arquivo.');
+
+      const finalMime = String(uploaded.mimeType || inferredMime).toLowerCase();
+      const finalType = finalMime.startsWith('audio/')
+        ? 'audio'
+        : finalMime.startsWith('video/')
+          ? 'video'
+          : finalMime.startsWith('image/')
+            ? 'image'
+            : 'file';
+      const name = uploaded.name || file.name || `${finalType}-${Date.now()}`;
+      const label =
+        finalType === 'audio'
+          ? 'Áudio'
+          : finalType === 'video'
+            ? 'Vídeo'
+            : finalType === 'image'
+              ? 'Imagem'
+              : 'Arquivo';
+
+      await sendMessage(conversationId, {
+        content: `${label}: ${name}`,
+        type: finalType,
+        attachment: {
+          url,
+          name,
+          mimeType: finalMime,
+          size: Number(uploaded.size || file.size || 0),
+          format: uploaded.format || finalType,
+        },
+      });
+
+      setShowEmojiPicker(false);
+      setShowGifPicker(false);
+      if (!isWhatsApp) sendTyping(conversationId, false);
+    } catch (error) {
+      console.error('Erro ao enviar mídia no chat:', error);
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Não foi possível enviar o arquivo.';
+      setMediaError(message);
+    } finally {
+      setUploadingMedia(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleMediaSelected = async (event) => {
+    const file = event.target.files?.[0];
+    if (file) await uploadAndSendMedia(file);
+  };
+
+  const stopAudioRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    // O stream é liberado no evento onstop, após coletar o último bloco de áudio.
+    setIsRecordingAudio(false);
+  };
+
+  const startAudioRecording = async () => {
+    if (
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === 'undefined'
+    ) {
+      setMediaError('Seu navegador não oferece suporte à gravação de áudio.');
+      return;
+    }
+    if (
+      !currentConversation?._id ||
+      sending ||
+      uploadingMedia ||
+      isRecordingAudio
+    )
+      return;
+    setMediaError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = stream;
+      audioChunksRef.current = [];
+      const preferredMime = [
+        'audio/webm;codecs=opus',
+        'audio/ogg;codecs=opus',
+        'audio/webm',
+      ].find((mime) => MediaRecorder.isTypeSupported?.(mime));
+      const recorder = preferredMime
+        ? new MediaRecorder(stream, { mimeType: preferredMime })
+        : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size) audioChunksRef.current.push(event.data);
+      };
+      recorder.onerror = (event) => {
+        console.error('Erro no MediaRecorder:', event.error);
+        setMediaError('Ocorreu um erro durante a gravação do áudio.');
+      };
+      recorder.onstop = async () => {
+        const blobType =
+          recorder.mimeType || audioChunksRef.current[0]?.type || 'audio/webm';
+        const blob = new Blob(audioChunksRef.current, { type: blobType });
+        audioChunksRef.current = [];
+        if (blob.size) {
+          const extension = blobType.includes('ogg') ? 'ogg' : 'webm';
+          await uploadAndSendMedia(
+            new File([blob], `audio-${Date.now()}.${extension}`, {
+              type: blobType,
+            }),
+          );
+        }
+        stream.getTracks().forEach((track) => track.stop());
+        recordingStreamRef.current = null;
+      };
+      recorder.start(250);
+      setRecordingSeconds(0);
+      setIsRecordingAudio(true);
+      recordingTimerRef.current = setInterval(
+        () => setRecordingSeconds((value) => value + 1),
+        1000,
+      );
+    } catch (error) {
+      console.error('Não foi possível iniciar a gravação:', error);
+      setMediaError(
+        error?.name === 'NotAllowedError'
+          ? 'Permita o acesso ao microfone para gravar um áudio.'
+          : 'Não foi possível iniciar a gravação de áudio.',
+      );
+      recordingStreamRef.current
+        ?.getTracks?.()
+        .forEach((track) => track.stop());
+      recordingStreamRef.current = null;
+      setIsRecordingAudio(false);
+    }
+  };
+
+  const formatRecordingTime = (seconds) =>
+    `${Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
+
+  useEffect(
+    () => () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== 'inactive') recorder.stop();
+      recordingStreamRef.current
+        ?.getTracks?.()
+        .forEach((track) => track.stop());
+    },
+    [],
+  );
 
   /*
   ============================================================
@@ -1789,6 +2008,12 @@ export default function ChatPage() {
                           attachmentMimeType.startsWith('image/') ||
                           Boolean(attachmentUrl && contentLooksLikeImage);
 
+                        const isAudioMessage =
+                          message?.type === 'audio' ||
+                          attachmentMimeType.startsWith('audio/');
+                        const isVideoMessage =
+                          message?.type === 'video' ||
+                          attachmentMimeType.startsWith('video/');
                         const isFileMessage = message?.type === 'file';
 
                         const placeholderContents = [
@@ -1799,6 +2024,10 @@ export default function ChatPage() {
                           'GIF',
                           'GIF enviado',
                           message?.attachment?.name,
+                          `Áudio: ${message?.attachment?.name || ''}`,
+                          `Vídeo: ${message?.attachment?.name || ''}`,
+                          `Imagem: ${message?.attachment?.name || ''}`,
+                          `Arquivo: ${message?.attachment?.name || ''}`,
                         ]
                           .filter(Boolean)
                           .map((value) => String(value).trim());
@@ -1807,7 +2036,16 @@ export default function ChatPage() {
                           Boolean(messageContent) &&
                           messageContent !== attachmentUrl &&
                           !placeholderContents.includes(messageContent) &&
-                          !(isImageMessage && isHttpUrl(messageContent));
+                          !(
+                            (isImageMessage ||
+                              isAudioMessage ||
+                              isVideoMessage ||
+                              isFileMessage) &&
+                            (isHttpUrl(messageContent) ||
+                              /^(Áudio|Vídeo|Imagem|Arquivo):\s/i.test(
+                                messageContent,
+                              ))
+                          );
 
                         return (
                           <div key={message._id}>
@@ -1911,6 +2149,62 @@ export default function ChatPage() {
                                         }}
                                       />
                                     </a>
+                                  )}
+
+                                  {/* ÁUDIO */}
+
+                                  {isAudioMessage && attachmentUrl && (
+                                    <div className="mb-1 min-w-[220px] max-w-full rounded-xl border border-white/[0.08] bg-black/15 p-2.5 sm:min-w-[280px]">
+                                      <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
+                                        <FaMicrophone size={12} />
+                                        <span className="truncate">
+                                          {message?.attachment?.name ||
+                                            'Mensagem de áudio'}
+                                        </span>
+                                      </div>
+                                      <audio
+                                        controls
+                                        preload="metadata"
+                                        className="h-9 w-full max-w-[320px]"
+                                        src={attachmentUrl}
+                                      >
+                                        Seu navegador não suporta reprodução de
+                                        áudio.
+                                      </audio>
+                                      {message?.attachment?.size ? (
+                                        <p className="mt-1 text-[10px] opacity-70">
+                                          {formatFileSize(
+                                            message.attachment.size,
+                                          )}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                  )}
+
+                                  {/* VÍDEO */}
+
+                                  {isVideoMessage && attachmentUrl && (
+                                    <div className="mb-1 max-w-full overflow-hidden rounded-xl border border-white/[0.08] bg-black/20">
+                                      <video
+                                        controls
+                                        preload="metadata"
+                                        playsInline
+                                        className="max-h-[320px] w-full max-w-[360px] rounded-xl"
+                                        src={attachmentUrl}
+                                      >
+                                        Seu navegador não suporta reprodução de
+                                        vídeo.
+                                      </video>
+                                      <a
+                                        href={attachmentUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="block truncate px-3 py-2 text-xs underline underline-offset-2"
+                                      >
+                                        {message?.attachment?.name ||
+                                          'Abrir vídeo'}
+                                      </a>
+                                    </div>
                                   )}
 
                                   {/* ARQUIVO */}
@@ -2037,6 +2331,58 @@ export default function ChatPage() {
                       isWhatsAppConversation ? 'bg-[#0e1715]' : 'bg-[#10141d]'
                     }`}
                   >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.rar"
+                      className="hidden"
+                      onChange={handleMediaSelected}
+                    />
+
+                    {/* ANEXAR ARQUIVO */}
+                    <button
+                      type="button"
+                      disabled={sending || uploadingMedia || isRecordingAudio}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-[#171c27] text-gray-400 transition hover:border-white/15 hover:bg-white/[0.06] hover:text-white disabled:opacity-40"
+                      title="Anexar imagem, vídeo, áudio ou documento"
+                      aria-label="Anexar arquivo"
+                    >
+                      {uploadingMedia ? (
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      ) : (
+                        <FaPaperclip size={15} />
+                      )}
+                    </button>
+
+                    {/* GRAVAR ÁUDIO */}
+                    <button
+                      type="button"
+                      disabled={sending || uploadingMedia}
+                      onClick={
+                        isRecordingAudio
+                          ? stopAudioRecording
+                          : startAudioRecording
+                      }
+                      className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition disabled:opacity-40 ${isRecordingAudio ? 'border-red-500/40 bg-red-500/15 text-red-300' : 'border-white/[0.07] bg-[#171c27] text-gray-400 hover:border-white/15 hover:bg-white/[0.06] hover:text-white'}`}
+                      title={
+                        isRecordingAudio
+                          ? `Parar gravação (${formatRecordingTime(recordingSeconds)})`
+                          : 'Gravar áudio'
+                      }
+                      aria-label={
+                        isRecordingAudio
+                          ? 'Parar gravação de áudio'
+                          : 'Gravar áudio'
+                      }
+                    >
+                      {isRecordingAudio ? (
+                        <FaStop size={12} />
+                      ) : (
+                        <FaMicrophone size={15} />
+                      )}
+                    </button>
+
                     {/* SELETOR DE EMOJIS */}
 
                     <div ref={emojiPickerRef} className="relative shrink-0">
@@ -2186,6 +2532,35 @@ export default function ChatPage() {
                       </button>
                     </div>
 
+                    {/* STATUS DE UPLOAD / GRAVAÇÃO */}
+                    {(mediaError || isRecordingAudio || uploadingMedia) && (
+                      <div className="absolute bottom-full left-3 right-3 mb-2 rounded-xl border border-white/[0.08] bg-[#171c27] px-3 py-2 text-[11px] shadow-xl sm:left-4 sm:right-4">
+                        {mediaError ? (
+                          <div className="flex items-center justify-between gap-2 text-red-300">
+                            <span>{mediaError}</span>
+                            <button
+                              type="button"
+                              onClick={() => setMediaError('')}
+                              aria-label="Fechar aviso"
+                            >
+                              <FaTimes size={11} />
+                            </button>
+                          </div>
+                        ) : uploadingMedia ? (
+                          <span className="text-blue-200">
+                            Enviando mídia… aguarde.
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-2 text-red-300">
+                            <span className="h-2 w-2 animate-pulse rounded-full bg-red-400" />{' '}
+                            Gravando áudio{' '}
+                            {formatRecordingTime(recordingSeconds)} · clique em
+                            parar para enviar
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     {/* INPUT */}
 
                     <div className="min-w-0 flex-1">
@@ -2217,7 +2592,12 @@ export default function ChatPage() {
 
                     <button
                       type="submit"
-                      disabled={!inputMessage.trim() || sending}
+                      disabled={
+                        !inputMessage.trim() ||
+                        sending ||
+                        uploadingMedia ||
+                        isRecordingAudio
+                      }
                       className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white shadow-lg transition active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-35 ${
                         isWhatsAppConversation
                           ? 'bg-emerald-600 shadow-emerald-950/20 hover:bg-emerald-500'
