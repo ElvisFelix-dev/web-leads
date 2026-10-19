@@ -390,31 +390,15 @@ export default function ChatArea({ onBack }) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
 
-      // Para conversas WhatsApp, prioriza OGG/Opus quando o navegador
-      // realmente oferece suporte. Muitos navegadores (incluindo Chrome)
-      // gravam apenas WebM/Opus; nesse caso mantemos o formato real e não
-      // fingimos que o arquivo é OGG. A conversão de fallback precisa ocorrer
-      // no backend antes de enviar ao WA-AKG.
-      const supportedTypes = isWhatsApp
-        ? [
-            'audio/ogg;codecs=opus',
-            'audio/ogg',
-            'audio/webm;codecs=opus',
-            'audio/webm',
-            'audio/mp4',
-          ]
-        : [
-            'audio/webm;codecs=opus',
-            'audio/webm',
-            'audio/ogg;codecs=opus',
-            'audio/ogg',
-            'audio/mp4',
-          ];
-
-      const mimeType = supportedTypes.find(
-        (type) =>
-          typeof MediaRecorder.isTypeSupported === 'function' &&
-          MediaRecorder.isTypeSupported(type),
+      const supportedTypes = [
+        'audio/webm;codecs=opus',
+        'audio/ogg;codecs=opus',
+        'audio/webm',
+        'audio/ogg',
+        'audio/mp4',
+      ];
+      const mimeType = supportedTypes.find((type) =>
+        MediaRecorder.isTypeSupported?.(type),
       );
       const recorder = mimeType
         ? new MediaRecorder(stream, { mimeType })
@@ -435,26 +419,8 @@ export default function ChatArea({ onBack }) {
       };
 
       recorder.onstop = () => {
-        const detectedMimeType = String(
-          recorder.mimeType ||
-            mimeType ||
-            recordedChunksRef.current[0]?.type ||
-            'audio/webm',
-        ).toLowerCase();
-
-        // Remove parâmetros como ;codecs=opus do MIME enviado como metadado.
-        // Isso não altera o conteúdo do áudio: apenas informa corretamente o contêiner.
-        const containerMimeType = detectedMimeType.includes('ogg')
-          ? 'audio/ogg'
-          : detectedMimeType.includes('mp4')
-            ? 'audio/mp4'
-            : detectedMimeType.includes('webm')
-              ? 'audio/webm'
-              : detectedMimeType.split(';')[0] || 'application/octet-stream';
-
-        const blob = new Blob(recordedChunksRef.current, {
-          type: detectedMimeType,
-        });
+        const blobType = recorder.mimeType || mimeType || 'audio/webm';
+        const blob = new Blob(recordedChunksRef.current, { type: blobType });
         releaseMicrophone();
         setIsRecording(false);
 
@@ -463,16 +429,13 @@ export default function ChatArea({ onBack }) {
           return;
         }
 
-        const extension =
-          containerMimeType === 'audio/ogg'
-            ? 'ogg'
-            : containerMimeType === 'audio/mp4'
-              ? 'm4a'
-              : containerMimeType === 'audio/webm'
-                ? 'webm'
-                : 'audio';
+        const extension = blobType.includes('ogg')
+          ? 'ogg'
+          : blobType.includes('mp4')
+            ? 'm4a'
+            : 'webm';
         const file = new File([blob], `audio-${Date.now()}.${extension}`, {
-          type: containerMimeType,
+          type: blobType,
         });
         const previewUrl = URL.createObjectURL(blob);
         setRecordedAudio(file);
@@ -546,10 +509,7 @@ export default function ChatArea({ onBack }) {
           url: uploaded.url,
           name: uploaded.name || recordedAudio.name,
           size: uploaded.size ?? recordedAudio.size,
-          mimeType:
-            uploaded.mimeType ||
-            recordedAudio.type ||
-            'application/octet-stream',
+          mimeType: uploaded.mimeType || recordedAudio.type || 'audio/webm',
           format: uploaded.format || '',
         },
       });
@@ -1506,46 +1466,85 @@ export default function ChatArea({ onBack }) {
               */
 
               const messageContent = String(message?.content || '').trim();
-
+              const attachment = message?.attachment || {};
               const attachmentMimeType = String(
-                message?.attachment?.mimeType || '',
+                attachment.mimeType || '',
               ).toLowerCase();
+              const rawAttachmentUrl = String(attachment.url || '').trim();
+              const contentIsUrl = isHttpUrl(messageContent);
+              const urlForDetection =
+                rawAttachmentUrl || (contentIsUrl ? messageContent : '');
+              const mediaPath =
+                `${urlForDetection} ${attachment.name || ''}`.toLowerCase();
 
-              const contentLooksLikeImage =
-                /\.(gif|jpe?g|png|webp|bmp|svg)(?:[?#].*)?$/i.test(
-                  messageContent,
-                ) || /(?:klipy|giphy|tenor)/i.test(messageContent);
+              // Fallbacks por MIME, tipo salvo e extensão: protege mensagens antigas
+              // em que o backend salvou o tipo genérico, mas preservou o anexo.
+              const looksLikeImage =
+                /\.(gif|jpe?g|png|webp|bmp|svg)(?:[?#\s].*)?$/i.test(mediaPath);
+              const looksLikeAudio =
+                /\.(ogg|oga|mp3|wav|m4a|aac|opus|webm)(?:[?#\s].*)?$/i.test(
+                  mediaPath,
+                );
+              const looksLikeVideo =
+                /\.(mp4|webm|mov|m4v|avi|mkv|mpeg|mpg)(?:[?#\s].*)?$/i.test(
+                  mediaPath,
+                );
 
               const attachmentUrl =
-                message?.attachment?.url ||
-                (message?.type === 'image' && isHttpUrl(messageContent)
-                  ? messageContent
-                  : '') ||
-                (isHttpUrl(messageContent) && contentLooksLikeImage
+                rawAttachmentUrl ||
+                (contentIsUrl &&
+                (message?.type === 'image' ||
+                  message?.type === 'audio' ||
+                  message?.type === 'video' ||
+                  message?.type === 'file' ||
+                  looksLikeImage ||
+                  looksLikeAudio ||
+                  looksLikeVideo ||
+                  attachmentMimeType.startsWith('application/'))
                   ? messageContent
                   : '');
 
               const isImageMessage =
                 message?.type === 'image' ||
                 attachmentMimeType.startsWith('image/') ||
-                Boolean(attachmentUrl && contentLooksLikeImage);
-
-              const isFileMessage = message?.type === 'file';
+                looksLikeImage;
               const isAudioMessage =
+                message?.type === 'audio' ||
                 attachmentMimeType.startsWith('audio/') ||
-                message?.type === 'audio';
+                looksLikeAudio;
               const isVideoMessage =
+                message?.type === 'video' ||
                 attachmentMimeType.startsWith('video/') ||
-                message?.type === 'video';
+                looksLikeVideo;
+              const isFileMessage =
+                message?.type === 'file' ||
+                Boolean(
+                  attachmentUrl &&
+                  !isImageMessage &&
+                  !isAudioMessage &&
+                  !isVideoMessage &&
+                  (attachment.name ||
+                    attachmentMimeType.startsWith('application/') ||
+                    attachmentMimeType.startsWith('text/')),
+                );
 
               const placeholderContents = [
                 'Imagem',
                 'Imagem recebida',
                 'Arquivo',
                 'Arquivo recebido',
+                'Áudio',
+                'Áudio recebido',
+                'Audio',
+                'Audio recebido',
+                'Vídeo',
+                'Vídeo recebido',
+                'Video',
+                'Video recebido',
+                'Mensagem recebida',
                 'GIF',
                 'GIF enviado',
-                message?.attachment?.name,
+                attachment.name,
               ]
                 .filter(Boolean)
                 .map((value) => String(value).trim());
@@ -1554,7 +1553,14 @@ export default function ChatArea({ onBack }) {
                 Boolean(messageContent) &&
                 messageContent !== attachmentUrl &&
                 !placeholderContents.includes(messageContent) &&
-                !(isImageMessage && isHttpUrl(messageContent));
+                !(
+                  contentIsUrl &&
+                  attachmentUrl === messageContent &&
+                  (isImageMessage ||
+                    isAudioMessage ||
+                    isVideoMessage ||
+                    isFileMessage)
+                );
 
               return (
                 <div key={message?._id || message?.externalMessageId || index}>
