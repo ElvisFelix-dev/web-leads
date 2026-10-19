@@ -34,6 +34,7 @@ export default function ChatArea({ onBack }) {
     loading,
     typingUsers,
     sendMessage,
+    uploadChatMedia,
     sendTyping,
     isUserOnline,
     getConversationName,
@@ -52,12 +53,16 @@ export default function ChatArea({ onBack }) {
   const [showParticipants, setShowParticipants] = useState(false);
   const [showConversationInfo, setShowConversationInfo] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [uploadedAttachment, setUploadedAttachment] = useState(null);
+  const [uploadError, setUploadError] = useState('');
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const emojiPickerRef = useRef(null);
   const gifPickerRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   /*
   ====================================================
@@ -410,6 +415,8 @@ export default function ChatArea({ onBack }) {
     setShowConversationInfo(false);
     setIsTyping(false);
     setShowGifPicker(false);
+    setUploadedAttachment(null);
+    setUploadError('');
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -430,6 +437,127 @@ export default function ChatArea({ onBack }) {
       }
     };
   }, []);
+
+  /*
+  ====================================================
+  UPLOAD E ENVIO DE ANEXOS
+  ====================================================
+  */
+
+  const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
+
+  const formatFileSize = (bytes = 0) => {
+    if (!Number.isFinite(Number(bytes)) || Number(bytes) <= 0)
+      return 'Tamanho desconhecido';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const handleFileSelected = async (event) => {
+    const file = event.target.files?.[0];
+    // Permite selecionar o mesmo arquivo novamente depois de cancelar/falhar.
+    event.target.value = '';
+
+    if (!file) return;
+
+    if (!currentConversation?._id) {
+      setUploadError('Selecione uma conversa antes de anexar um arquivo.');
+      return;
+    }
+
+    if (file.size > MAX_UPLOAD_SIZE) {
+      setUploadError('O arquivo não pode ultrapassar 50 MB.');
+      return;
+    }
+
+    if (typeof uploadChatMedia !== 'function') {
+      setUploadError(
+        'O upload ainda não está conectado ao ChatContext. Adicione a função uploadChatMedia ao contexto de chat.',
+      );
+      return;
+    }
+
+    setUploadError('');
+    setUploadedAttachment(null);
+    setUploadingMedia(true);
+
+    try {
+      const uploaded = await uploadChatMedia(file);
+
+      if (!uploaded?.url) {
+        throw new Error(
+          'O servidor não retornou uma URL válida para o arquivo.',
+        );
+      }
+
+      setUploadedAttachment({
+        url: uploaded.url,
+        name: uploaded.name || file.name,
+        originalName: file.name,
+        size: uploaded.size ?? file.size,
+        mimeType: uploaded.mimeType || file.type || 'application/octet-stream',
+        format: uploaded.format || '',
+      });
+    } catch (error) {
+      console.error('Erro ao fazer upload do anexo:', error);
+      setUploadError(
+        error?.response?.data?.message ||
+          error?.message ||
+          'Não foi possível enviar o arquivo para o armazenamento.',
+      );
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  const handleSendAttachment = async () => {
+    if (!uploadedAttachment || !currentConversation?._id || sending) return;
+
+    const mimeType = String(uploadedAttachment.mimeType || '').toLowerCase();
+    const isImage = mimeType.startsWith('image/');
+    const isAudio = mimeType.startsWith('audio/');
+    const isVideo = mimeType.startsWith('video/');
+
+    // O endpoint de upload pode armazenar áudio/vídeo, mas o envio ao WhatsApp
+    // depende de suporte explícito do provedor e do backend para esses tipos.
+    if (isWhatsApp && (isAudio || isVideo)) {
+      setUploadError(
+        'O arquivo foi carregado, mas o envio de áudio/vídeo pelo WhatsApp ainda precisa ser habilitado no backend e no provedor WhatsApp.',
+      );
+      return;
+    }
+
+    try {
+      setSending(true);
+      setUploadError('');
+
+      await sendMessage(currentConversation._id, {
+        content: '',
+        type: isImage ? 'image' : 'file',
+        attachment: {
+          url: uploadedAttachment.url,
+          name: uploadedAttachment.originalName || uploadedAttachment.name,
+          mimeType: uploadedAttachment.mimeType,
+          size: uploadedAttachment.size,
+          format: uploadedAttachment.format,
+        },
+      });
+
+      setUploadedAttachment(null);
+      setShowEmojiPicker(false);
+      setShowGifPicker(false);
+    } catch (error) {
+      console.error('Erro ao enviar anexo na conversa:', error);
+      setUploadError(
+        error?.response?.data?.message ||
+          error?.message ||
+          'O upload foi concluído, mas não foi possível enviar a mensagem.',
+      );
+    } finally {
+      setSending(false);
+    }
+  };
 
   /*
   ====================================================
@@ -1123,6 +1251,12 @@ export default function ChatArea({ onBack }) {
                 Boolean(attachmentUrl && contentLooksLikeImage);
 
               const isFileMessage = message?.type === 'file';
+              const isAudioMessage =
+                attachmentMimeType.startsWith('audio/') ||
+                message?.type === 'audio';
+              const isVideoMessage =
+                attachmentMimeType.startsWith('video/') ||
+                message?.type === 'video';
 
               const placeholderContents = [
                 'Imagem',
@@ -1293,6 +1427,31 @@ export default function ChatArea({ onBack }) {
                             />
                           </a>
                         )}
+
+                        {/* ÁUDIO */}
+
+                        {(isAudioMessage || isVideoMessage) &&
+                          attachmentUrl && (
+                            <div className="mb-2 min-w-0 max-w-full">
+                              {isAudioMessage ? (
+                                <audio
+                                  src={attachmentUrl}
+                                  controls
+                                  preload="metadata"
+                                  className="max-w-full"
+                                  aria-label="Reproduzir áudio"
+                                />
+                              ) : (
+                                <video
+                                  src={attachmentUrl}
+                                  controls
+                                  preload="metadata"
+                                  className="max-h-[320px] max-w-full rounded-xl"
+                                  aria-label="Reproduzir vídeo"
+                                />
+                              )}
+                            </div>
+                          )}
 
                         {/* ARQUIVO */}
 
@@ -1513,6 +1672,116 @@ export default function ChatArea({ onBack }) {
           </div>
         )}
 
+        {(uploadingMedia || uploadedAttachment || uploadError) && (
+          <div className="mx-auto mb-3 max-w-4xl rounded-2xl border border-white/[0.08] bg-[#101116] p-3">
+            {uploadingMedia && (
+              <div
+                className="flex items-center gap-3 text-xs text-gray-300"
+                role="status"
+              >
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-600 border-t-sky-400" />
+                Enviando arquivo para o armazenamento...
+              </div>
+            )}
+
+            {uploadError && (
+              <div className="mb-2 flex items-start justify-between gap-3 rounded-xl border border-rose-400/15 bg-rose-400/[0.06] px-3 py-2">
+                <p className="text-xs leading-5 text-rose-300" role="alert">
+                  {uploadError}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setUploadError('')}
+                  className="shrink-0 text-rose-300/70 transition hover:text-rose-200"
+                  aria-label="Fechar aviso de anexo"
+                  title="Fechar aviso"
+                >
+                  <FaTimes size={11} />
+                </button>
+              </div>
+            )}
+
+            {uploadedAttachment && (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                {String(uploadedAttachment.mimeType || '').startsWith(
+                  'image/',
+                ) ? (
+                  <img
+                    src={uploadedAttachment.url}
+                    alt={uploadedAttachment.originalName || 'Prévia da imagem'}
+                    className="max-h-40 max-w-full rounded-xl border border-white/[0.08] object-contain sm:max-w-[180px]"
+                  />
+                ) : String(uploadedAttachment.mimeType || '').startsWith(
+                    'video/',
+                  ) ? (
+                  <video
+                    src={uploadedAttachment.url}
+                    controls
+                    preload="metadata"
+                    className="max-h-40 max-w-full rounded-xl sm:max-w-[220px]"
+                  />
+                ) : String(uploadedAttachment.mimeType || '').startsWith(
+                    'audio/',
+                  ) ? (
+                  <audio
+                    src={uploadedAttachment.url}
+                    controls
+                    preload="metadata"
+                    className="w-full sm:max-w-[280px]"
+                  />
+                ) : (
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-sky-400/15 bg-sky-400/[0.07] text-sky-300">
+                    <FaPaperclip size={16} />
+                  </div>
+                )}
+
+                <div className="min-w-0 flex-1">
+                  <p className="break-all text-xs font-semibold text-gray-200">
+                    {uploadedAttachment.originalName || uploadedAttachment.name}
+                  </p>
+                  <p className="mt-1 text-[10px] text-gray-500">
+                    {formatFileSize(uploadedAttachment.size)} · Upload concluído
+                  </p>
+                  <a
+                    href={uploadedAttachment.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 inline-flex text-[10px] text-sky-300 underline underline-offset-2 hover:text-sky-200"
+                  >
+                    Abrir arquivo
+                  </a>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSendAttachment}
+                      disabled={sending || uploadingMedia}
+                      className={`rounded-lg px-3 py-2 text-[11px] font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                        isWhatsApp
+                          ? 'bg-emerald-600 hover:bg-emerald-500'
+                          : 'bg-indigo-600 hover:bg-indigo-500'
+                      }`}
+                    >
+                      {sending ? 'Enviando...' : 'Enviar no chat'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUploadedAttachment(null);
+                        setUploadError('');
+                      }}
+                      disabled={sending}
+                      className="rounded-lg border border-white/[0.08] px-3 py-2 text-[11px] text-gray-400 transition hover:bg-white/[0.05] hover:text-gray-200 disabled:opacity-50"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="mx-auto flex max-w-4xl items-end gap-2">
           {/* EMOJI */}
 
@@ -1580,19 +1849,33 @@ export default function ChatArea({ onBack }) {
               className="max-h-32 min-h-[44px] flex-1 resize-none bg-transparent px-3.5 py-3 pr-12 text-xs leading-5 text-gray-200 outline-none placeholder:text-gray-600 disabled:cursor-not-allowed disabled:opacity-60"
             />
 
-            <button
-              type="button"
-              className="absolute bottom-1.5 right-1.5 flex h-8 w-8 items-center justify-center rounded-xl text-gray-500 transition-all duration-200 hover:bg-white/[0.06] hover:text-gray-300 active:scale-95"
-              title="Anexar arquivo"
-              aria-label="Anexar arquivo"
-              onClick={() => {
-                console.info(
-                  'O envio de arquivos ainda precisa ser conectado ao serviço de upload.',
-                );
-              }}
-            >
-              <FaPaperclip size={13} />
-            </button>
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip"
+                className="hidden"
+                onChange={handleFileSelected}
+                aria-label="Selecionar arquivo para anexar"
+              />
+              <button
+                type="button"
+                className="absolute bottom-1.5 right-1.5 flex h-8 w-8 items-center justify-center rounded-xl text-gray-500 transition-all duration-200 hover:bg-white/[0.06] hover:text-gray-300 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+                title="Anexar imagem, áudio, vídeo ou documento (máx. 50 MB)"
+                aria-label="Anexar arquivo"
+                disabled={sending || uploadingMedia}
+                onClick={() => {
+                  setUploadError('');
+                  fileInputRef.current?.click();
+                }}
+              >
+                {uploadingMedia ? (
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-500 border-t-sky-400" />
+                ) : (
+                  <FaPaperclip size={13} />
+                )}
+              </button>
+            </>
           </div>
 
           {/* ENVIAR */}
