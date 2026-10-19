@@ -519,14 +519,6 @@ export default function ChatArea({ onBack }) {
     const isAudio = mimeType.startsWith('audio/');
     const isVideo = mimeType.startsWith('video/');
 
-    // O endpoint de upload pode armazenar áudio/vídeo, mas o envio ao WhatsApp
-    // depende de suporte explícito do provedor e do backend para esses tipos.
-    if (isWhatsApp && (isAudio || isVideo)) {
-      setUploadError(
-        'O arquivo foi carregado, mas o envio de áudio/vídeo pelo WhatsApp ainda precisa ser habilitado no backend e no provedor WhatsApp.',
-      );
-      return;
-    }
 
     try {
       setSending(true);
@@ -534,7 +526,7 @@ export default function ChatArea({ onBack }) {
 
       await sendMessage(currentConversation._id, {
         content: '',
-        type: isImage ? 'image' : 'file',
+        type: isImage ? 'image' : isAudio ? 'audio' : isVideo ? 'video' : 'file',
         attachment: {
           url: uploadedAttachment.url,
           name: uploadedAttachment.originalName || uploadedAttachment.name,

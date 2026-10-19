@@ -769,7 +769,7 @@ export const ChatProvider = ({ children }) => {
       const content = String(payload.content || '').trim();
       const attachment = payload.attachment;
 
-      if (!['text', 'image', 'file'].includes(type)) {
+      if (!['text', 'image', 'audio', 'video', 'file'].includes(type)) {
         throw new Error('Tipo de mensagem não suportado.');
       }
 
@@ -1070,39 +1070,6 @@ export const ChatProvider = ({ children }) => {
   );
 
   // =========================================================
-  // UPLOAD DE MÍDIA DO CHAT
-  // =========================================================
-
-  const uploadChatMedia = useCallback(async (file) => {
-    if (!file) {
-      throw new Error('Selecione um arquivo para enviar.');
-    }
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const response = await api.post('/api/chat/media', formData);
-
-      const uploadedFile = response.data?.data;
-
-      if (!uploadedFile?.url) {
-        throw new Error('O servidor não retornou a URL do arquivo.');
-      }
-
-      return uploadedFile;
-    } catch (error) {
-      console.error('Erro ao fazer upload da mídia:', error);
-
-      throw new Error(
-        error?.response?.data?.message ||
-          error?.message ||
-          'Não foi possível enviar o arquivo.',
-      );
-    }
-  }, []);
-
-  // =========================================================
   // DIGITANDO
   // =========================================================
 
@@ -1331,7 +1298,6 @@ export const ChatProvider = ({ children }) => {
   const value = {
     conversations,
     currentConversation,
-    uploadChatMedia,
     messages,
     loading,
     loadingConversations,
