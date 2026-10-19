@@ -8,11 +8,15 @@ import {
 } from 'react';
 
 import { io } from 'socket.io-client';
+
 import api from '../service/api';
+
 import { UserContext } from './UserContext';
 
 // =========================================================
+
 // HELPERS DE SANITIZAÇÃO
+
 // =========================================================
 
 const safeString = (value, fallback = '') => {
@@ -26,7 +30,9 @@ const safeString = (value, fallback = '') => {
 
   if (typeof value === 'object') {
     if (typeof value.text === 'string') return value.text;
+
     if (typeof value.content === 'string') return value.content;
+
     if (typeof value.message === 'string') return value.message;
   }
 
@@ -42,7 +48,9 @@ const getObjectId = (value) => {
 
   if (typeof value === 'object') {
     if (value._id) return String(value._id);
+
     if (value.id) return String(value.id);
+
     if (value.$oid) return String(value.$oid);
   }
 
@@ -50,18 +58,25 @@ const getObjectId = (value) => {
 };
 
 // Retorna o ID de um lead, seja ele um ID simples ou um objeto.
+
 const getRelatedId = (value) => getObjectId(value);
 
 // Identifica o lead associado a uma conversa WhatsApp.
+
 const getConversationLeadId = (conversation) => {
   if (!conversation) return null;
 
   const candidates = [
     conversation.lead,
+
     conversation.leadId,
+
     conversation.whatsappContact?.lead,
+
     conversation.whatsappContact?.leadId,
+
     conversation.contact?.lead,
+
     conversation.contact?.leadId,
   ];
 
@@ -79,14 +94,18 @@ const sanitizeMessage = (message) => {
 
   return {
     ...message,
+
     _id: getObjectId(message._id),
+
     conversation:
       typeof message.conversation === 'object'
         ? message.conversation
         : message.conversation
           ? String(message.conversation)
           : null,
+
     content: safeString(message.content, ''),
+
     lastMessage: safeString(message.lastMessage, ''),
   };
 };
@@ -95,6 +114,7 @@ const sanitizeConversation = (conversation) => {
   if (!conversation || typeof conversation !== 'object') return null;
 
   let lastMessageText = '';
+
   let lastMessageObject = null;
 
   if (typeof conversation.lastMessage === 'string') {
@@ -104,13 +124,17 @@ const sanitizeConversation = (conversation) => {
     typeof conversation.lastMessage === 'object'
   ) {
     lastMessageText = safeString(conversation.lastMessage.content, '');
+
     lastMessageObject = conversation.lastMessage;
   }
 
   return {
     ...conversation,
+
     _id: getObjectId(conversation._id),
+
     lastMessage: lastMessageText,
+
     lastMessageObject,
   };
 };
@@ -130,14 +154,18 @@ const extractConversations = (response) => {
 };
 
 // =========================================================
+
 // NOTIFICAÇÕES DO NAVEGADOR
+
 // =========================================================
 
 const requestNotificationPermission = async () => {
   if (typeof window === 'undefined') return false;
+
   if (!('Notification' in window)) return false;
 
   if (Notification.permission === 'granted') return true;
+
   if (Notification.permission === 'denied') return false;
 
   try {
@@ -149,22 +177,31 @@ const requestNotificationPermission = async () => {
 
 const showBrowserNotification = ({ title, body, avatar, onClick }) => {
   if (typeof window === 'undefined') return;
+
   if (!('Notification' in window)) return;
+
   if (Notification.permission !== 'granted') return;
+
   if (document.visibilityState === 'visible') return;
 
   try {
     const notification = new Notification(title, {
       body,
+
       icon: avatar || '/favicon.ico',
+
       badge: '/favicon.ico',
+
       tag: 'chat-message',
+
       requireInteraction: false,
     });
 
     notification.onclick = () => {
       window.focus();
+
       onClick?.();
+
       notification.close();
     };
 
@@ -181,7 +218,9 @@ const showBrowserNotification = ({ title, body, avatar, onClick }) => {
 };
 
 // =========================================================
+
 // CONTEXT
+
 // =========================================================
 
 const ChatContext = createContext(null);
@@ -197,34 +236,56 @@ export const useChat = () => {
 };
 
 // =========================================================
+
 // PROVIDER
+
 // =========================================================
 
 export const ChatProvider = ({ children }) => {
   const { user } = useContext(UserContext);
 
   // STATE
+
   const [socket, setSocket] = useState(null);
+
   const [conversations, setConversations] = useState([]);
+
   const [currentConversation, setCurrentConversation] = useState(null);
+
   const [messages, setMessages] = useState([]);
+
   const [loading, setLoading] = useState(false);
+
   const [loadingConversations, setLoadingConversations] = useState(false);
+
   const [typingUsers, setTypingUsers] = useState({});
+
   const [unreadCount, setUnreadCount] = useState(0);
+
   const [onlineUsers, setOnlineUsers] = useState([]);
+
   const [error, setError] = useState(null);
+
   const [isConnected, setIsConnected] = useState(false);
+
   const [lastNotification, setLastNotification] = useState(null);
 
   // REFS
+
   const socketRef = useRef(null);
+
   const currentConversationRef = useRef(null);
+
   const notificationSoundRef = useRef(null);
+
   const loadingConversationsRef = useRef(false);
+
   const conversationsRef = useRef([]);
+
   const messagesRequestRef = useRef(0);
+
   const processedNotificationIdsRef = useRef(new Map());
+
   const realtimeConversationVersionRef = useRef(0);
 
   useEffect(() => {
@@ -234,6 +295,7 @@ export const ChatProvider = ({ children }) => {
   useEffect(() => {
     const cleanupInterval = setInterval(() => {
       const now = Date.now();
+
       const fiveMinutes = 5 * 60 * 1000;
 
       processedNotificationIdsRef.current.forEach((timestamp, id) => {
@@ -251,19 +313,23 @@ export const ChatProvider = ({ children }) => {
   }, [currentConversation]);
 
   // HELPERS
+
   const getId = useCallback((value) => getObjectId(value), []);
 
   const isSameId = useCallback(
     (a, b) => {
       const idA = getId(a);
+
       const idB = getId(b);
 
       return Boolean(idA && idB && idA === idB);
     },
+
     [getId],
   );
 
   // SOM DE NOTIFICAÇÃO
+
   const playNotificationSound = useCallback(() => {
     try {
       if (!notificationSoundRef.current) {
@@ -271,6 +337,7 @@ export const ChatProvider = ({ children }) => {
       }
 
       notificationSoundRef.current.currentTime = 0;
+
       notificationSoundRef.current.play().catch(() => {});
     } catch {
       // Ignora erros de áudio.
@@ -278,14 +345,18 @@ export const ChatProvider = ({ children }) => {
   }, []);
 
   // =========================================================
+
   // CARREGAR CONVERSAS
+
   // =========================================================
 
   const loadConversations = useCallback(async () => {
     if (!user?._id) return [];
 
     // Evita uma segunda requisição concorrente retornar uma lista vazia
+
     // e sobrescrever uma lista já carregada.
+
     if (loadingConversationsRef.current) {
       return conversationsRef.current;
     }
@@ -294,23 +365,28 @@ export const ChatProvider = ({ children }) => {
 
     try {
       loadingConversationsRef.current = true;
+
       setLoadingConversations(true);
 
       const response = await api.get('/api/chat/conversations');
+
       const conversationsData = extractConversations(response);
 
       console.log('💬 Conversas carregadas:', conversationsData.length);
 
       if (requestRealtimeVersion !== realtimeConversationVersionRef.current) {
         console.log('⚡ Resposta antiga de conversas ignorada.');
+
         return conversationsRef.current;
       }
 
       conversationsRef.current = conversationsData;
+
       setConversations(conversationsData);
 
       const total = conversationsData.reduce(
         (sum, conversation) => sum + Number(conversation?.unreadCount || 0),
+
         0,
       );
 
@@ -330,19 +406,24 @@ export const ChatProvider = ({ children }) => {
 
       if (requestRealtimeVersion === realtimeConversationVersionRef.current) {
         conversationsRef.current = [];
+
         setConversations([]);
+
         setUnreadCount(0);
       }
 
       return [];
     } finally {
       loadingConversationsRef.current = false;
+
       setLoadingConversations(false);
     }
   }, [user?._id]);
 
   // =========================================================
+
   // ATUALIZAR CONVERSA A PARTIR DE UMA MENSAGEM
+
   // =========================================================
 
   const updateConversationFromMessage = useCallback(
@@ -350,6 +431,7 @@ export const ChatProvider = ({ children }) => {
       if (!message || !conversationId) return;
 
       const sanitized = sanitizeMessage(message);
+
       if (!sanitized) return;
 
       realtimeConversationVersionRef.current += 1;
@@ -361,28 +443,37 @@ export const ChatProvider = ({ children }) => {
 
         if (index === -1) {
           console.log('⚠️ Conversa não encontrada na lista:', conversationId);
+
           return prev;
         }
 
         const conversation = prev[index];
+
         const currentUnread = Number(conversation?.unreadCount || 0);
 
         const updatedConversation = {
           ...conversation,
+
           lastMessageObject: sanitized,
+
           lastMessage: safeString(sanitized.content, ''),
+
           lastMessageAt: sanitized.createdAt || new Date().toISOString(),
+
           updatedAt:
             sanitized.createdAt ||
             conversation?.updatedAt ||
             new Date().toISOString(),
+
           unreadCount: shouldIncrementUnread
             ? currentUnread + 1
             : currentUnread,
         };
 
         const newList = [...prev];
+
         newList.splice(index, 1);
+
         newList.unshift(updatedConversation);
 
         conversationsRef.current = newList;
@@ -394,17 +485,21 @@ export const ChatProvider = ({ children }) => {
         setUnreadCount((prev) => prev + 1);
       }
     },
+
     [isSameId],
   );
 
   // =========================================================
+
   // CARREGAR MENSAGENS
+
   // =========================================================
 
   const loadMessages = useCallback(
     async (conversationId) => {
       if (!conversationId) {
         setError('ID da conversa não informado.');
+
         return;
       }
 
@@ -412,6 +507,7 @@ export const ChatProvider = ({ children }) => {
 
       try {
         setLoading(true);
+
         setError(null);
 
         const response = await api.get(
@@ -433,9 +529,11 @@ export const ChatProvider = ({ children }) => {
         }
 
         const validMessages = messagesData
+
           .filter(
             (message) => message && typeof message === 'object' && message._id,
           )
+
           .map((message) => {
             const sanitized = sanitizeMessage(message);
 
@@ -445,6 +543,7 @@ export const ChatProvider = ({ children }) => {
 
             return sanitized;
           })
+
           .filter(Boolean);
 
         setMessages(validMessages);
@@ -461,6 +560,7 @@ export const ChatProvider = ({ children }) => {
 
         if (requestId === messagesRequestRef.current) {
           setMessages([]);
+
           setError(
             error?.response?.data?.message || 'Erro ao carregar mensagens.',
           );
@@ -471,17 +571,21 @@ export const ChatProvider = ({ children }) => {
         }
       }
     },
+
     [loadConversations],
   );
 
   // =========================================================
+
   // MENSAGEM RECEBIDA VIA SOCKET
+
   // =========================================================
 
   const handleMessageReceived = useCallback(
     (message) => {
       if (!message || typeof message !== 'object' || !message._id) {
         console.warn('⚠️ Mensagem inválida via socket:', message);
+
         return;
       }
 
@@ -490,6 +594,7 @@ export const ChatProvider = ({ children }) => {
 
       if (!conversationId) {
         console.warn('⚠️ conversationId não encontrado:', message);
+
         return;
       }
 
@@ -500,6 +605,7 @@ export const ChatProvider = ({ children }) => {
       }
 
       const sanitizedMessage = sanitizeMessage(message);
+
       if (!sanitizedMessage) return;
 
       if (!sanitizedMessage.conversation) {
@@ -507,7 +613,9 @@ export const ChatProvider = ({ children }) => {
       }
 
       const current = currentConversationRef.current;
+
       const currentConversationId = getId(current?._id);
+
       const isCurrentConversation = currentConversationId === conversationId;
 
       const isOwnMessage = isSameId(sanitizedMessage?.sender?._id, user?._id);
@@ -531,7 +639,9 @@ export const ChatProvider = ({ children }) => {
         });
 
         api
+
           .post(`/api/chat/conversations/${conversationId}/read`)
+
           .catch(() => {});
       }
 
@@ -539,7 +649,9 @@ export const ChatProvider = ({ children }) => {
 
       updateConversationFromMessage(
         sanitizedMessage,
+
         conversationId,
+
         shouldIncrementUnread,
       );
 
@@ -555,14 +667,21 @@ export const ChatProvider = ({ children }) => {
 
         setLastNotification({
           id: `${messageId}_${Date.now()}`,
+
           messageId,
+
           conversationId,
+
           message: sanitizedMessage,
+
           senderName,
+
           senderAvatar: sanitizedMessage.sender?.avatar || null,
+
           preview:
             safeString(sanitizedMessage.content).substring(0, 80) ||
             'Nova mensagem recebida',
+
           timestamp: Date.now(),
         });
 
@@ -570,18 +689,25 @@ export const ChatProvider = ({ children }) => {
 
         showBrowserNotification({
           title: `💬 ${senderName}`,
+
           body:
             safeString(sanitizedMessage.content).substring(0, 100) ||
             'Nova mensagem recebida',
+
           avatar: sanitizedMessage.sender?.avatar,
         });
       }
     },
+
     [
       getId,
+
       isSameId,
+
       user?._id,
+
       updateConversationFromMessage,
+
       playNotificationSound,
     ],
   );
@@ -603,53 +729,71 @@ export const ChatProvider = ({ children }) => {
 
       handleMessageReceived({
         ...message,
+
         conversation: message.conversation || conversationId,
+
         conversationId,
       });
     },
+
     [getId, handleMessageReceived],
   );
 
   // =========================================================
+
   // SOCKET.IO
+
   // =========================================================
 
   useEffect(() => {
     if (!user?._id) return undefined;
 
     const socketUrl =
-      import.meta.env.VITE_API_URL || 'https://leadsnamao.onrender.com';
+      import.meta.env.VITE_API_URL || 'https\://leadsnamao.onrender.com';
 
     const newSocket = io(socketUrl, {
       auth: { userId: String(user._id) },
+
       transports: ['websocket', 'polling'],
+
       reconnection: true,
+
       reconnectionAttempts: 10,
+
       reconnectionDelay: 1000,
+
       reconnectionDelayMax: 5000,
+
       timeout: 20000,
+
       forceNew: true,
     });
 
     socketRef.current = newSocket;
+
     setSocket(newSocket);
 
     const handleConnect = () => {
       console.log('🔌 Conectado ao chat socket:', newSocket.id);
 
       setIsConnected(true);
+
       newSocket.emit('join_conversations');
+
       loadConversations();
+
       requestNotificationPermission();
     };
 
     const handleDisconnect = (reason) => {
       console.log('🔌 Desconectado do chat socket:', reason);
+
       setIsConnected(false);
     };
 
     const handleConnectError = (error) => {
       console.error('❌ Erro de conexão Socket.IO:', error);
+
       setIsConnected(false);
     };
 
@@ -657,7 +801,9 @@ export const ChatProvider = ({ children }) => {
       const message = payload?.message
         ? {
             ...payload.message,
+
             conversation: payload.conversationId,
+
             conversationId: payload.conversationId,
           }
         : payload;
@@ -669,16 +815,19 @@ export const ChatProvider = ({ children }) => {
       if (!userId) return;
 
       const id = getId(userId);
+
       if (!id) return;
 
       setTypingUsers((prev) => ({
         ...prev,
+
         [id]: Boolean(isTyping),
       }));
     };
 
     const handleUserOnline = (userId) => {
       const id = getId(userId);
+
       if (!id) return;
 
       setOnlineUsers((prev) => (prev.includes(id) ? prev : [...prev, id]));
@@ -686,30 +835,47 @@ export const ChatProvider = ({ children }) => {
 
     const handleUserOffline = (userId) => {
       const id = getId(userId);
+
       if (!id) return;
 
       setOnlineUsers((prev) => prev.filter((existingId) => existingId !== id));
     };
 
     newSocket.on('new_message', handleNewMessage);
+
     newSocket.on('new_message_notification', handleMessageNotification);
+
     newSocket.on('newMessage', handleMessageReceived);
+
     newSocket.on('connect', handleConnect);
+
     newSocket.on('disconnect', handleDisconnect);
+
     newSocket.on('connect_error', handleConnectError);
+
     newSocket.on('user_typing', handleUserTyping);
+
     newSocket.on('user_online', handleUserOnline);
+
     newSocket.on('user_offline', handleUserOffline);
 
     return () => {
       newSocket.off('new_message', handleNewMessage);
+
       newSocket.off('new_message_notification', handleMessageNotification);
+
       newSocket.off('newMessage', handleMessageReceived);
+
       newSocket.off('connect', handleConnect);
+
       newSocket.off('disconnect', handleDisconnect);
+
       newSocket.off('connect_error', handleConnectError);
+
       newSocket.off('user_typing', handleUserTyping);
+
       newSocket.off('user_online', handleUserOnline);
+
       newSocket.off('user_offline', handleUserOffline);
 
       newSocket.disconnect();
@@ -719,18 +885,25 @@ export const ChatProvider = ({ children }) => {
       }
 
       setSocket(null);
+
       setIsConnected(false);
     };
   }, [
     user?._id,
+
     getId,
+
     handleMessageReceived,
+
     handleMessageNotification,
+
     loadConversations,
   ]);
 
   // =========================================================
+
   // TÍTULO DA ABA
+
   // =========================================================
 
   useEffect(() => {
@@ -743,7 +916,48 @@ export const ChatProvider = ({ children }) => {
   }, [unreadCount]);
 
   // =========================================================
+  // UPLOAD DE MÍDIA DO CHAT
+  // Envia o arquivo ao backend e retorna os metadados do anexo.
+  // O backend precisa disponibilizar POST /api/chat/media.
+  // =========================================================
+
+  const uploadChatMedia = useCallback(async (file) => {
+    if (!file) {
+      throw new Error('Selecione um arquivo para enviar.');
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await api.post('/api/chat/media', formData);
+      const data = response.data?.data ?? response.data;
+
+      if (!data?.url) {
+        throw new Error('O servidor não retornou a URL da mídia enviada.');
+      }
+
+      return {
+        url: data.url,
+        name: data.name || file.name,
+        size: data.size ?? file.size,
+        mimeType: data.mimeType || file.type || 'application/octet-stream',
+        format: data.format || '',
+      };
+    } catch (error) {
+      console.error('❌ Erro ao enviar mídia do chat:', error);
+      throw new Error(
+        error?.response?.data?.message ||
+          error?.message ||
+          'Não foi possível enviar o arquivo. Tente novamente.',
+      );
+    }
+  }, []);
+
+  // =========================================================
+
   // ENVIAR MENSAGEM: TEXTO, IMAGEM, GIF E ARQUIVO
+
   // =========================================================
 
   const sendMessage = useCallback(
@@ -756,7 +970,9 @@ export const ChatProvider = ({ children }) => {
           : input && typeof input === 'object'
             ? {
                 content: input.content ?? '',
+
                 type: input.type || 'text',
+
                 attachment: input.attachment || null,
               }
             : null;
@@ -766,7 +982,9 @@ export const ChatProvider = ({ children }) => {
       }
 
       const type = String(payload.type).toLowerCase();
+
       const content = String(payload.content || '').trim();
+
       const attachment = payload.attachment;
 
       if (!['text', 'image', 'audio', 'video', 'file'].includes(type)) {
@@ -780,22 +998,34 @@ export const ChatProvider = ({ children }) => {
       }
 
       const optimisticId = `temp_${Date.now()}_${Math.random()
+
         .toString(36)
+
         .substring(2, 8)}`;
 
       const optimisticMessage = {
         _id: optimisticId,
+
         conversation: conversationId,
+
         content,
+
         type,
+
         attachment,
+
         sender: {
           _id: user?._id,
+
           name: user?.name || 'Você',
+
           avatar: user?.avatar || null,
         },
+
         createdAt: new Date().toISOString(),
+
         status: 'sending',
+
         isOptimistic: true,
       };
 
@@ -804,6 +1034,7 @@ export const ChatProvider = ({ children }) => {
       try {
         const response = await api.post(
           `/api/chat/conversations/${conversationId}/messages`,
+
           { content, type, attachment },
         );
 
@@ -852,17 +1083,24 @@ export const ChatProvider = ({ children }) => {
         throw error;
       }
     },
+
     [
       user?._id,
+
       user?.name,
+
       user?.avatar,
+
       isSameId,
+
       updateConversationFromMessage,
     ],
   );
 
   // =========================================================
+
   // CRIAR CONVERSA INTERNA
+
   // =========================================================
 
   const createConversation = useCallback(
@@ -880,7 +1118,9 @@ export const ChatProvider = ({ children }) => {
       try {
         const response = await api.post('/api/chat/conversations', {
           participants: uniqueParticipants,
+
           type,
+
           name,
         });
 
@@ -889,14 +1129,18 @@ export const ChatProvider = ({ children }) => {
         return response.data?.data;
       } catch (error) {
         console.error('❌ Erro ao criar conversa:', error);
+
         throw error;
       }
     },
+
     [getId, loadConversations],
   );
 
   // =========================================================
+
   // CANAL DOS CORRETORES
+
   // =========================================================
 
   const createBrokerChannel = useCallback(
@@ -915,14 +1159,18 @@ export const ChatProvider = ({ children }) => {
         return response.data?.data;
       } catch (error) {
         console.error('❌ Erro ao criar canal:', error);
+
         throw error;
       }
     },
+
     [loadConversations],
   );
 
   // =========================================================
+
   // BUSCAR USUÁRIOS
+
   // =========================================================
 
   const searchUsers = useCallback(async (query) => {
@@ -936,12 +1184,15 @@ export const ChatProvider = ({ children }) => {
       return Array.isArray(response.data?.data) ? response.data.data : [];
     } catch (error) {
       console.error('❌ Erro ao buscar usuários:', error);
+
       return [];
     }
   }, []);
 
   // =========================================================
+
   // SELECIONAR CONVERSA
+
   // =========================================================
 
   const selectConversation = useCallback(
@@ -949,18 +1200,23 @@ export const ChatProvider = ({ children }) => {
       if (!conversation?._id) return;
 
       const conversationId = getId(conversation._id);
+
       if (!conversationId) return;
 
       console.log(
         '💬 Selecionando conversa:',
+
         conversationId,
+
         conversation.channel,
       );
 
       setCurrentConversation(conversation);
+
       currentConversationRef.current = conversation;
 
       messagesRequestRef.current += 1;
+
       setMessages([]);
 
       if (socketRef.current?.connected) {
@@ -969,11 +1225,14 @@ export const ChatProvider = ({ children }) => {
 
       await loadMessages(conversationId);
     },
+
     [getId, loadMessages],
   );
 
   // =========================================================
+
   // NOVO: ABRIR CONVERSA WHATSAPP A PARTIR DE UM LEAD
+
   // =========================================================
 
   const openLeadConversation = useCallback(
@@ -996,17 +1255,22 @@ export const ChatProvider = ({ children }) => {
       let conversation = findLeadConversation(conversationsRef.current);
 
       // Primeiro, atualiza a lista para verificar se a conversa
+
       // já foi criada por um webhook ou por outra ação.
+
       if (!conversation) {
         const response = await api.get('/api/chat/conversations');
+
         const refreshedConversations = extractConversations(response);
 
         conversationsRef.current = refreshedConversations;
+
         setConversations(refreshedConversations);
 
         setUnreadCount(
           refreshedConversations.reduce(
             (sum, item) => sum + Number(item?.unreadCount || 0),
+
             0,
           ),
         );
@@ -1023,23 +1287,30 @@ export const ChatProvider = ({ children }) => {
       }
 
       // Se não existe, pede ao backend para preparar o contato
+
       // e criar ou recuperar a conversa WhatsApp do lead.
+
       if (!conversation) {
         await api.post(
           `/api/whatsapp/leads/${encodeURIComponent(leadId)}/conversation`,
         );
 
         // Atualiza a lista usando o endpoint oficial do chat,
+
         // que já aplica as regras de acesso do usuário.
+
         const response = await api.get('/api/chat/conversations');
+
         const refreshedConversations = extractConversations(response);
 
         conversationsRef.current = refreshedConversations;
+
         setConversations(refreshedConversations);
 
         setUnreadCount(
           refreshedConversations.reduce(
             (sum, item) => sum + Number(item?.unreadCount || 0),
+
             0,
           ),
         );
@@ -1066,11 +1337,14 @@ export const ChatProvider = ({ children }) => {
 
       return conversation;
     },
+
     [selectConversation],
   );
 
   // =========================================================
+
   // DIGITANDO
+
   // =========================================================
 
   const sendTyping = useCallback((conversationId, isTyping) => {
@@ -1078,12 +1352,15 @@ export const ChatProvider = ({ children }) => {
 
     socketRef.current.emit('typing', {
       conversationId,
+
       isTyping,
     });
   }, []);
 
   // =========================================================
+
   // STATUS ONLINE
+
   // =========================================================
 
   const isUserOnline = useCallback(
@@ -1092,16 +1369,20 @@ export const ChatProvider = ({ children }) => {
 
       return Boolean(id && onlineUsers.includes(id));
     },
+
     [getId, onlineUsers],
   );
 
   // =========================================================
+
   // NOME DA CONVERSA
+
   // =========================================================
 
   const getConversationName = useCallback(
     (conversation) => {
       if (!conversation) return 'Conversa';
+
       if (conversation.name) return conversation.name;
 
       if (conversation.channel === 'whatsapp') {
@@ -1122,16 +1403,20 @@ export const ChatProvider = ({ children }) => {
 
       return 'Conversa';
     },
+
     [isSameId, user?._id],
   );
 
   // =========================================================
+
   // AVATAR DA CONVERSA
+
   // =========================================================
 
   const getConversationAvatar = useCallback(
     (conversation) => {
       if (!conversation) return null;
+
       if (conversation.avatar) return conversation.avatar;
 
       if (conversation.channel === 'whatsapp') {
@@ -1148,11 +1433,14 @@ export const ChatProvider = ({ children }) => {
 
       return null;
     },
+
     [isSameId, user?._id],
   );
 
   // =========================================================
+
   // OUTRO PARTICIPANTE
+
   // =========================================================
 
   const getOtherParticipant = useCallback(
@@ -1167,11 +1455,14 @@ export const ChatProvider = ({ children }) => {
         ) || null
       );
     },
+
     [isSameId, user?._id],
   );
 
   // =========================================================
+
   // PARTICIPANTES
+
   // =========================================================
 
   const getConversationParticipants = useCallback((conversation) => {
@@ -1185,21 +1476,26 @@ export const ChatProvider = ({ children }) => {
       getConversationParticipants(conversation).filter((participant) =>
         isUserOnline(participant?._id),
       ),
+
     [getConversationParticipants, isUserOnline],
   );
 
   const getParticipantCount = useCallback(
     (conversation) => getConversationParticipants(conversation).length,
+
     [getConversationParticipants],
   );
 
   const getOnlineParticipantCount = useCallback(
     (conversation) => getOnlineParticipants(conversation).length,
+
     [getOnlineParticipants],
   );
 
   // =========================================================
+
   // SUBTÍTULO
+
   // =========================================================
 
   const getConversationSubtitle = useCallback(
@@ -1223,6 +1519,7 @@ export const ChatProvider = ({ children }) => {
       }
 
       const participantCount = getParticipantCount(conversation);
+
       const onlineCount = getOnlineParticipantCount(conversation);
 
       if (participantCount === 0) return 'Nenhum participante';
@@ -1237,16 +1534,22 @@ export const ChatProvider = ({ children }) => {
         participantCount === 1 ? 'participante' : 'participantes'
       }`;
     },
+
     [
       getOtherParticipant,
+
       getParticipantCount,
+
       getOnlineParticipantCount,
+
       isUserOnline,
     ],
   );
 
   // =========================================================
+
   // CARREGAR CONVERSAS AO ENTRAR
+
   // =========================================================
 
   useEffect(() => {
@@ -1256,7 +1559,9 @@ export const ChatProvider = ({ children }) => {
   }, [user?._id, loadConversations]);
 
   // =========================================================
+
   // LIMPAR AO DESLOGAR
+
   // =========================================================
 
   useEffect(() => {
@@ -1265,73 +1570,116 @@ export const ChatProvider = ({ children }) => {
     console.log('🧹 Limpando estado do ChatContext');
 
     conversationsRef.current = [];
+
     setConversations([]);
 
     setCurrentConversation(null);
+
     currentConversationRef.current = null;
 
     setMessages([]);
+
     setUnreadCount(0);
+
     setOnlineUsers([]);
+
     setTypingUsers({});
+
     setError(null);
+
     setIsConnected(false);
+
     setLastNotification(null);
 
     messagesRequestRef.current += 1;
+
     realtimeConversationVersionRef.current = 0;
+
     processedNotificationIdsRef.current.clear();
 
     if (socketRef.current) {
       socketRef.current.disconnect();
+
       socketRef.current = null;
     }
 
     setSocket(null);
+
     document.title = 'Leads Na Mão';
   }, [user]);
 
   // =========================================================
+
   // CONTEXT VALUE
+
   // =========================================================
 
   const value = {
     conversations,
+
     currentConversation,
+
     messages,
+
     loading,
+
     loadingConversations,
+
     typingUsers,
+
     unreadCount,
+
     onlineUsers,
+
     error,
+
     isConnected,
+
     socket,
+
     lastNotification,
 
     clearNotification: () => setLastNotification(null),
 
     loadConversations,
+
     loadMessages,
+
     sendMessage,
+    uploadChatMedia,
+
     createConversation,
+
     createBrokerChannel,
+
     searchUsers,
+
     selectConversation,
 
     // Nova função disponível para as páginas do CRM.
+
     openLeadConversation,
 
     sendTyping,
+
     setCurrentConversation,
+
     isUserOnline,
+
     getConversationName,
+
     getConversationAvatar,
+
     getOtherParticipant,
+
     getConversationParticipants,
+
     getOnlineParticipants,
+
     getParticipantCount,
+
     getOnlineParticipantCount,
+
     getConversationSubtitle,
   };
 

@@ -19,6 +19,9 @@ import {
   FaExternalLinkAlt,
   FaCalendarAlt,
   FaLink,
+  FaMicrophone,
+  FaStop,
+  FaTrash,
 } from 'react-icons/fa';
 
 import { GifPicker } from 'gif-picker-react';
@@ -56,6 +59,11 @@ export default function ChatArea({ onBack }) {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadedAttachment, setUploadedAttachment] = useState(null);
   const [uploadError, setUploadError] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [recordedAudio, setRecordedAudio] = useState(null);
+  const [recordedAudioUrl, setRecordedAudioUrl] = useState('');
+  const [sendingAudio, setSendingAudio] = useState(false);
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -63,6 +71,10 @@ export default function ChatArea({ onBack }) {
   const emojiPickerRef = useRef(null);
   const gifPickerRef = useRef(null);
   const fileInputRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const recordedChunksRef = useRef([]);
+  const recordingStartedAtRef = useRef(null);
 
   /*
   ====================================================
@@ -323,6 +335,261 @@ export default function ChatArea({ onBack }) {
 
   /*
   ====================================================
+  GRAVAÇÃO DE ÁUDIO PELO MICROFONE
+  ====================================================
+  */
+
+  const formatDuration = (totalSeconds = 0) => {
+    const seconds = Math.max(0, Number(totalSeconds) || 0);
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+  };
+
+  const releaseMicrophone = () => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+  };
+
+  const clearRecordedAudio = () => {
+    if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
+    setRecordedAudio(null);
+    setRecordedAudioUrl('');
+    setRecordingSeconds(0);
+  };
+
+  const startAudioRecording = async () => {
+    setUploadError('');
+
+    if (
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === 'undefined'
+    ) {
+      setUploadError(
+        'Seu navegador não oferece suporte à gravação de áudio. Atualize o navegador ou anexe um arquivo de áudio.',
+      );
+      return;
+    }
+
+    if (!currentConversation?._id) {
+      setUploadError('Selecione uma conversa antes de gravar um áudio.');
+      return;
+    }
+
+    if (typeof uploadChatMedia !== 'function') {
+      setUploadError(
+        'O upload de mídia ainda não está disponível no ChatContext.',
+      );
+      return;
+    }
+
+    try {
+      clearRecordedAudio();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      // Para conversas WhatsApp, prioriza OGG/Opus quando o navegador
+      // realmente oferece suporte. Muitos navegadores (incluindo Chrome)
+      // gravam apenas WebM/Opus; nesse caso mantemos o formato real e não
+      // fingimos que o arquivo é OGG. A conversão de fallback precisa ocorrer
+      // no backend antes de enviar ao WA-AKG.
+      const supportedTypes = isWhatsApp
+        ? [
+            'audio/ogg;codecs=opus',
+            'audio/ogg',
+            'audio/webm;codecs=opus',
+            'audio/webm',
+            'audio/mp4',
+          ]
+        : [
+            'audio/webm;codecs=opus',
+            'audio/webm',
+            'audio/ogg;codecs=opus',
+            'audio/ogg',
+            'audio/mp4',
+          ];
+
+      const mimeType = supportedTypes.find(
+        (type) =>
+          typeof MediaRecorder.isTypeSupported === 'function' &&
+          MediaRecorder.isTypeSupported(type),
+      );
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      recordedChunksRef.current = [];
+      recordingStartedAtRef.current = Date.now();
+      setRecordingSeconds(0);
+
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size > 0) recordedChunksRef.current.push(event.data);
+      };
+
+      recorder.onerror = () => {
+        setUploadError('Ocorreu um erro durante a gravação. Tente novamente.');
+        setIsRecording(false);
+        releaseMicrophone();
+      };
+
+      recorder.onstop = () => {
+        const detectedMimeType = String(
+          recorder.mimeType ||
+            mimeType ||
+            recordedChunksRef.current[0]?.type ||
+            'audio/webm',
+        ).toLowerCase();
+
+        // Remove parâmetros como ;codecs=opus do MIME enviado como metadado.
+        // Isso não altera o conteúdo do áudio: apenas informa corretamente o contêiner.
+        const containerMimeType = detectedMimeType.includes('ogg')
+          ? 'audio/ogg'
+          : detectedMimeType.includes('mp4')
+            ? 'audio/mp4'
+            : detectedMimeType.includes('webm')
+              ? 'audio/webm'
+              : detectedMimeType.split(';')[0] || 'application/octet-stream';
+
+        const blob = new Blob(recordedChunksRef.current, {
+          type: detectedMimeType,
+        });
+        releaseMicrophone();
+        setIsRecording(false);
+
+        if (!blob.size) {
+          setUploadError('Nenhum áudio foi gravado. Tente novamente.');
+          return;
+        }
+
+        const extension =
+          containerMimeType === 'audio/ogg'
+            ? 'ogg'
+            : containerMimeType === 'audio/mp4'
+              ? 'm4a'
+              : containerMimeType === 'audio/webm'
+                ? 'webm'
+                : 'audio';
+        const file = new File([blob], `audio-${Date.now()}.${extension}`, {
+          type: containerMimeType,
+        });
+        const previewUrl = URL.createObjectURL(blob);
+        setRecordedAudio(file);
+        setRecordedAudioUrl(previewUrl);
+        setRecordingSeconds(
+          Math.max(
+            1,
+            Math.round(
+              (Date.now() - (recordingStartedAtRef.current || Date.now())) /
+                1000,
+            ),
+          ),
+        );
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start(250);
+      setIsRecording(true);
+    } catch (error) {
+      releaseMicrophone();
+      setIsRecording(false);
+      const message =
+        error?.name === 'NotAllowedError'
+          ? 'Permita o acesso ao microfone nas configurações do navegador para gravar áudio.'
+          : error?.name === 'NotFoundError'
+            ? 'Nenhum microfone foi encontrado neste dispositivo.'
+            : error?.message || 'Não foi possível iniciar a gravação.';
+      setUploadError(message);
+    }
+  };
+
+  const stopAudioRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+  };
+
+  const cancelAudioRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.ondataavailable = null;
+      recorder.onstop = null;
+      recorder.stop();
+    }
+    releaseMicrophone();
+    setIsRecording(false);
+    recordedChunksRef.current = [];
+    clearRecordedAudio();
+  };
+
+  const handleSendRecordedAudio = async () => {
+    if (!recordedAudio || !currentConversation?._id || sendingAudio || sending)
+      return;
+    if (typeof uploadChatMedia !== 'function') {
+      setUploadError(
+        'O upload de mídia ainda não está disponível no ChatContext.',
+      );
+      return;
+    }
+
+    setSendingAudio(true);
+    setUploadError('');
+    try {
+      const uploaded = await uploadChatMedia(recordedAudio);
+      if (!uploaded?.url)
+        throw new Error('O servidor não retornou a URL do áudio.');
+
+      await sendMessage(currentConversation._id, {
+        content: '',
+        type: 'audio',
+        attachment: {
+          url: uploaded.url,
+          name: uploaded.name || recordedAudio.name,
+          size: uploaded.size ?? recordedAudio.size,
+          mimeType:
+            uploaded.mimeType ||
+            recordedAudio.type ||
+            'application/octet-stream',
+          format: uploaded.format || '',
+        },
+      });
+
+      clearRecordedAudio();
+    } catch (error) {
+      console.error('Erro ao enviar áudio gravado:', error);
+      setUploadError(
+        error?.response?.data?.message ||
+          error?.message ||
+          'Não foi possível enviar o áudio.',
+      );
+    } finally {
+      setSendingAudio(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isRecording) return undefined;
+    const timer = window.setInterval(() => {
+      if (recordingStartedAtRef.current) {
+        setRecordingSeconds(
+          Math.floor((Date.now() - recordingStartedAtRef.current) / 1000),
+        );
+      }
+    }, 500);
+    return () => window.clearInterval(timer);
+  }, [isRecording]);
+
+  useEffect(() => {
+    return () => {
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== 'inactive') recorder.stop();
+      releaseMicrophone();
+      if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
+    };
+  }, [recordedAudioUrl]);
+
+  /*
+  ====================================================
   DIGITAÇÃO
   ====================================================
   */
@@ -417,6 +684,22 @@ export default function ChatArea({ onBack }) {
     setShowGifPicker(false);
     setUploadedAttachment(null);
     setUploadError('');
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== 'inactive'
+    ) {
+      mediaRecorderRef.current.ondataavailable = null;
+      mediaRecorderRef.current.onstop = null;
+      mediaRecorderRef.current.stop();
+    }
+    releaseMicrophone();
+    setIsRecording(false);
+    setRecordedAudio(null);
+    setRecordedAudioUrl((previousUrl) => {
+      if (previousUrl) URL.revokeObjectURL(previousUrl);
+      return '';
+    });
+    setRecordingSeconds(0);
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -519,14 +802,19 @@ export default function ChatArea({ onBack }) {
     const isAudio = mimeType.startsWith('audio/');
     const isVideo = mimeType.startsWith('video/');
 
-
     try {
       setSending(true);
       setUploadError('');
 
       await sendMessage(currentConversation._id, {
         content: '',
-        type: isImage ? 'image' : isAudio ? 'audio' : isVideo ? 'video' : 'file',
+        type: isImage
+          ? 'image'
+          : isAudio
+            ? 'audio'
+            : isVideo
+              ? 'video'
+              : 'file',
         attachment: {
           url: uploadedAttachment.url,
           name: uploadedAttachment.originalName || uploadedAttachment.name,
@@ -1664,6 +1952,86 @@ export default function ChatArea({ onBack }) {
           </div>
         )}
 
+        {(isRecording || recordedAudio || sendingAudio) && (
+          <div
+            className={`mx-auto mb-3 flex max-w-4xl flex-col gap-3 rounded-2xl border p-3 sm:flex-row sm:items-center ${isWhatsApp ? 'border-emerald-500/20 bg-emerald-500/[0.045]' : 'border-indigo-400/20 bg-indigo-500/[0.045]'}`}
+          >
+            {isRecording ? (
+              <>
+                <span className="flex items-center gap-2 text-xs font-semibold text-rose-300">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-rose-400" />
+                  Gravando áudio · {formatDuration(recordingSeconds)}
+                </span>
+                <div className="flex flex-1 items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={cancelAudioRecording}
+                    className="rounded-xl border border-white/10 px-3 py-2 text-xs text-gray-300 hover:bg-white/5"
+                    aria-label="Cancelar gravação"
+                  >
+                    <FaTrash className="mr-1.5 inline" size={11} /> Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={stopAudioRecording}
+                    className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-500"
+                    aria-label="Finalizar gravação"
+                  >
+                    <FaStop className="mr-1.5 inline" size={10} /> Finalizar
+                  </button>
+                </div>
+              </>
+            ) : recordedAudio ? (
+              <>
+                <div className="min-w-0 flex-1">
+                  <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-200">
+                    <FaMicrophone
+                      className={
+                        isWhatsApp ? 'text-emerald-400' : 'text-indigo-300'
+                      }
+                    />
+                    Prévia do áudio · {formatDuration(recordingSeconds)}
+                  </div>
+                  <audio
+                    src={recordedAudioUrl}
+                    controls
+                    preload="metadata"
+                    className="h-9 w-full max-w-md"
+                    aria-label="Ouvir áudio gravado antes de enviar"
+                  />
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={cancelAudioRecording}
+                    disabled={sendingAudio}
+                    className="rounded-xl border border-white/10 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 disabled:opacity-50"
+                  >
+                    Descartar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSendRecordedAudio}
+                    disabled={sendingAudio || sending}
+                    className={`rounded-xl px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 ${isWhatsApp ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-indigo-600 hover:bg-indigo-500'}`}
+                  >
+                    {sendingAudio ? (
+                      'Enviando...'
+                    ) : (
+                      <>
+                        <FaPaperPlane className="mr-1.5 inline" size={10} />{' '}
+                        Enviar áudio
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <span className="text-xs text-gray-400">Enviando áudio...</span>
+            )}
+          </div>
+        )}
+
         {(uploadingMedia || uploadedAttachment || uploadError) && (
           <div className="mx-auto mb-3 max-w-4xl rounded-2xl border border-white/[0.08] bg-[#101116] p-3">
             {uploadingMedia && (
@@ -1817,6 +2185,28 @@ export default function ChatArea({ onBack }) {
             GIF
           </button>
 
+          {/* MICROFONE / GRAVAÇÃO DE ÁUDIO */}
+
+          <button
+            type="button"
+            onClick={isRecording ? stopAudioRecording : startAudioRecording}
+            disabled={
+              sending ||
+              uploadingMedia ||
+              sendingAudio ||
+              Boolean(recordedAudio)
+            }
+            className={`mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 ${isRecording ? 'border-rose-400/30 bg-rose-500/15 text-rose-300 animate-pulse' : isWhatsApp ? 'border-emerald-500/10 text-emerald-400 hover:bg-emerald-500/10' : 'border-indigo-400/10 text-indigo-300 hover:bg-indigo-500/10'}`}
+            title={isRecording ? 'Finalizar gravação' : 'Gravar áudio'}
+            aria-label={
+              isRecording
+                ? 'Finalizar gravação de áudio'
+                : 'Gravar áudio pelo microfone'
+            }
+          >
+            {isRecording ? <FaStop size={13} /> : <FaMicrophone size={15} />}
+          </button>
+
           {/* CAMPO DE TEXTO */}
 
           <div
@@ -1875,7 +2265,13 @@ export default function ChatArea({ onBack }) {
           <button
             type="button"
             onClick={handleSendMessage}
-            disabled={!inputMessage.trim() || sending}
+            disabled={
+              !inputMessage.trim() ||
+              sending ||
+              isRecording ||
+              Boolean(recordedAudio) ||
+              sendingAudio
+            }
             className={`mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-lg transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:bg-white/[0.04] disabled:text-gray-600 disabled:shadow-none ${
               isWhatsApp
                 ? 'bg-emerald-600 shadow-emerald-950/20 hover:bg-emerald-500'
