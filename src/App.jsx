@@ -57,6 +57,7 @@ import SaleDetailsAdmin from './pages/admin/SaleDetailsAdmin';
 import CommissionApproval from './pages/admin/CommissionApproval';
 import PropertyFavorites from './pages/PropertyFavorites';
 import WhatsAppQrCode from './pages/WhatsAppQrCode';
+import NotFound from './pages/NotFound';
 
 import ChatPage from './pages/ChatPage';
 import NotificationCenter from './pages/NotificationCenter';
@@ -91,6 +92,7 @@ export function App() {
         <Route path="/about-us" element={<AboutUs />} />
         <Route path="/imoveis" element={<Properties />} />
         <Route path="/map" element={<PropertiesMap />} />
+        <Route path="*" element={<NotFound />} />
 
         {/* Páginas COM sidebar (usam Layout) */}
         <Route element={<Layout />}>
