@@ -60,6 +60,7 @@ import WhatsAppQrCode from './pages/WhatsAppQrCode';
 
 import ChatPage from './pages/ChatPage';
 import NotificationCenter from './pages/NotificationCenter';
+import LeadFollowUpTemplates from './pages/admin/LeadFollowUpTemplates';
 
 export function App() {
   return (
@@ -134,6 +135,7 @@ export function App() {
           <Route path="/commissions" element={<CommissionApproval />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/notifications" element={<NotificationCenter />} />
+          <Route path="/admin/follow-ups" element={<LeadFollowUpTemplates />} />
           <Route path="/qr" element={<WhatsAppQrCode />} />
         </Route>
       </Routes>

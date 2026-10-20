@@ -30,6 +30,7 @@ import {
   FaComments,
   FaWhatsapp,
   FaBell,
+  FaRegEdit,
 } from 'react-icons/fa';
 
 import imgLogo from '../assets/logoImg.png';
@@ -278,6 +279,12 @@ export default function Sidebar({ onCollapseChange }) {
       path: '/notifications',
       label: 'Notificações',
       icon: <FaBell />,
+    },
+
+    {
+      path: '/admin/follow-ups',
+      label: 'Central de Follow-ups',
+      icon: <FaRegEdit />,
     },
 
     // ----------------------------------------------------------
