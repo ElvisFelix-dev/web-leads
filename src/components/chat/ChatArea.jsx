@@ -839,7 +839,6 @@ export default function ChatArea({ onBack }) {
     }
   };
 
-
   /*
   ====================================================
   ENVIO AUTOMÁTICO DE LINK DO LEAD PARA O WHATSAPP DO CRM
@@ -853,19 +852,42 @@ export default function ChatArea({ onBack }) {
     const targetLeadId = request?.leadId;
     const requestId = request?.requestId;
 
-    if (!messageText || !targetLeadId || !requestId || !currentConversation?._id) {
+    if (
+      !messageText ||
+      !targetLeadId ||
+      !requestId ||
+      !currentConversation?._id
+    ) {
       return;
     }
 
-    const conversationLead =
-      currentConversation?.lead ||
-      currentConversation?.relatedLead ||
-      currentConversation?.contactLead;
-    const conversationLeadId =
-      conversationLead?._id ||
-      conversationLead?.id ||
-      currentConversation?.leadId ||
-      currentConversation?.relatedLeadId;
+    // A conversa pode trazer o vínculo do lead em campos diferentes,
+    // dependendo de como o backend montou o contato WhatsApp.
+    const leadCandidates = [
+      currentConversation?.lead,
+      currentConversation?.leadId,
+      currentConversation?.relatedLead,
+      currentConversation?.relatedLeadId,
+      currentConversation?.contactLead,
+      currentConversation?.whatsappContact?.lead,
+      currentConversation?.whatsappContact?.leadId,
+      currentConversation?.contact?.lead,
+      currentConversation?.contact?.leadId,
+    ];
+
+    const conversationLeadId = leadCandidates
+      .map((candidate) => {
+        if (candidate === null || candidate === undefined) return null;
+        if (typeof candidate === 'string' || typeof candidate === 'number') {
+          return String(candidate);
+        }
+        if (typeof candidate === 'object') {
+          const id = candidate._id ?? candidate.id ?? candidate.$oid;
+          return id === null || id === undefined ? null : String(id);
+        }
+        return null;
+      })
+      .find(Boolean);
 
     if (
       currentConversation.channel !== 'whatsapp' ||
@@ -891,7 +913,10 @@ export default function ChatArea({ onBack }) {
         setUploadError('');
         navigate(location.pathname, { replace: true, state: null });
       } catch (error) {
-        console.error('Erro ao enviar link da proposta pelo WhatsApp do CRM:', error);
+        console.error(
+          'Erro ao enviar link da proposta pelo WhatsApp do CRM:',
+          error,
+        );
         setUploadError(
           error?.response?.data?.message ||
             error?.message ||
@@ -907,11 +932,7 @@ export default function ChatArea({ onBack }) {
   }, [
     location.state,
     location.pathname,
-    currentConversation?._id,
-    currentConversation?.channel,
-    currentConversation?.lead?._id,
-    currentConversation?.relatedLead?._id,
-    currentConversation?.leadId,
+    currentConversation,
     sendMessage,
     navigate,
   ]);

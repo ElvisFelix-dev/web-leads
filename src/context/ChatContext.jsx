@@ -66,23 +66,22 @@ const getRelatedId = (value) => getObjectId(value);
 const getConversationLeadId = (conversation) => {
   if (!conversation) return null;
 
+  // Mantém a identificação compatível com os diferentes formatos
+  // que podem ser retornados pela API de conversas do WhatsApp.
   const candidates = [
     conversation.lead,
-
     conversation.leadId,
-
+    conversation.relatedLead,
+    conversation.relatedLeadId,
+    conversation.contactLead,
     conversation.whatsappContact?.lead,
-
     conversation.whatsappContact?.leadId,
-
     conversation.contact?.lead,
-
     conversation.contact?.leadId,
   ];
 
   for (const candidate of candidates) {
     const id = getRelatedId(candidate);
-
     if (id) return id;
   }
 
