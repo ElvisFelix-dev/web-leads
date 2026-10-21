@@ -1,10 +1,11 @@
 // src/pages/PropertyList.jsx
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 
 import {
   Home,
+  ArrowLeft,
   Plus,
   Search,
   RefreshCcw,
@@ -42,6 +43,7 @@ const currency = new Intl.NumberFormat('pt-BR', {
 });
 
 export default function PropertyList() {
+  const navigate = useNavigate();
   const {
     properties,
     loading,
@@ -737,13 +739,37 @@ export default function PropertyList() {
             </div>
           </div>
 
-          <Link
-            to="/create-property"
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-500"
-          >
-            <Plus size={18} />
-            Novo imóvel
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-5 py-3 font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
+            >
+              <ArrowLeft size={18} />
+              Voltar
+            </button>
+
+            <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-blue-400/40 bg-blue-600/20 px-5 py-3 font-semibold text-blue-200 shadow-lg shadow-blue-950/20 transition hover:border-blue-300/60 hover:bg-blue-600/30 focus-within:ring-2 focus-within:ring-blue-500/60">
+              <Upload size={18} />
+              Importar CSV
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="sr-only"
+                onChange={handleImportFileChange}
+                disabled={importLoading}
+                aria-label="Selecionar arquivo CSV para importar imóveis"
+              />
+            </label>
+
+            <Link
+              to="/create-property"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-lg shadow-blue-950/20 transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400/60"
+            >
+              <Plus size={18} />
+              Novo imóvel
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -789,8 +815,8 @@ export default function PropertyList() {
 
       {/* TOOLBAR */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-        <div className="flex flex-col gap-4 xl:flex-row">
-          <div className="relative flex-1">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="relative min-w-[240px] flex-[1_1_320px]">
             <Search
               size={18}
               className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
@@ -832,18 +858,6 @@ export default function PropertyList() {
             <RefreshCcw size={18} />
             Atualizar
           </button>
-
-          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-blue-500/40 bg-blue-600/15 px-5 py-3 font-semibold text-blue-300 transition hover:bg-blue-600/25">
-            <Upload size={18} />
-            Importar CSV
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              className="hidden"
-              onChange={handleImportFileChange}
-              disabled={importLoading}
-            />
-          </label>
 
           <button
             onClick={handleExportCSV}
