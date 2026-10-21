@@ -613,14 +613,22 @@ export default function LeadDetails() {
       }
 
       // Localiza/seleciona a conversa WhatsApp vinculada ao lead no CRM.
-      await openLeadConversation(lead._id);
+      const conversation = await openLeadConversation(lead._id);
 
-      // O ChatArea envia a mensagem usando o fluxo real de envio do CRM.
+      if (!conversation?._id) {
+        throw new Error(
+          'A conversa foi aberta, mas não foi possível identificar seu ID para enviar a proposta.',
+        );
+      }
+
+      // Passa o ID exato da conversa selecionada para evitar depender
+      // do formato do vínculo lead/conversa retornado pelo backend.
       navigate('/chat', {
         state: {
           crmWhatsAppSend: {
             requestId: `public-proposal-${lead._id}-${Date.now()}`,
             leadId: String(lead._id),
+            conversationId: String(conversation._id),
             message,
           },
         },
@@ -1453,7 +1461,7 @@ export default function LeadDetails() {
                   disabled={openingChat}
                 />
 
-                {/*{whatsappUrl && (
+                {whatsappUrl && (
                   <QuickAction
                     icon={<ExternalLink size={17} />}
 
@@ -1463,7 +1471,7 @@ export default function LeadDetails() {
                       window.open(whatsappUrl, '_blank', 'noopener,noreferrer')
                     }
                   />
-                )}*/}
+                )}
 
                 {lead.email && (
                   <QuickAction

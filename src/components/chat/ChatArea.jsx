@@ -849,52 +849,56 @@ export default function ChatArea({ onBack }) {
   useEffect(() => {
     const request = location.state?.crmWhatsAppSend;
     const messageText = String(request?.message || '').trim();
-    const targetLeadId = request?.leadId;
     const requestId = request?.requestId;
+    const targetConversationId = request?.conversationId
+      ? String(request.conversationId)
+      : null;
+    const targetLeadId = request?.leadId ? String(request.leadId) : null;
 
+    if (!messageText || !requestId || !currentConversation?._id) return;
+
+    const currentConversationId = String(currentConversation._id);
     if (
-      !messageText ||
-      !targetLeadId ||
-      !requestId ||
-      !currentConversation?._id
+      targetConversationId &&
+      currentConversationId !== targetConversationId
     ) {
       return;
     }
 
-    // A conversa pode trazer o vínculo do lead em campos diferentes,
-    // dependendo de como o backend montou o contato WhatsApp.
-    const leadCandidates = [
-      currentConversation?.lead,
-      currentConversation?.leadId,
-      currentConversation?.relatedLead,
-      currentConversation?.relatedLeadId,
-      currentConversation?.contactLead,
-      currentConversation?.whatsappContact?.lead,
-      currentConversation?.whatsappContact?.leadId,
-      currentConversation?.contact?.lead,
-      currentConversation?.contact?.leadId,
-    ];
-
-    const conversationLeadId = leadCandidates
-      .map((candidate) => {
-        if (candidate === null || candidate === undefined) return null;
-        if (typeof candidate === 'string' || typeof candidate === 'number') {
-          return String(candidate);
-        }
-        if (typeof candidate === 'object') {
-          const id = candidate._id ?? candidate.id ?? candidate.$oid;
-          return id === null || id === undefined ? null : String(id);
-        }
-        return null;
-      })
-      .find(Boolean);
-
-    if (
-      currentConversation.channel !== 'whatsapp' ||
-      !conversationLeadId ||
-      String(conversationLeadId) !== String(targetLeadId)
-    ) {
+    if (currentConversation.channel !== 'whatsapp') {
+      setUploadError('A conversa selecionada não é uma conversa do WhatsApp.');
       return;
+    }
+
+    // Compatibilidade com solicitações antigas que ainda não carregam conversationId.
+    if (!targetConversationId && targetLeadId) {
+      const leadCandidates = [
+        currentConversation?.lead,
+        currentConversation?.leadId,
+        currentConversation?.relatedLead,
+        currentConversation?.relatedLeadId,
+        currentConversation?.contactLead,
+        currentConversation?.whatsappContact?.lead,
+        currentConversation?.whatsappContact?.leadId,
+        currentConversation?.contact?.lead,
+        currentConversation?.contact?.leadId,
+      ];
+
+      const conversationLeadId = leadCandidates
+        .map((candidate) => {
+          if (candidate === null || candidate === undefined) return null;
+          if (typeof candidate === 'string' || typeof candidate === 'number') {
+            return String(candidate);
+          }
+          if (typeof candidate === 'object') {
+            const id = candidate._id ?? candidate.id ?? candidate.$oid;
+            return id === null || id === undefined ? null : String(id);
+          }
+          return null;
+        })
+        .find(Boolean);
+
+      if (!conversationLeadId || conversationLeadId !== targetLeadId) return;
     }
 
     if (autoSendRequestRef.current === requestId) return;
@@ -905,8 +909,7 @@ export default function ChatArea({ onBack }) {
       setUploadError('');
 
       try {
-        await sendMessage(currentConversation._id, messageText);
-
+        await sendMessage(currentConversationId, messageText);
         setInputMessage('');
         setShowEmojiPicker(false);
         setShowGifPicker(false);
