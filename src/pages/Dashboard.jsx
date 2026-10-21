@@ -166,14 +166,34 @@ export default function Dashboard() {
   } = totals;
 
   // 🔥 CORREÇÃO: Definindo o chartData
-  const chartData = leadsDaily.map((lead) => {
-    const property = imoveisDaily.find((item) => item._id === lead._id);
-    return {
-      day: lead._id,
-      leads: lead.count || 0,
-      imoveis: property?.count || 0,
-    };
-  });
+
+  const chartData = (() => {
+    const dailyData = new Map();
+
+    // Registra os dias com leads
+    leadsDaily.forEach((item) => {
+      dailyData.set(item._id, {
+        day: item._id,
+        leads: Number(item.count) || 0,
+        imoveis: 0,
+      });
+    });
+
+    // Registra também os dias que possuem somente imóveis
+    imoveisDaily.forEach((item) => {
+      const current = dailyData.get(item._id) || {
+        day: item._id,
+        leads: 0,
+        imoveis: 0,
+      };
+
+      current.imoveis = Number(item.count) || 0;
+
+      dailyData.set(item._id, current);
+    });
+
+    return Array.from(dailyData.values());
+  })();
 
   // Verificar se há dados
   const hasData = leads > 0 || imoveis > 0 || ranking.length > 0;
