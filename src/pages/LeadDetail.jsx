@@ -589,23 +589,55 @@ export default function LeadDetails() {
     }
   };
 
-  const handleSendPublicProposalWhatsApp = () => {
-    if (!publicProposalUrl || !lead?.phone) {
+  const handleSendPublicProposalWhatsApp = async () => {
+    if (!publicProposalUrl || !lead?._id || !lead?.phone) {
       setPublicLinkError(
-        'É necessário gerar o link e ter um telefone cadastrado para abrir o WhatsApp.',
+        'Gere o link da proposta e confirme se o lead possui telefone cadastrado.',
       );
       return;
     }
 
-    const phone = normalizePhone(lead.phone);
-    const internationalPhone = phone.startsWith('55') ? phone : `55${phone}`;
+    if (openingChat) return;
+
     const message = `Olá, ${lead.name || 'tudo bem'}! Segue o link seguro para preencher sua proposta do imóvel: ${publicProposalUrl}`;
 
-    window.open(
-      `https://wa.me/${internationalPhone}?text=${encodeURIComponent(message)}`,
-      '_blank',
-      'noopener,noreferrer',
-    );
+    setOpeningChat(true);
+    setPublicLinkError('');
+    setPublicLinkSuccess('');
+
+    try {
+      if (typeof openLeadConversation !== 'function') {
+        throw new Error(
+          'A integração de conversas não está disponível no ChatContext.',
+        );
+      }
+
+      // Localiza/seleciona a conversa WhatsApp vinculada ao lead no CRM.
+      await openLeadConversation(lead._id);
+
+      // O ChatArea envia a mensagem usando o fluxo real de envio do CRM.
+      navigate('/chat', {
+        state: {
+          crmWhatsAppSend: {
+            requestId: `public-proposal-${lead._id}-${Date.now()}`,
+            leadId: String(lead._id),
+            message,
+          },
+        },
+      });
+    } catch (error) {
+      console.error(
+        'Erro ao enviar link da proposta pelo WhatsApp do CRM:',
+        error,
+      );
+      setPublicLinkError(
+        error?.response?.data?.message ||
+          error?.message ||
+          'Não foi possível abrir a conversa WhatsApp deste lead no CRM.',
+      );
+    } finally {
+      setOpeningChat(false);
+    }
   };
 
   const handleEdit = () => {
@@ -1128,11 +1160,17 @@ export default function LeadDetails() {
                       <button
                         type="button"
                         onClick={handleSendPublicProposalWhatsApp}
-                        disabled={!lead.phone}
+                        disabled={!lead.phone || openingChat}
                         className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        <Send size={16} />
-                        Enviar pelo WhatsApp
+                        {openingChat ? (
+                          <LoaderCircle size={16} className="animate-spin" />
+                        ) : (
+                          <Send size={16} />
+                        )}
+                        {openingChat
+                          ? 'Enviando pelo CRM...'
+                          : 'Enviar pelo WhatsApp do CRM'}
                       </button>
 
                       <button
