@@ -30,3 +30,16 @@ export const getPropertyBySlug = async (slug) => {
 
   return data.data || data;
 };
+
+// =====================================
+// Importar imóveis por CSV
+// =====================================
+// O backend precisa disponibilizar POST /api/properties/import/csv
+// e receber { properties: [...] }.
+export const importPropertiesCSV = async (properties = []) => {
+  const { data } = await api.post('/api/properties/import/csv', {
+    properties,
+  });
+
+  return data.data || data;
+};
