@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import {
   FaPaperPlane,
@@ -48,6 +48,7 @@ export default function ChatArea({ onBack }) {
 
   const { user } = useContext(UserContext);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -75,6 +76,7 @@ export default function ChatArea({ onBack }) {
   const mediaStreamRef = useRef(null);
   const recordedChunksRef = useRef([]);
   const recordingStartedAtRef = useRef(null);
+  const autoSendRequestRef = useRef(null);
 
   /*
   ====================================================
@@ -836,6 +838,83 @@ export default function ChatArea({ onBack }) {
       setSending(false);
     }
   };
+
+
+  /*
+  ====================================================
+  ENVIO AUTOMÁTICO DE LINK DO LEAD PARA O WHATSAPP DO CRM
+  Recebe a solicitação encaminhada pela tela de detalhes do lead.
+  O envio usa sendMessage do ChatContext, o mesmo fluxo do chat.
+  ====================================================
+  */
+  useEffect(() => {
+    const request = location.state?.crmWhatsAppSend;
+    const messageText = String(request?.message || '').trim();
+    const targetLeadId = request?.leadId;
+    const requestId = request?.requestId;
+
+    if (!messageText || !targetLeadId || !requestId || !currentConversation?._id) {
+      return;
+    }
+
+    const conversationLead =
+      currentConversation?.lead ||
+      currentConversation?.relatedLead ||
+      currentConversation?.contactLead;
+    const conversationLeadId =
+      conversationLead?._id ||
+      conversationLead?.id ||
+      currentConversation?.leadId ||
+      currentConversation?.relatedLeadId;
+
+    if (
+      currentConversation.channel !== 'whatsapp' ||
+      !conversationLeadId ||
+      String(conversationLeadId) !== String(targetLeadId)
+    ) {
+      return;
+    }
+
+    if (autoSendRequestRef.current === requestId) return;
+    autoSendRequestRef.current = requestId;
+
+    const sendProposalLink = async () => {
+      setSending(true);
+      setUploadError('');
+
+      try {
+        await sendMessage(currentConversation._id, messageText);
+
+        setInputMessage('');
+        setShowEmojiPicker(false);
+        setShowGifPicker(false);
+        setUploadError('');
+        navigate(location.pathname, { replace: true, state: null });
+      } catch (error) {
+        console.error('Erro ao enviar link da proposta pelo WhatsApp do CRM:', error);
+        setUploadError(
+          error?.response?.data?.message ||
+            error?.message ||
+            'Não foi possível enviar o link pelo WhatsApp do CRM. Tente novamente pela conversa.',
+        );
+        autoSendRequestRef.current = null;
+      } finally {
+        setSending(false);
+      }
+    };
+
+    sendProposalLink();
+  }, [
+    location.state,
+    location.pathname,
+    currentConversation?._id,
+    currentConversation?.channel,
+    currentConversation?.lead?._id,
+    currentConversation?.relatedLead?._id,
+    currentConversation?.leadId,
+    sendMessage,
+    navigate,
+  ]);
 
   /*
   ====================================================
