@@ -2367,4 +2367,3 @@ function getProposalBadgeType(status) {
       return 'gray';
   }
 }
-Abrir;
