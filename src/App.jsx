@@ -58,6 +58,7 @@ import CommissionApproval from './pages/admin/CommissionApproval';
 import PropertyFavorites from './pages/PropertyFavorites';
 import WhatsAppQrCode from './pages/WhatsAppQrCode';
 import NotFound from './pages/NotFound';
+import PublicProposalForm from './pages/PublicProposalForm';
 
 import ChatPage from './pages/ChatPage';
 import NotificationCenter from './pages/NotificationCenter';
@@ -92,7 +93,7 @@ export function App() {
         <Route path="/about-us" element={<AboutUs />} />
         <Route path="/imoveis" element={<Properties />} />
         <Route path="/map" element={<PropertiesMap />} />
-        <Route path="*" element={<NotFound />} />
+        <Route path="/proposal-form/:token" element={<PublicProposalForm />} />
 
         {/* Páginas COM sidebar (usam Layout) */}
         <Route element={<Layout />}>
@@ -139,6 +140,7 @@ export function App() {
           <Route path="/notifications" element={<NotificationCenter />} />
           <Route path="/admin/follow-ups" element={<LeadFollowUpTemplates />} />
           <Route path="/qr" element={<WhatsAppQrCode />} />
+          <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
 

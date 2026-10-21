@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+
 import { useNavigate, useParams } from 'react-router-dom';
 
 import {
@@ -22,45 +23,73 @@ import {
   ChevronRight,
   CheckCircle2,
   X,
+  Link2,
+  Copy,
+  Send,
+  LoaderCircle,
+  Check,
 } from 'lucide-react';
 
 import api from '../service/api';
+
 import { useChat } from '../context/ChatContext';
 
 import LeadHistory from '../components/lead/LeadHistory';
+
 import LeadRecentMessages from '../components/lead/LeadRecentMessages';
 
 export default function LeadDetails() {
   const { id } = useParams();
+
   const navigate = useNavigate();
 
   const { openLeadConversation } = useChat();
 
   const [lead, setLead] = useState(null);
+
   const [proposals, setProposals] = useState([]);
+
   const [visits, setVisits] = useState([]);
 
   const [loading, setLoading] = useState(true);
+
   const [loadingProposals, setLoadingProposals] = useState(false);
+
   const [loadingVisits, setLoadingVisits] = useState(false);
+
   const [openingChat, setOpeningChat] = useState(false);
 
   const [error, setError] = useState(null);
+
   const [chatError, setChatError] = useState('');
 
+  // Link público individual da proposta.
+  const [publicProposalUrl, setPublicProposalUrl] = useState('');
+  const [publicProposalExpiresAt, setPublicProposalExpiresAt] = useState(null);
+  const [generatingPublicLink, setGeneratingPublicLink] = useState(false);
+  const [copyingPublicLink, setCopyingPublicLink] = useState(false);
+  const [publicLinkError, setPublicLinkError] = useState('');
+  const [publicLinkSuccess, setPublicLinkSuccess] = useState('');
+
   /*
+
    * ============================================================
+
    * CARREGAR LEAD
+
    * ============================================================
+
    */
 
   useEffect(() => {
     async function loadLead() {
       try {
         setLoading(true);
+
         setError(null);
 
         const response = await api.get(`/api/leads/${id}`);
+
         const payload = response?.data;
 
         const loadedLead =
@@ -84,9 +113,13 @@ export default function LeadDetails() {
   }, [id]);
 
   /*
+
    * ============================================================
+
    * CARREGAR PROPOSTAS DO LEAD
+
    * ============================================================
+
    */
 
   useEffect(() => {
@@ -97,6 +130,7 @@ export default function LeadDetails() {
         setLoadingProposals(true);
 
         const response = await api.get(`/api/proposals/lead/${id}`);
+
         const payload = response?.data;
 
         const loadedProposals =
@@ -105,6 +139,7 @@ export default function LeadDetails() {
         setProposals(Array.isArray(loadedProposals) ? loadedProposals : []);
       } catch (error) {
         console.error('Erro ao carregar propostas do lead:', error);
+
         setProposals([]);
       } finally {
         setLoadingProposals(false);
@@ -115,14 +150,23 @@ export default function LeadDetails() {
   }, [id]);
 
   /*
+
    * ============================================================
+
    * CARREGAR VISITAS DO LEAD
+
    * ============================================================
+
    *
+
    * O imóvel visitado é obtido da própria visita,
+
    * priorizando visit.propertyInfo.
+
    *
+
    * Não utilizamos lead.property para exibir o imóvel visitado.
+
    */
 
   useEffect(() => {
@@ -135,6 +179,7 @@ export default function LeadDetails() {
         const response = await api.get('/api/visits', {
           params: {
             page: 1,
+
             limit: 100,
           },
         });
@@ -151,6 +196,7 @@ export default function LeadDetails() {
 
         if (!Array.isArray(loadedVisits)) {
           setVisits([]);
+
           return;
         }
 
@@ -168,6 +214,7 @@ export default function LeadDetails() {
         setVisits(leadVisits);
       } catch (error) {
         console.error('Erro ao carregar visitas do lead:', error);
+
         setVisits([]);
       } finally {
         setLoadingVisits(false);
@@ -178,9 +225,13 @@ export default function LeadDetails() {
   }, [id]);
 
   /*
+
    * ============================================================
+
    * PROPOSTAS NORMALIZADAS
+
    * ============================================================
+
    */
 
   const normalizedProposals = useMemo(() => {
@@ -194,9 +245,13 @@ export default function LeadDetails() {
   }, [proposals, lead?.proposals]);
 
   /*
+
    * ============================================================
+
    * PROPOSTA MAIS RECENTE
+
    * ============================================================
+
    */
 
   const latestProposal = useMemo(() => {
@@ -204,9 +259,13 @@ export default function LeadDetails() {
   }, [normalizedProposals]);
 
   /*
+
    * ============================================================
+
    * DATA DA PROPOSTA
+
    * ============================================================
+
    */
 
   const proposalDate = useMemo(() => {
@@ -222,9 +281,13 @@ export default function LeadDetails() {
   }, [lead?.proposalDate, latestProposal]);
 
   /*
+
    * ============================================================
+
    * VALOR DA PROPOSTA
+
    * ============================================================
+
    */
 
   const latestProposalValue = useMemo(() => {
@@ -234,27 +297,37 @@ export default function LeadDetails() {
   }, [latestProposal]);
 
   /*
+
    * ============================================================
+
    * VISITAS REALIZADAS COM IMÓVEL
+
    * ============================================================
+
    */
 
   const completedVisits = useMemo(() => {
     if (!Array.isArray(visits)) return [];
 
     return visits
+
       .filter((visit) => {
         if (!isCompletedVisit(visit)) return false;
 
         return Boolean(extractVisitProperty(visit));
       })
+
       .sort((a, b) => getVisitDateValue(b) - getVisitDateValue(a));
   }, [visits]);
 
   /*
+
    * ============================================================
+
    * ÚLTIMA VISITA REALIZADA
+
    * ============================================================
+
    */
 
   const latestCompletedVisit = useMemo(() => {
@@ -262,9 +335,13 @@ export default function LeadDetails() {
   }, [completedVisits]);
 
   /*
+
    * ============================================================
+
    * IMÓVEL EFETIVAMENTE VISITADO
+
    * ============================================================
+
    */
 
   const visitedProperty = useMemo(() => {
@@ -274,9 +351,13 @@ export default function LeadDetails() {
   }, [latestCompletedVisit]);
 
   /*
+
    * ============================================================
+
    * DATA DA VISITA REALIZADA
+
    * ============================================================
+
    */
 
   const completedVisitDate = useMemo(() => {
@@ -286,9 +367,13 @@ export default function LeadDetails() {
   }, [latestCompletedVisit]);
 
   /*
+
    * ============================================================
+
    * FORMATADORES
+
    * ============================================================
+
    */
 
   const formatDate = (date, withTime = false) => {
@@ -300,11 +385,15 @@ export default function LeadDetails() {
 
     return parsedDate.toLocaleDateString('pt-BR', {
       day: '2-digit',
+
       month: '2-digit',
+
       year: 'numeric',
+
       ...(withTime
         ? {
             hour: '2-digit',
+
             minute: '2-digit',
           }
         : {}),
@@ -323,14 +412,19 @@ export default function LeadDetails() {
 
     return Number(value).toLocaleString('pt-BR', {
       style: 'currency',
+
       currency: 'BRL',
     });
   };
 
   /*
+
    * ============================================================
+
    * WHATSAPP WEB
+
    * ============================================================
+
    */
 
   const whatsappUrl = useMemo(() => {
@@ -339,26 +433,37 @@ export default function LeadDetails() {
     if (!phone) return null;
 
     // Evita adicionar o código do Brasil duas vezes.
+
     const internationalPhone = phone.startsWith('55') ? phone : `55${phone}`;
 
-    return `https://wa.me/${internationalPhone}`;
+    return `https\://wa.me/${internationalPhone}`;
   }, [lead?.phone]);
 
   /*
+
    * ============================================================
+
    * ABRIR CONVERSA WHATSAPP DENTRO DO CRM
+
    * ============================================================
+
    *
+
    * A função openLeadConversation deve estar implementada
+
    * no ChatContext e localizar a conversa vinculada ao lead.
+
    *
+
    * O envio da mensagem continua sendo feito pela tela de chat.
+
    */
 
   const handleOpenWhatsAppChat = async () => {
     if (!lead?._id || openingChat) return;
 
     setOpeningChat(true);
+
     setChatError('');
 
     try {
@@ -385,15 +490,122 @@ export default function LeadDetails() {
   };
 
   /*
+
    * ============================================================
+
    * AÇÕES
+
    * ============================================================
+
    */
 
   const handleCreateProposal = () => {
     if (!lead?._id) return;
 
     navigate(`/proposals/create?lead=${lead._id}`);
+  };
+
+  // Gera um link público individual validado pelo backend.
+  const handleGeneratePublicProposalLink = async () => {
+    if (!lead?._id || generatingPublicLink) return;
+
+    setGeneratingPublicLink(true);
+    setPublicLinkError('');
+    setPublicLinkSuccess('');
+
+    try {
+      const leadPropertyId =
+        typeof lead.property === 'string'
+          ? lead.property
+          : lead.property?._id || lead.property?.id;
+
+      const visitedPropertyId =
+        typeof visitedProperty === 'string'
+          ? visitedProperty
+          : visitedProperty?._id || visitedProperty?.id;
+
+      const propertyId = leadPropertyId || visitedPropertyId;
+
+      if (!propertyId) {
+        throw new Error(
+          'Este lead ainda não possui um imóvel vinculado. Vincule um imóvel disponível antes de gerar o link.',
+        );
+      }
+
+      const response = await api.post('/api/public-proposals/links', {
+        leadId: lead._id,
+        propertyId,
+      });
+
+      const result = response?.data?.data || response?.data;
+      const linkPath = result?.path;
+
+      if (!linkPath || !result?.token) {
+        throw new Error(
+          'O servidor não retornou o link público. Confira a integração da rota de propostas públicas.',
+        );
+      }
+
+      setPublicProposalUrl(
+        /^https?:\/\//i.test(linkPath)
+          ? linkPath
+          : `${window.location.origin}${linkPath.startsWith('/') ? '' : '/'}${linkPath}`,
+      );
+      setPublicProposalExpiresAt(result.expiresAt || null);
+      setPublicLinkSuccess(
+        'Link gerado com segurança. Copie e compartilhe com o cliente.',
+      );
+    } catch (error) {
+      console.error('Erro ao gerar link público da proposta:', error);
+      setPublicLinkError(
+        error?.response?.data?.message ||
+          error?.message ||
+          'Não foi possível gerar o link público da proposta.',
+      );
+    } finally {
+      setGeneratingPublicLink(false);
+    }
+  };
+
+  const handleCopyPublicProposalLink = async () => {
+    if (!publicProposalUrl || copyingPublicLink) return;
+
+    setCopyingPublicLink(true);
+    setPublicLinkError('');
+    setPublicLinkSuccess('');
+
+    try {
+      await navigator.clipboard.writeText(publicProposalUrl);
+      setPublicLinkSuccess(
+        'Link copiado. Agora você pode enviá-lo ao cliente.',
+      );
+    } catch (error) {
+      console.error('Erro ao copiar link público:', error);
+      setPublicLinkError(
+        'Não foi possível copiar automaticamente. Selecione e copie o link exibido.',
+      );
+    } finally {
+      setCopyingPublicLink(false);
+    }
+  };
+
+  const handleSendPublicProposalWhatsApp = () => {
+    if (!publicProposalUrl || !lead?.phone) {
+      setPublicLinkError(
+        'É necessário gerar o link e ter um telefone cadastrado para abrir o WhatsApp.',
+      );
+      return;
+    }
+
+    const phone = normalizePhone(lead.phone);
+    const internationalPhone = phone.startsWith('55') ? phone : `55${phone}`;
+    const message = `Olá, ${lead.name || 'tudo bem'}! Segue o link seguro para preencher sua proposta do imóvel: ${publicProposalUrl}`;
+
+    window.open(
+      `https://wa.me/${internationalPhone}?text=${encodeURIComponent(message)}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
   };
 
   const handleEdit = () => {
@@ -403,9 +615,13 @@ export default function LeadDetails() {
   };
 
   /*
+
    * ============================================================
+
    * LOADING
+
    * ============================================================
+
    */
 
   if (loading) {
@@ -413,9 +629,13 @@ export default function LeadDetails() {
   }
 
   /*
+
    * ============================================================
+
    * ERROR
+
    * ============================================================
+
    */
 
   if (error) {
@@ -424,7 +644,9 @@ export default function LeadDetails() {
         <div className="mx-auto max-w-7xl">
           <button
             type="button"
+
             onClick={() => navigate(-1)}
+
             className="mb-6 flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"
           >
             <ArrowLeft size={18} />
@@ -446,7 +668,9 @@ export default function LeadDetails() {
 
                 <button
                   type="button"
+
                   onClick={() => window.location.reload()}
+
                   className="mt-4 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
                 >
                   Tentar novamente
@@ -462,19 +686,29 @@ export default function LeadDetails() {
   if (!lead) return null;
 
   /*
+
    * ============================================================
+
    * DADOS RELACIONADOS
+
    * ============================================================
+
    */
 
   const assignedTo = lead.assignedTo;
+
   const createdBy = lead.createdBy;
+
   const sourceBroker = lead.sourceBroker;
 
   /*
+
    * ============================================================
+
    * RENDER
+
    * ============================================================
+
    */
 
   return (
@@ -485,7 +719,9 @@ export default function LeadDetails() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <button
             type="button"
+
             onClick={() => navigate(-1)}
+
             className="flex w-fit items-center gap-2 text-sm font-medium text-slate-400 transition hover:text-white"
           >
             <ArrowLeft size={18} />
@@ -497,31 +733,47 @@ export default function LeadDetails() {
 
             <button
               type="button"
+
               onClick={handleOpenWhatsAppChat}
+
               disabled={openingChat}
+
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-400 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <MessageCircle size={17} />
+
               {openingChat ? 'Abrindo conversa...' : 'Conversar no CRM'}
             </button>
 
             {/* WHATSAPP WEB EXISTENTE */}
 
             {/* {whatsappUrl && (
+
               <a
+
                 href={whatsappUrl}
+
                 target="_blank"
+
                 rel="noopener noreferrer"
+
                 className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
+
               >
+
                 <ExternalLink size={17} />
+
                 WhatsApp Web
+
               </a>
+
             )} */}
 
             <button
               type="button"
+
               onClick={handleEdit}
+
               className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
             >
               <Edit size={17} />
@@ -530,7 +782,9 @@ export default function LeadDetails() {
 
             <button
               type="button"
+
               onClick={handleCreateProposal}
+
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/20 transition hover:bg-blue-500"
             >
               <FileText size={17} />
@@ -544,6 +798,7 @@ export default function LeadDetails() {
         {chatError && (
           <div
             role="alert"
+
             className="flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-300"
           >
             <AlertCircle size={19} className="mt-0.5 shrink-0" />
@@ -556,8 +811,11 @@ export default function LeadDetails() {
 
             <button
               type="button"
+
               onClick={() => setChatError('')}
+
               aria-label="Fechar mensagem de erro"
+
               className="text-red-300 transition hover:text-white"
             >
               <X size={18} />
@@ -583,6 +841,7 @@ export default function LeadDetails() {
 
                     <Badge
                       text={formatLabel(lead.status)}
+
                       type={getStatusBadgeType(lead.status)}
                     />
                   </div>
@@ -596,6 +855,7 @@ export default function LeadDetails() {
 
                     <Badge
                       text={`Prioridade: ${formatLabel(lead.priority)}`}
+
                       type={getPriorityBadgeType(lead.priority)}
                     />
 
@@ -609,12 +869,15 @@ export default function LeadDetails() {
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:min-w-[420px]">
                 <MetricCard
                   label="Score"
+
                   value={lead.score ?? 0}
+
                   icon={<Target size={17} />}
                 />
 
                 <MetricCard
                   label="Proposta"
+
                   value={
                     latestProposalValue !== null
                       ? formatCurrency(latestProposalValue)
@@ -622,12 +885,15 @@ export default function LeadDetails() {
                         ? formatCurrency(lead.proposalValue)
                         : '0'
                   }
+
                   icon={<FileText size={17} />}
                 />
 
                 <MetricCard
                   label="Data proposta"
+
                   value={proposalDate ? formatDate(proposalDate) : '-'}
+
                   icon={<Calendar size={17} />}
                 />
               </div>
@@ -664,7 +930,9 @@ export default function LeadDetails() {
 
               <button
                 type="button"
+
                 onClick={() => navigate('/calendar')}
+
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-400 transition hover:bg-blue-500/20"
               >
                 Ver agenda
@@ -686,46 +954,62 @@ export default function LeadDetails() {
               <div className="grid gap-6 md:grid-cols-2">
                 <Info
                   icon={<User size={18} />}
+
                   label="Nome"
+
                   value={lead.name}
                 />
 
                 <Info
                   icon={<Mail size={18} />}
+
                   label="Email"
+
                   value={lead.email}
+
                   href={lead.email ? `mailto:${lead.email}` : null}
                 />
 
                 <Info
                   icon={<Phone size={18} />}
+
                   label="Telefone"
+
                   value={lead.phone}
+
                   href={lead.phone ? `tel:${lead.phone}` : null}
                 />
 
                 <Info
                   icon={<MapPin size={18} />}
+
                   label="Região"
+
                   value={formatLabel(lead.region)}
                 />
 
                 <Info
                   icon={<Building2 size={18} />}
+
                   label="Origem"
+
                   value={formatLabel(lead.source)}
                 />
 
                 <Info
                   icon={<Target size={18} />}
+
                   label="Tipo de origem"
+
                   value={formatLabel(lead.sourceType)}
                 />
 
                 {lead.sourceSite && (
                   <Info
                     icon={<ExternalLink size={18} />}
+
                     label="Site de origem"
+
                     value={lead.sourceSite}
                   />
                 )}
@@ -733,7 +1017,9 @@ export default function LeadDetails() {
                 {lead.landingPage && (
                   <Info
                     icon={<ExternalLink size={18} />}
+
                     label="Landing page"
+
                     value={lead.landingPage}
                   />
                 )}
@@ -745,9 +1031,13 @@ export default function LeadDetails() {
             {!loadingVisits && visitedProperty && (
               <PropertyCard
                 property={visitedProperty}
+
                 visit={latestCompletedVisit}
+
                 visitDate={completedVisitDate}
+
                 onCreateProposal={handleCreateProposal}
+
                 navigate={navigate}
               />
             )}
@@ -760,6 +1050,133 @@ export default function LeadDetails() {
               onCreateProposal={handleCreateProposal}
               navigate={navigate}
             />
+
+            {/* PROPOSTA PÚBLICA PARA O CLIENTE */}
+            <Card title="Link público de proposta" icon={<Link2 size={18} />}>
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
+                    <Link2 size={19} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-white">
+                      Envie a proposta para o cliente preencher
+                    </p>
+                    <p className="mt-1 text-sm leading-6 text-slate-400">
+                      Gere um link individual vinculado a este lead, ao imóvel
+                      disponível e ao corretor responsável. O cliente poderá
+                      informar os valores e as condições da proposta.
+                    </p>
+                  </div>
+                </div>
+
+                {!publicProposalUrl ? (
+                  <button
+                    type="button"
+                    onClick={handleGeneratePublicProposalLink}
+                    disabled={generatingPublicLink}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-950/30 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                  >
+                    {generatingPublicLink ? (
+                      <LoaderCircle size={17} className="animate-spin" />
+                    ) : (
+                      <Link2 size={17} />
+                    )}
+                    {generatingPublicLink
+                      ? 'Gerando link seguro...'
+                      : 'Gerar link público'}
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <label
+                      htmlFor="public-proposal-url"
+                      className="block text-xs font-medium uppercase tracking-wide text-slate-500"
+                    >
+                      Link para compartilhar
+                    </label>
+                    <input
+                      id="public-proposal-url"
+                      type="text"
+                      readOnly
+                      value={publicProposalUrl}
+                      onFocus={(event) => event.target.select()}
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-200 outline-none focus:border-blue-500"
+                    />
+
+                    {publicProposalExpiresAt && (
+                      <p className="text-xs text-slate-500">
+                        Válido até {formatDate(publicProposalExpiresAt, true)}.
+                        O link é individual e de uso único.
+                      </p>
+                    )}
+
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={handleCopyPublicProposalLink}
+                        disabled={copyingPublicLink}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-700 disabled:opacity-60"
+                      >
+                        {copyingPublicLink ? (
+                          <LoaderCircle size={16} className="animate-spin" />
+                        ) : (
+                          <Copy size={16} />
+                        )}
+                        {copyingPublicLink ? 'Copiando...' : 'Copiar link'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSendPublicProposalWhatsApp}
+                        disabled={!lead.phone}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Send size={16} />
+                        Enviar pelo WhatsApp
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPublicProposalUrl('');
+                          setPublicProposalExpiresAt(null);
+                          setPublicLinkError('');
+                          setPublicLinkSuccess('');
+                        }}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-slate-800 hover:text-white"
+                      >
+                        Gerar outro link
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {publicLinkSuccess && (
+                  <p
+                    role="status"
+                    className="flex items-start gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-emerald-300"
+                  >
+                    <Check size={17} className="mt-0.5 shrink-0" />
+                    <span>{publicLinkSuccess}</span>
+                  </p>
+                )}
+
+                {publicLinkError && (
+                  <p
+                    role="alert"
+                    className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-sm text-red-300"
+                  >
+                    <AlertCircle size={17} className="mt-0.5 shrink-0" />
+                    <span>{publicLinkError}</span>
+                  </p>
+                )}
+
+                <p className="text-xs leading-5 text-slate-500">
+                  A criação depende de um corretor responsável e de um imóvel
+                  disponível. O link expira e só pode ser utilizado uma vez.
+                </p>
+              </div>
+            </Card>
 
             {/* OBSERVAÇÕES */}
 
@@ -779,6 +1196,7 @@ export default function LeadDetails() {
               ) : (
                 <EmptyState
                   icon={<MessageCircle size={20} />}
+
                   text="Nenhuma observação cadastrada."
                 />
               )}
@@ -790,26 +1208,35 @@ export default function LeadDetails() {
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <CommercialDate
                   label="Último contato"
+
                   value={lead.lastContactAt}
+
                   icon={<Phone size={16} />}
                 />
 
                 <CommercialDate
                   label="Visita realizada"
+
                   value={completedVisitDate}
+
                   icon={<Calendar size={16} />}
                 />
 
                 <CommercialDate
                   label="Proposta"
+
                   value={proposalDate}
+
                   icon={<FileText size={16} />}
+
                   highlight
                 />
 
                 <CommercialDate
                   label="Fechamento"
+
                   value={lead.closeDate}
+
                   icon={<CheckCircle2 size={16} />}
                 />
               </div>
@@ -839,6 +1266,7 @@ export default function LeadDetails() {
 
                     <Badge
                       text={formatLabel(latestProposal.status)}
+
                       type={getProposalBadgeType(latestProposal.status)}
                     />
                   </div>
@@ -862,13 +1290,17 @@ export default function LeadDetails() {
           <div className="space-y-6">
             <UserCard
               title="Corretor responsável"
+
               icon={<BriefcaseBusiness size={18} />}
+
               user={assignedTo}
             />
 
             <UserCard
               title="Lead criado por"
+
               icon={<User size={18} />}
+
               user={createdBy}
             />
 
@@ -877,6 +1309,7 @@ export default function LeadDetails() {
             <Card title="Captação" icon={<Target size={18} />}>
               <div className="space-y-5">
                 <Info label="Origem" value={formatLabel(lead.source)} />
+
                 <Info label="Tipo" value={formatLabel(lead.sourceType)} />
 
                 {sourceBroker && (
@@ -899,17 +1332,20 @@ export default function LeadDetails() {
 
                 <Info
                   label="Atribuído em"
+
                   value={formatDate(lead.assignedAt, true)}
                 />
 
                 <Info
                   label="Aguardando distribuição"
+
                   value={lead.awaitingAssignment ? 'Sim' : 'Não'}
                 />
 
                 {lead.assignedBy && (
                   <Info
                     label="Distribuído por"
+
                     value={
                       lead.assignedBy?.name || lead.assignedBy?.email || '-'
                     }
@@ -925,9 +1361,11 @@ export default function LeadDetails() {
                 <div className="space-y-4">
                   <Info
                     label="Status"
+
                     value={
                       <Badge
                         text={formatLabel(latestProposal.status)}
+
                         type={getProposalBadgeType(latestProposal.status)}
                       />
                     }
@@ -935,6 +1373,7 @@ export default function LeadDetails() {
 
                   <Info
                     label="Valor"
+
                     value={formatCurrency(latestProposalValue)}
                   />
 
@@ -942,7 +1381,9 @@ export default function LeadDetails() {
 
                   <button
                     type="button"
+
                     onClick={() => navigate(`/proposals/${latestProposal._id}`)}
+
                     className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-700"
                   >
                     Ver proposta
@@ -952,6 +1393,7 @@ export default function LeadDetails() {
               ) : (
                 <EmptyState
                   icon={<FileText size={20} />}
+
                   text="Nenhuma proposta cadastrada."
                 />
               )}
@@ -963,17 +1405,22 @@ export default function LeadDetails() {
               <div className="space-y-2">
                 <QuickAction
                   icon={<MessageCircle size={17} />}
+
                   label={
                     openingChat ? 'Abrindo conversa...' : 'Conversar no CRM'
                   }
+
                   onClick={handleOpenWhatsAppChat}
+
                   disabled={openingChat}
                 />
 
                 {whatsappUrl && (
                   <QuickAction
                     icon={<ExternalLink size={17} />}
+
                     label="Abrir WhatsApp Web"
+
                     onClick={() =>
                       window.open(whatsappUrl, '_blank', 'noopener,noreferrer')
                     }
@@ -983,7 +1430,9 @@ export default function LeadDetails() {
                 {lead.email && (
                   <QuickAction
                     icon={<Mail size={17} />}
+
                     label="Enviar email"
+
                     onClick={() => {
                       window.location.href = `mailto:${lead.email}`;
                     }}
@@ -992,19 +1441,25 @@ export default function LeadDetails() {
 
                 <QuickAction
                   icon={<Calendar size={17} />}
+
                   label="Abrir agenda"
+
                   onClick={() => navigate('/my-visits')}
                 />
 
                 <QuickAction
                   icon={<Edit size={17} />}
+
                   label="Editar lead"
+
                   onClick={handleEdit}
                 />
 
                 <QuickAction
                   icon={<FileText size={17} />}
+
                   label="Criar proposta"
+
                   onClick={handleCreateProposal}
                 />
               </div>
@@ -1017,14 +1472,17 @@ export default function LeadDetails() {
 }
 
 /* ================================================================
+
    CARD
-================================================================ */
+
+\================================================================ */
 
 function Card({ title, icon, children, noPadding = false }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-lg">
       <div className="flex items-center gap-2 border-b border-slate-800 px-6 py-4">
         {icon && <span className="text-blue-400">{icon}</span>}
+
         <h2 className="font-semibold text-white">{title}</h2>
       </div>
 
@@ -1034,8 +1492,10 @@ function Card({ title, icon, children, noPadding = false }) {
 }
 
 /* ================================================================
+
    INFO
-================================================================ */
+
+\================================================================ */
 
 function Info({ icon, label, value, href = null }) {
   const content = (
@@ -1058,6 +1518,7 @@ function Info({ icon, label, value, href = null }) {
     return (
       <a
         href={href}
+
         className="flex items-start gap-3 rounded-lg transition hover:bg-slate-800/50"
       >
         {content}
@@ -1069,8 +1530,10 @@ function Info({ icon, label, value, href = null }) {
 }
 
 /* ================================================================
+
    COMMERCIAL DATE
-================================================================ */
+
+\================================================================ */
 
 function CommercialDate({ label, value, icon, highlight = false }) {
   return (
@@ -1087,6 +1550,7 @@ function CommercialDate({ label, value, icon, highlight = false }) {
         }`}
       >
         {icon}
+
         <span className="text-xs font-medium uppercase tracking-wide">
           {label}
         </span>
@@ -1106,8 +1570,10 @@ function CommercialDate({ label, value, icon, highlight = false }) {
 }
 
 /* ================================================================
+
    USER CARD
-================================================================ */
+
+\================================================================ */
 
 function UserCard({ title, icon, user }) {
   return (
@@ -1117,7 +1583,9 @@ function UserCard({ title, icon, user }) {
           {user.avatar ? (
             <img
               src={user.avatar}
+
               alt={user.name || 'Usuário'}
+
               className="h-12 w-12 shrink-0 rounded-full border border-slate-700 object-cover"
             />
           ) : (
@@ -1143,6 +1611,7 @@ function UserCard({ title, icon, user }) {
       ) : (
         <EmptyState
           icon={<User size={20} />}
+
           text="Nenhum responsável atribuído."
         />
       )}
@@ -1151,21 +1620,30 @@ function UserCard({ title, icon, user }) {
 }
 
 /* ================================================================
+
    PROPERTY CARD
-================================================================ */
+
+\================================================================ */
 
 function PropertyCard({
   property,
+
   visit,
+
   visitDate,
+
   onCreateProposal,
+
   navigate,
 }) {
   if (!property) return null;
 
   const address = property.address || {};
+
   const propertyTitle = property.title || property.name || 'Imóvel sem título';
+
   const propertyPrice = property.price;
+
   const propertyId = property._id || property.id || null;
 
   return (
@@ -1204,6 +1682,7 @@ function PropertyCard({
               address.cidade) && (
               <div className="mt-3 flex items-start gap-2 text-sm text-slate-400">
                 <MapPin size={16} className="mt-0.5 shrink-0" />
+
                 <span>{formatPropertyAddress(address)}</span>
               </div>
             )}
@@ -1244,7 +1723,9 @@ function PropertyCard({
           {propertyId && (
             <button
               type="button"
+
               onClick={() => navigate(`/properties/${propertyId}`)}
+
               className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-700"
             >
               Ver imóvel
@@ -1254,7 +1735,9 @@ function PropertyCard({
 
           <button
             type="button"
+
             onClick={onCreateProposal}
+
             className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500"
           >
             <FileText size={17} />
@@ -1267,8 +1750,10 @@ function PropertyCard({
 }
 
 /* ================================================================
+
    PROPOSAL CARD
-================================================================ */
+
+\================================================================ */
 
 function ProposalCard({ proposals, loading, onCreateProposal, navigate }) {
   return (
@@ -1276,6 +1761,7 @@ function ProposalCard({ proposals, loading, onCreateProposal, navigate }) {
       {loading ? (
         <div className="space-y-3">
           <ProposalSkeleton />
+
           <ProposalSkeleton />
         </div>
       ) : proposals.length > 0 ? (
@@ -1283,14 +1769,18 @@ function ProposalCard({ proposals, loading, onCreateProposal, navigate }) {
           {proposals.map((proposal) => (
             <ProposalItem
               key={proposal._id}
+
               proposal={proposal}
+
               onClick={() => navigate(`/proposals/${proposal._id}`)}
             />
           ))}
 
           <button
             type="button"
+
             onClick={onCreateProposal}
+
             className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-blue-400 transition hover:text-blue-300"
           >
             <FileText size={16} />
@@ -1314,7 +1804,9 @@ function ProposalCard({ proposals, loading, onCreateProposal, navigate }) {
 
           <button
             type="button"
+
             onClick={onCreateProposal}
+
             className="mt-5 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500"
           >
             <FileText size={17} />
@@ -1327,17 +1819,22 @@ function ProposalCard({ proposals, loading, onCreateProposal, navigate }) {
 }
 
 /* ================================================================
+
    PROPOSAL ITEM
-================================================================ */
+
+\================================================================ */
 
 function ProposalItem({ proposal, onClick }) {
   const proposalValue = getProposalValue(proposal);
+
   const proposalDate = getProposalDate(proposal);
 
   return (
     <button
       type="button"
+
       onClick={onClick}
+
       className="group w-full rounded-xl border border-slate-800 bg-slate-950/50 p-4 text-left transition hover:border-slate-700 hover:bg-slate-800/60"
     >
       <div className="flex items-center justify-between gap-4">
@@ -1365,11 +1862,13 @@ function ProposalItem({ proposal, onClick }) {
         <div className="flex items-center gap-3">
           <Badge
             text={formatLabel(proposal.status)}
+
             type={getProposalBadgeType(proposal.status)}
           />
 
           <ChevronRight
             size={18}
+
             className="text-slate-600 transition group-hover:text-slate-300"
           />
         </div>
@@ -1379,35 +1878,43 @@ function ProposalItem({ proposal, onClick }) {
 }
 
 /* ================================================================
+
    PROPOSAL SKELETON
-================================================================ */
+
+\================================================================ */
 
 function ProposalSkeleton() {
   return <div className="h-20 animate-pulse rounded-xl bg-slate-950/60" />;
 }
 
 /* ================================================================
+
    PROPERTY STAT
-================================================================ */
+
+\================================================================ */
 
 function PropertyStat({ label, value }) {
   return (
     <div className="rounded-lg bg-slate-950/60 p-3">
       <p className="text-xs text-slate-500">{label}</p>
+
       <p className="mt-1 text-sm font-medium text-slate-200">{value}</p>
     </div>
   );
 }
 
 /* ================================================================
+
    METRIC CARD
-================================================================ */
+
+\================================================================ */
 
 function MetricCard({ label, value, icon }) {
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
       <div className="flex items-center gap-2 text-slate-500">
         {icon}
+
         <span className="text-xs">{label}</span>
       </div>
 
@@ -1417,47 +1924,63 @@ function MetricCard({ label, value, icon }) {
 }
 
 /* ================================================================
+
    QUICK ACTION
-================================================================ */
+
+\================================================================ */
 
 function QuickAction({ icon, label, onClick, disabled = false }) {
   return (
     <button
       type="button"
+
       onClick={onClick}
+
       disabled={disabled}
+
       className="flex w-full items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm text-slate-300 transition hover:border-slate-800 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
     >
       <span className="text-slate-500">{icon}</span>
+
       {label}
     </button>
   );
 }
 
 /* ================================================================
+
    EMPTY STATE
-================================================================ */
+
+\================================================================ */
 
 function EmptyState({ icon, text }) {
   return (
     <div className="flex items-center gap-3 py-2 text-sm text-slate-500">
       <span className="text-slate-600">{icon}</span>
+
       {text}
     </div>
   );
 }
 
 /* ================================================================
+
    BADGE
-================================================================ */
+
+\================================================================ */
 
 function Badge({ text, type = 'gray' }) {
   const styles = {
     blue: 'border-blue-500/20 bg-blue-500/10 text-blue-400',
+
     green: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
+
     yellow: 'border-yellow-500/20 bg-yellow-500/10 text-yellow-400',
+
     red: 'border-red-500/20 bg-red-500/10 text-red-400',
+
     gray: 'border-slate-700 bg-slate-800 text-slate-300',
+
     purple: 'border-purple-500/20 bg-purple-500/10 text-purple-400',
   };
 
@@ -1473,26 +1996,33 @@ function Badge({ text, type = 'gray' }) {
 }
 
 /* ================================================================
+
    SKELETON
-================================================================ */
+
+\================================================================ */
 
 function LeadDetailsSkeleton() {
   return (
     <div className="min-h-screen bg-slate-950 p-6">
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="h-6 w-24 animate-pulse rounded bg-slate-800" />
+
         <div className="h-48 animate-pulse rounded-2xl bg-slate-900" />
 
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
             <SkeletonCard />
+
             <SkeletonCard />
+
             <SkeletonCard />
           </div>
 
           <div className="space-y-6">
             <SkeletonCard />
+
             <SkeletonCard />
+
             <SkeletonCard />
           </div>
         </div>
@@ -1506,8 +2036,10 @@ function SkeletonCard() {
 }
 
 /* ================================================================
+
    HELPERS
-================================================================ */
+
+\================================================================ */
 
 function normalizePhone(phone) {
   if (!phone) return '';
@@ -1520,6 +2052,7 @@ function formatLabel(value) {
 
   return String(value)
     .replace(/_/g, ' ')
+
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
@@ -1528,14 +2061,19 @@ function normalizeText(value) {
 
   return String(value)
     .trim()
+
     .toLowerCase()
+
     .normalize('NFD')
+
     .replace(/[\u0300-\u036f]/g, '');
 }
 
 /* ================================================================
+
    VISIT HELPERS
-================================================================ */
+
+\================================================================ */
 
 function isCompletedVisit(visit) {
   if (!visit) return false;
@@ -1546,10 +2084,15 @@ function isCompletedVisit(visit) {
 
   return [
     'concluida',
+
     'completed',
+
     'complete',
+
     'realizada',
+
     'realizado',
+
     'done',
   ].includes(status);
 }
@@ -1607,11 +2150,17 @@ function extractVisitProperty(visit) {
 
   return {
     ...property,
+
     _id: property._id || property.id || null,
+
     id: property.id || property._id || null,
+
     name: property.name || property.title || 'Imóvel sem título',
+
     title: property.title || property.name || '',
+
     address: property.address || property.location || {},
+
     price:
       property.price ??
       property.prices?.salePrice ??
@@ -1621,8 +2170,10 @@ function extractVisitProperty(visit) {
 }
 
 /* ================================================================
+
    STATIC FORMATTERS
-================================================================ */
+
+\================================================================ */
 
 function formatCurrencyStatic(value) {
   if (
@@ -1636,6 +2187,7 @@ function formatCurrencyStatic(value) {
 
   return Number(value).toLocaleString('pt-BR', {
     style: 'currency',
+
     currency: 'BRL',
   });
 }
@@ -1649,7 +2201,9 @@ function formatDateStatic(date) {
 
   return parsedDate.toLocaleDateString('pt-BR', {
     day: '2-digit',
+
     month: '2-digit',
+
     year: 'numeric',
   });
 }
@@ -1657,9 +2211,13 @@ function formatDateStatic(date) {
 function formatPropertyAddress(address = {}) {
   const parts = [
     address.street || address.logradouro,
+
     address.number || address.numero,
+
     address.district || address.neighborhood || address.bairro,
+
     address.city || address.cidade,
+
     address.state || address.uf,
   ].filter(Boolean);
 
@@ -1667,8 +2225,10 @@ function formatPropertyAddress(address = {}) {
 }
 
 /* ================================================================
+
    PROPOSAL HELPERS
-================================================================ */
+
+\================================================================ */
 
 function getProposalDate(proposal) {
   if (!proposal) return null;
@@ -1708,8 +2268,10 @@ function getProposalValue(proposal) {
 }
 
 /* ================================================================
+
    LEAD STATUS
-================================================================ */
+
+\================================================================ */
 
 function getStatusBadgeType(status) {
   const normalizedStatus = normalizeText(status);
@@ -1719,7 +2281,9 @@ function getStatusBadgeType(status) {
       return 'blue';
 
     case 'em andamento':
+
     case 'in progress':
+
     case 'in_progress':
       return 'yellow';
 
@@ -1735,22 +2299,27 @@ function getStatusBadgeType(status) {
 }
 
 /* ================================================================
+
    PRIORITY
-================================================================ */
+
+\================================================================ */
 
 function getPriorityBadgeType(priority) {
   const normalizedPriority = normalizeText(priority);
 
   switch (normalizedPriority) {
     case 'alta':
+
     case 'high':
       return 'red';
 
     case 'media':
+
     case 'medium':
       return 'yellow';
 
     case 'baixa':
+
     case 'low':
       return 'blue';
 
@@ -1760,30 +2329,37 @@ function getPriorityBadgeType(priority) {
 }
 
 /* ================================================================
+
    PROPOSAL STATUS
-================================================================ */
+
+\================================================================ */
 
 function getProposalBadgeType(status) {
   const normalizedStatus = normalizeText(status);
 
   switch (normalizedStatus) {
     case 'accepted':
+
     case 'aprovada':
       return 'green';
 
     case 'pending':
+
     case 'pendente':
       return 'yellow';
 
     case 'rejected':
+
     case 'rejeitada':
       return 'red';
 
     case 'draft':
+
     case 'rascunho':
       return 'gray';
 
     case 'cancelled':
+
     case 'cancelada':
       return 'purple';
 
