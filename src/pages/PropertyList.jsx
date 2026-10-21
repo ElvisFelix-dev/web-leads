@@ -9,6 +9,10 @@ import {
   Search,
   RefreshCcw,
   Download,
+  Upload,
+  FileSpreadsheet,
+  X,
+  CheckCircle2,
   Grid3X3,
   List,
   Eye,
@@ -23,7 +27,6 @@ import {
   Ruler,
   Calendar,
   TrendingUp,
-  CheckCircle2,
   Clock3,
   Archive,
   EyeOff,
@@ -31,6 +34,7 @@ import {
 } from 'lucide-react';
 
 import useProperties from '../hooks/useProperties';
+import { importPropertiesCSV } from '../services/propertyApi';
 
 const currency = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -56,6 +60,11 @@ export default function PropertyList() {
   const [purposeFilter, setPurposeFilter] = useState('todos');
   const [view, setView] = useState('grid');
   const [actionLoading, setActionLoading] = useState(null);
+  const [importFile, setImportFile] = useState(null);
+  const [importRows, setImportRows] = useState([]);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState(null);
 
   useEffect(() => {
     fetchProperties();
@@ -285,6 +294,233 @@ export default function PropertyList() {
         isLoading: false,
         autoClose: 4000,
       });
+    }
+  };
+
+  // ============================================================
+  // IMPORTAR IMÓVEIS CSV
+  // ============================================================
+
+  const parseCSV = (text) => {
+    const firstLine = text.split(/\r?\n/, 1)[0] || '';
+    const delimiter =
+      (firstLine.match(/;/g) || []).length >=
+      (firstLine.match(/,/g) || []).length
+        ? ';'
+        : ',';
+    const rows = [];
+    let row = [];
+    let cell = '';
+    let quoted = false;
+
+    for (let i = 0; i < text.length; i += 1) {
+      const char = text[i];
+      const next = text[i + 1];
+
+      if (char === '"' && quoted && next === '"') {
+        cell += '"';
+        i += 1;
+      } else if (char === '"') {
+        quoted = !quoted;
+      } else if (char === delimiter && !quoted) {
+        row.push(cell);
+        cell = '';
+      } else if ((char === '\n' || char === '\r') && !quoted) {
+        if (char === '\r' && next === '\n') i += 1;
+        row.push(cell);
+        if (row.some((value) => String(value).trim() !== '')) rows.push(row);
+        row = [];
+        cell = '';
+      } else {
+        cell += char;
+      }
+    }
+
+    row.push(cell);
+    if (row.some((value) => String(value).trim() !== '')) rows.push(row);
+    if (rows.length < 2)
+      throw new Error('O CSV precisa conter cabeçalho e pelo menos um imóvel.');
+
+    const normalizeHeader = (header) =>
+      String(header || '')
+        .replace(/^\uFEFF/, '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase();
+
+    const headers = rows[0].map(normalizeHeader);
+    return rows.slice(1).map((values) => {
+      const raw = {};
+      headers.forEach((header, index) => {
+        raw[header] = String(values[index] ?? '').trim();
+      });
+
+      const get = (...keys) => {
+        for (const key of keys) {
+          const value = raw[normalizeHeader(key)];
+          if (value !== undefined) return value;
+        }
+        return '';
+      };
+      const number = (value) => {
+        if (!value) return 0;
+        let normalized = String(value).trim().replace(/\s/g, '');
+        if (normalized.includes(',') && normalized.includes('.')) {
+          normalized = normalized.replace(/\./g, '').replace(',', '.');
+        } else if (normalized.includes(',')) {
+          normalized = normalized.replace(',', '.');
+        }
+        const parsed = Number(normalized);
+        return Number.isFinite(parsed) ? parsed : 0;
+      };
+      const boolean = (value, fallback = false) => {
+        if (!value) return fallback;
+        return ['sim', 's', 'true', '1', 'yes', 'y'].includes(
+          String(value).trim().toLowerCase(),
+        );
+      };
+      const enumValue = (value) =>
+        String(value || '')
+          .trim()
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\s+/g, '_');
+
+      return {
+        name: get('Nome', 'name'),
+        code: get('Código', 'Codigo', 'code'),
+        purpose: enumValue(get('Finalidade', 'purpose')) || 'venda',
+        status: enumValue(get('Status', 'status')) || 'disponivel',
+        type: enumValue(get('Tipo', 'type')),
+        category: enumValue(get('Categoria', 'category')),
+        prices: {
+          salePrice: number(
+            get('Preço de venda (R$)', 'Preco de venda (R$)', 'salePrice'),
+          ),
+          rentPrice: number(
+            get('Preço de aluguel (R$)', 'Preco de aluguel (R$)', 'rentPrice'),
+          ),
+          condominiumFee: number(
+            get(
+              'Taxa de condomínio (R$)',
+              'Taxa de condominio (R$)',
+              'condominiumFee',
+            ),
+          ),
+          iptu: number(get('IPTU (R$)', 'iptu')),
+        },
+        location: {
+          city: get('Cidade', 'city'),
+          state: get('Estado', 'state'),
+          district: get('Bairro', 'district'),
+          zipCode: get('CEP', 'zipCode'),
+        },
+        bedrooms: number(get('Quartos', 'bedrooms')),
+        suites: number(get('Suítes', 'Suites', 'suites')),
+        bathrooms: number(get('Banheiros', 'bathrooms')),
+        parkingSpaces: number(get('Vagas', 'parkingSpaces')),
+        dimensions: {
+          totalArea: number(
+            get('Área total (m²)', 'Area total (m²)', 'totalArea'),
+          ),
+          builtArea: number(
+            get('Área construída (m²)', 'Area construida (m²)', 'builtArea'),
+          ),
+        },
+        furnished: boolean(get('Mobiliado', 'furnished')),
+        acceptsPets: boolean(get('Aceita pets', 'acceptsPets')),
+        acceptsFinancing: boolean(
+          get('Aceita financiamento', 'acceptsFinancing'),
+          true,
+        ),
+        acceptsFGTS: boolean(get('Aceita FGTS', 'acceptsFGTS')),
+        featured: boolean(get('Destaque', 'featured')),
+        exclusive: boolean(get('Exclusivo', 'exclusive')),
+        active: boolean(get('Ativo', 'active'), true),
+        published: boolean(get('Publicado', 'published'), true),
+        features: get('Características', 'Caracteristicas', 'features')
+          .split('|')
+          .map((feature) => feature.trim())
+          .filter(Boolean),
+      };
+    });
+  };
+
+  const handleImportFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    if (!/\.csv$/i.test(file.name)) {
+      toast.error('Selecione um arquivo .csv.');
+      return;
+    }
+
+    try {
+      const content = await file.text();
+      const rows = parseCSV(content);
+      if (rows.length > 500) {
+        toast.error('O limite é de 500 imóveis por importação.');
+        return;
+      }
+      const invalidRows = rows
+        .map((row, index) => (!row.name || !row.type ? index + 2 : null))
+        .filter(Boolean);
+
+      setImportFile(file);
+      setImportRows(rows);
+      setImportResult(null);
+      setImportModalOpen(true);
+
+      if (invalidRows.length) {
+        toast.warning(
+          `Confira as linhas ${invalidRows.slice(0, 8).join(', ')}: nome e tipo são obrigatórios.`,
+        );
+      }
+    } catch (error) {
+      toast.error(error?.message || 'Não foi possível ler o CSV.');
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!importRows.length || importLoading) return;
+    const invalidCount = importRows.filter(
+      (row) => !row.name || !row.type,
+    ).length;
+    if (invalidCount) {
+      toast.error(
+        `Corrija ${invalidCount} linha(s) sem nome ou tipo antes de importar.`,
+      );
+      return;
+    }
+
+    setImportLoading(true);
+    const toastId = toast.loading(`Importando ${importRows.length} imóveis...`);
+    try {
+      const result = await importPropertiesCSV(importRows);
+      setImportResult(result);
+      toast.update(toastId, {
+        render: `Importação concluída: ${result.imported || 0} importado(s), ${result.failed || 0} com erro, ${result.skipped || 0} duplicado(s).`,
+        type: result.failed || result.skipped ? 'warning' : 'success',
+        isLoading: false,
+        autoClose: 6000,
+      });
+      await fetchProperties();
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Erro ao importar imóveis.';
+      toast.update(toastId, {
+        render: message,
+        type: 'error',
+        isLoading: false,
+        autoClose: 5000,
+      });
+    } finally {
+      setImportLoading(false);
     }
   };
 
@@ -597,6 +833,18 @@ export default function PropertyList() {
             Atualizar
           </button>
 
+          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-blue-500/40 bg-blue-600/15 px-5 py-3 font-semibold text-blue-300 transition hover:bg-blue-600/25">
+            <Upload size={18} />
+            Importar CSV
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={handleImportFileChange}
+              disabled={importLoading}
+            />
+          </label>
+
           <button
             onClick={handleExportCSV}
             disabled={loading || filteredProperties.length === 0}
@@ -684,6 +932,209 @@ export default function PropertyList() {
           >
             Novo imóvel
           </Link>
+        </div>
+      )}
+
+      {/* MODAL DE PRÉ-VISUALIZAÇÃO E RESULTADO DA IMPORTAÇÃO */}
+      {importModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-700 bg-slate-950 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-800 p-6">
+              <div>
+                <div className="flex items-center gap-3">
+                  <div className="rounded-xl bg-blue-500/15 p-3 text-blue-300">
+                    <FileSpreadsheet size={24} />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">
+                      {importResult
+                        ? 'Resultado da importação'
+                        : 'Importar imóveis'}
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-400">
+                      {importFile?.name} · {importRows.length} registro(s)
+                      detectado(s)
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!importLoading) {
+                    setImportModalOpen(false);
+                    setImportRows([]);
+                    setImportFile(null);
+                    setImportResult(null);
+                  }
+                }}
+                disabled={importLoading}
+                className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:opacity-50"
+                aria-label="Fechar"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {importResult ? (
+              <div className="max-h-[65vh] space-y-5 overflow-y-auto p-6">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
+                    <p className="text-sm text-emerald-300">Importados</p>
+                    <p className="mt-2 text-3xl font-bold text-white">
+                      {importResult.imported || 0}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4">
+                    <p className="text-sm text-red-300">Com erro</p>
+                    <p className="mt-2 text-3xl font-bold text-white">
+                      {importResult.failed || 0}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+                    <p className="text-sm text-amber-300">
+                      Duplicados ignorados
+                    </p>
+                    <p className="mt-2 text-3xl font-bold text-white">
+                      {importResult.skipped || 0}
+                    </p>
+                  </div>
+                </div>
+                {importResult.errors?.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-white">
+                      Registros que precisam de atenção
+                    </h3>
+                    {importResult.errors.map((item, index) => (
+                      <div
+                        key={`${item.line}-${index}`}
+                        className="rounded-xl border border-slate-800 bg-slate-900 p-4"
+                      >
+                        <p className="font-medium text-white">
+                          Linha {item.line}:{' '}
+                          {item.name || item.code || 'Imóvel sem identificação'}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-400">
+                          {item.message}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="max-h-[65vh] overflow-auto p-6">
+                <div className="mb-5 rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4 text-sm text-blue-100">
+                  Confira a prévia antes de importar. Nome e tipo são
+                  obrigatórios. O backend validará os enums do seu model;
+                  registros inválidos serão reportados individualmente.
+                </div>
+                <div className="mb-5 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl bg-slate-900 p-4">
+                    <p className="text-xs text-slate-400">Total de registros</p>
+                    <p className="mt-1 text-2xl font-bold text-white">
+                      {importRows.length}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-slate-900 p-4">
+                    <p className="text-xs text-slate-400">
+                      Linhas aparentemente válidas
+                    </p>
+                    <p className="mt-1 text-2xl font-bold text-emerald-300">
+                      {importRows.filter((row) => row.name && row.type).length}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-slate-900 p-4">
+                    <p className="text-xs text-slate-400">Linhas incompletas</p>
+                    <p className="mt-1 text-2xl font-bold text-amber-300">
+                      {
+                        importRows.filter((row) => !row.name || !row.type)
+                          .length
+                      }
+                    </p>
+                  </div>
+                </div>
+                <div className="overflow-x-auto rounded-xl border border-slate-800">
+                  <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
+                    <thead className="bg-slate-900 text-xs uppercase text-slate-400">
+                      <tr>
+                        <th className="px-4 py-3">#</th>
+                        <th className="px-4 py-3">Imóvel</th>
+                        <th className="px-4 py-3">Tipo</th>
+                        <th className="px-4 py-3">Finalidade</th>
+                        <th className="px-4 py-3">Cidade</th>
+                        <th className="px-4 py-3">Código</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {importRows.slice(0, 30).map((row, index) => (
+                        <tr
+                          key={`${row.code || row.name}-${index}`}
+                          className="text-slate-300"
+                        >
+                          <td className="px-4 py-3 text-slate-500">
+                            {index + 2}
+                          </td>
+                          <td className="px-4 py-3 font-medium text-white">
+                            {row.name || '—'}
+                          </td>
+                          <td className="px-4 py-3">{row.type || '—'}</td>
+                          <td className="px-4 py-3">{row.purpose || '—'}</td>
+                          <td className="px-4 py-3">
+                            {row.location?.city || '—'}
+                          </td>
+                          <td className="px-4 py-3">
+                            {row.code || 'Gerado automaticamente'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {importRows.length > 30 && (
+                  <p className="mt-3 text-sm text-slate-500">
+                    Exibindo os primeiros 30 registros; todos os{' '}
+                    {importRows.length} serão processados.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col-reverse gap-3 border-t border-slate-800 p-6 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!importLoading) {
+                    setImportModalOpen(false);
+                    setImportRows([]);
+                    setImportFile(null);
+                    setImportResult(null);
+                  }
+                }}
+                disabled={importLoading}
+                className="rounded-xl border border-slate-700 px-5 py-3 font-semibold text-slate-300 transition hover:bg-slate-900 disabled:opacity-50"
+              >
+                {importResult ? 'Fechar' : 'Cancelar'}
+              </button>
+              {!importResult && (
+                <button
+                  type="button"
+                  onClick={handleConfirmImport}
+                  disabled={
+                    importLoading ||
+                    !importRows.length ||
+                    importRows.some((row) => !row.name || !row.type)
+                  }
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <CheckCircle2 size={18} />
+                  {importLoading
+                    ? 'Importando...'
+                    : `Confirmar importação (${importRows.length})`}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
