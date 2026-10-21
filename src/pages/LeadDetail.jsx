@@ -1415,7 +1415,7 @@ export default function LeadDetails() {
                   disabled={openingChat}
                 />
 
-                {whatsappUrl && (
+                {/*{whatsappUrl && (
                   <QuickAction
                     icon={<ExternalLink size={17} />}
 
@@ -1425,7 +1425,7 @@ export default function LeadDetails() {
                       window.open(whatsappUrl, '_blank', 'noopener,noreferrer')
                     }
                   />
-                )}
+                )}*/}
 
                 {lead.email && (
                   <QuickAction
@@ -2367,3 +2367,4 @@ function getProposalBadgeType(status) {
       return 'gray';
   }
 }
+Abrir;
