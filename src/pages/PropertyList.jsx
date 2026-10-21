@@ -35,7 +35,7 @@ import {
 } from 'lucide-react';
 
 import useProperties from '../hooks/useProperties';
-import { importPropertiesCSV } from '../services/propertyApi';
+import { importPropertiesCSV } from '../service/propertyApi';
 
 const currency = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
