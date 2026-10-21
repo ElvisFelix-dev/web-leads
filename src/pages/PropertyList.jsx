@@ -8,6 +8,7 @@ import {
   Plus,
   Search,
   RefreshCcw,
+  Download,
   Grid3X3,
   List,
   Eye,
@@ -47,6 +48,7 @@ export default function PropertyList() {
     restore,
     featured,
     fetchProperties,
+    fetchAllPropertiesForExport,
   } = useProperties();
 
   const [search, setSearch] = useState('');
@@ -76,7 +78,17 @@ export default function PropertyList() {
         property.code?.toLowerCase().includes(search.toLowerCase());
 
       const matchStatus =
-        statusFilter === 'todos' ? true : property.status === statusFilter;
+        statusFilter === 'todos'
+          ? true
+          : statusFilter === 'published'
+            ? property.status === 'disponivel' && property.published === true
+            : statusFilter === 'draft'
+              ? property.status === 'rascunho' ||
+                (property.status === 'disponivel' &&
+                  property.published === false)
+              : statusFilter === 'archived'
+                ? property.status === 'arquivado'
+                : property.status === statusFilter;
 
       const matchPurpose =
         purposeFilter === 'todos' ? true : property.purpose === purposeFilter;
@@ -101,6 +113,180 @@ export default function PropertyList() {
       rent: properties.filter((item) => item.purpose === 'aluguel').length,
     };
   }, [properties]);
+
+  // ============================================================
+  // EXPORTAR IMÓVEIS FILTRADOS PARA CSV
+  // ============================================================
+
+  const handleExportCSV = async () => {
+    const toastId = toast.loading(
+      'Carregando todos os imóveis para exportação...',
+    );
+
+    try {
+      const allProperties = await fetchAllPropertiesForExport();
+
+      const normalizedSearch = search.trim().toLowerCase();
+
+      const exportProperties = allProperties.filter((property) => {
+        if (!property) return false;
+
+        const matchSearch =
+          property.name?.toLowerCase().includes(normalizedSearch) ||
+          property.location?.city?.toLowerCase().includes(normalizedSearch) ||
+          property.location?.district
+            ?.toLowerCase()
+            .includes(normalizedSearch) ||
+          property.code?.toLowerCase().includes(normalizedSearch);
+
+        const matchStatus =
+          statusFilter === 'todos'
+            ? true
+            : statusFilter === 'published'
+              ? property.status === 'disponivel' && property.published === true
+              : statusFilter === 'draft'
+                ? property.status === 'rascunho' ||
+                  (property.status === 'disponivel' &&
+                    property.published === false)
+                : statusFilter === 'archived'
+                  ? property.status === 'arquivado'
+                  : property.status === statusFilter;
+
+        const matchPurpose =
+          purposeFilter === 'todos' ? true : property.purpose === purposeFilter;
+
+        return matchSearch && matchStatus && matchPurpose;
+      });
+
+      if (!exportProperties.length) {
+        toast.update(toastId, {
+          render: 'Não há imóveis para exportar com os filtros atuais.',
+          type: 'info',
+          isLoading: false,
+          autoClose: 3000,
+        });
+        return;
+      }
+
+      const csvEscape = (value) => {
+        const normalized =
+          value === null || value === undefined ? '' : String(value);
+        return `"${normalized.replace(/"/g, '""')}"`;
+      };
+
+      const headers = [
+        'Nome',
+        'Código',
+        'Finalidade',
+        'Status',
+        'Preço de venda (R$)',
+        'Preço de aluguel (R$)',
+        'Taxa de condomínio (R$)',
+        'IPTU (R$)',
+        'Cidade',
+        'Estado',
+        'Bairro',
+        'CEP',
+        'Tipo',
+        'Categoria',
+        'Quartos',
+        'Suítes',
+        'Banheiros',
+        'Vagas',
+        'Área total (m²)',
+        'Área construída (m²)',
+        'Mobiliado',
+        'Aceita pets',
+        'Aceita financiamento',
+        'Aceita FGTS',
+        'Destaque',
+        'Exclusivo',
+        'Ativo',
+        'Publicado',
+        'Características',
+        'Nome do corretor',
+        'E-mail do corretor',
+        'Telefone do corretor',
+        'Data de cadastro',
+        'Última atualização',
+      ];
+
+      const rows = exportProperties.map((property) => [
+        property.name,
+        property.code,
+        property.purpose,
+        property.status,
+        property.prices?.salePrice,
+        property.prices?.rentPrice,
+        property.prices?.condominiumFee,
+        property.prices?.iptu,
+        property.location?.city,
+        property.location?.state,
+        property.location?.district,
+        property.location?.zipCode,
+        property.type,
+        property.category,
+        property.bedrooms,
+        property.suites,
+        property.bathrooms,
+        property.parkingSpaces,
+        property.dimensions?.totalArea,
+        property.dimensions?.builtArea,
+        property.furnished ? 'Sim' : 'Não',
+        property.acceptsPets ? 'Sim' : 'Não',
+        property.acceptsFinancing ? 'Sim' : 'Não',
+        property.acceptsFGTS ? 'Sim' : 'Não',
+        property.featured ? 'Sim' : 'Não',
+        property.exclusive ? 'Sim' : 'Não',
+        property.active ? 'Sim' : 'Não',
+        property.published ? 'Sim' : 'Não',
+        Array.isArray(property.features) ? property.features.join(' | ') : '',
+        property.broker?.name,
+        property.broker?.email,
+        property.broker?.phone,
+        property.createdAt
+          ? new Date(property.createdAt).toLocaleDateString('pt-BR')
+          : '',
+        property.updatedAt
+          ? new Date(property.updatedAt).toLocaleDateString('pt-BR')
+          : '',
+      ]);
+
+      const csvContent = [
+        headers.map(csvEscape).join(';'),
+        ...rows.map((row) => row.map(csvEscape).join(';')),
+      ].join('\r\n');
+
+      const blob = new Blob(['\uFEFF', csvContent], {
+        type: 'text/csv;charset=utf-8;',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const date = new Date().toISOString().slice(0, 10);
+
+      link.href = url;
+      link.download = `imoveis-${date}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+
+      toast.update(toastId, {
+        render: `${exportProperties.length} imóvel(is) exportado(s) com sucesso.`,
+        type: 'success',
+        isLoading: false,
+        autoClose: 3000,
+      });
+    } catch (err) {
+      console.error('Erro ao exportar imóveis:', err);
+      toast.update(toastId, {
+        render: err?.message || 'Erro ao exportar imóveis para CSV.',
+        type: 'error',
+        isLoading: false,
+        autoClose: 4000,
+      });
+    }
+  };
 
   // ============================================================
   // AÇÕES COM TOASTIFY
@@ -409,6 +595,16 @@ export default function PropertyList() {
           >
             <RefreshCcw size={18} />
             Atualizar
+          </button>
+
+          <button
+            onClick={handleExportCSV}
+            disabled={loading || filteredProperties.length === 0}
+            className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+            title="Exportar os imóveis exibidos pelos filtros atuais"
+          >
+            <Download size={18} />
+            Exportar CSV
           </button>
 
           <button

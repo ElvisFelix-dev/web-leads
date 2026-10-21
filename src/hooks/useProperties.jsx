@@ -61,6 +61,45 @@ export default function useProperties(autoLoad = true, params = null) {
 
   /*
   ============================================================
+  BUSCAR TODOS OS IMÓVEIS PARA EXPORTAÇÃO
+  Faz paginação usando o limite máximo aceito pelo backend (100).
+  Não altera o estado `properties` exibido na tela.
+  ============================================================
+  */
+
+  const fetchAllPropertiesForExport = useCallback(
+    async (filters = params || {}) => {
+      const allProperties = [];
+      const limit = 100;
+      let page = 1;
+
+      while (true) {
+        const result = await getProperties({
+          ...filters,
+          page,
+          limit,
+        });
+
+        const batch = Array.isArray(result)
+          ? result
+          : result?.data || result?.properties || [];
+
+        allProperties.push(...batch);
+
+        if (batch.length < limit) {
+          break;
+        }
+
+        page += 1;
+      }
+
+      return allProperties;
+    },
+    [params],
+  );
+
+  /*
+  ============================================================
   BUSCAR POR ID
   ============================================================
   */
@@ -292,6 +331,8 @@ export default function useProperties(autoLoad = true, params = null) {
     // CRUD
 
     fetchProperties,
+
+    fetchAllPropertiesForExport,
 
     fetchProperty,
 
