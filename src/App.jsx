@@ -59,6 +59,7 @@ import PropertyFavorites from './pages/PropertyFavorites';
 import WhatsAppQrCode from './pages/WhatsAppQrCode';
 import NotFound from './pages/NotFound';
 import PublicProposalForm from './pages/PublicProposalForm';
+import CommissionDetails from './pages/commissions/CommissionDetails';
 
 import ChatPage from './pages/ChatPage';
 import NotificationCenter from './pages/NotificationCenter';
@@ -143,6 +144,7 @@ export function App() {
           <Route path="/notifications" element={<NotificationCenter />} />
           <Route path="/admin/follow-ups" element={<LeadFollowUpTemplates />} />
           <Route path="/qr" element={<WhatsAppQrCode />} />
+          <Route path="/commissions/:id" element={<CommissionDetails />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
