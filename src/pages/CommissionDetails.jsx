@@ -17,7 +17,7 @@ import {
   AlertCircle,
   RefreshCw,
 } from 'lucide-react';
-import { getCommissionById } from '../../service/commissionService';
+import { getCommissionById } from '../service/commissionService';
 
 const currency = (value) =>
   new Intl.NumberFormat('pt-BR', {
