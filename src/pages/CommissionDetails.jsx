@@ -16,8 +16,18 @@ import {
   Building2,
   AlertCircle,
   RefreshCw,
+  MapPin,
+  BedDouble,
+  Bath,
+  Ruler,
+  CarFront,
+  BriefcaseBusiness,
+  Mail,
+  Phone,
+  Hash,
+  CalendarCheck,
 } from 'lucide-react';
-import { getCommissionById } from '../service/commissionService';
+import { commissionService } from '../service/commissionService';
 
 const currency = (value) =>
   new Intl.NumberFormat('pt-BR', {
@@ -125,7 +135,8 @@ export default function CommissionDetails() {
     try {
       setLoading(true);
       setError('');
-      const response = await getCommissionById(id);
+      const response = await commissionService.getById(id);
+
       setCommission(
         response?.data?.commission ??
           response?.data?.data ??
@@ -198,6 +209,96 @@ export default function CommissionDetails() {
       property.address,
       sale.propertySnapshot?.address,
     );
+    const propertyImage = firstValue(
+      property.coverImage,
+      property.mainImage,
+      property.image,
+      property.thumbnail,
+      property.images?.[0]?.url,
+      property.images?.[0]?.secure_url,
+      property.photos?.[0]?.url,
+      sale.propertySnapshot?.image,
+      sale.propertySnapshot?.coverImage,
+    );
+    const propertyType = firstValue(
+      property.type,
+      property.propertyType,
+      property.category,
+      sale.propertySnapshot?.type,
+    );
+    const bedrooms = firstValue(
+      property.bedrooms,
+      property.bedroomsCount,
+      property.details?.bedrooms,
+    );
+    const bathrooms = firstValue(
+      property.bathrooms,
+      property.bathroomsCount,
+      property.details?.bathrooms,
+    );
+    const area = firstValue(
+      property.area,
+      property.totalArea,
+      property.builtArea,
+      property.details?.area,
+    );
+    const parkingSpaces = firstValue(
+      property.parkingSpaces,
+      property.garageSpaces,
+      property.garage,
+      property.details?.parkingSpaces,
+    );
+    const propertyCode = firstValue(
+      property.code,
+      property.reference,
+      property.propertyCode,
+      property._id,
+    );
+    const city = firstValue(
+      property.location?.city,
+      property.city,
+      sale.propertySnapshot?.city,
+    );
+    const stateCode = firstValue(
+      property.location?.state,
+      property.state,
+      sale.propertySnapshot?.state,
+    );
+    const neighborhood = firstValue(
+      property.location?.neighborhood,
+      property.neighborhood,
+      property.district,
+    );
+    const brokerAvatar = firstValue(
+      broker.avatar,
+      broker.avatarUrl,
+      broker.profileImage,
+      broker.photo,
+      broker.image,
+      broker.picture,
+      seller.broker?.avatar,
+      c.brokerSnapshot?.avatar,
+    );
+    const brokerPosition = firstValue(
+      broker.position,
+      broker.role,
+      broker.jobTitle,
+      broker.profession,
+      seller.broker?.position,
+      c.brokerSnapshot?.position,
+      'Corretor imobiliário',
+    );
+    const brokerEmail = firstValue(
+      broker.email,
+      seller.broker?.email,
+      c.brokerSnapshot?.email,
+    );
+    const brokerPhone = firstValue(
+      broker.phone,
+      broker.whatsapp,
+      seller.broker?.phone,
+      c.brokerSnapshot?.phone,
+    );
     const brokerName = firstValue(
       getName(broker),
       getName(seller.broker),
@@ -227,6 +328,20 @@ export default function CommissionDetails() {
       status,
       propertyName,
       propertyAddress,
+      propertyImage,
+      propertyType,
+      bedrooms,
+      bathrooms,
+      area,
+      parkingSpaces,
+      propertyCode,
+      city,
+      stateCode,
+      neighborhood,
+      brokerAvatar,
+      brokerPosition,
+      brokerEmail,
+      brokerPhone,
       saleNumber,
       saleDate,
       paidAt,
@@ -400,6 +515,169 @@ export default function CommissionDetails() {
                 </p>
               </div>
             </div>
+            <div className="mt-6 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#081221]">
+              {view.propertyImage ? (
+                <img
+                  src={view.propertyImage}
+                  alt={view.propertyName}
+                  className="h-56 w-full object-cover sm:h-72"
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="flex h-44 items-center justify-center bg-gradient-to-br from-blue-500/10 via-[#101d31] to-violet-500/10">
+                  <Home
+                    size={42}
+                    className="text-blue-200/50"
+                    strokeWidth={1.2}
+                  />
+                </div>
+              )}
+              <div className="p-5 sm:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    {view.propertyType && (
+                      <span className="inline-flex rounded-full border border-blue-300/15 bg-blue-300/[0.07] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-blue-200">
+                        {view.propertyType}
+                      </span>
+                    )}
+                    <h3 className="mt-2 text-xl font-bold tracking-tight text-white sm:text-2xl">
+                      {view.propertyName}
+                    </h3>
+                    {(view.propertyAddress || view.city) && (
+                      <p className="mt-2 flex items-start gap-2 text-sm leading-6 text-slate-400">
+                        <MapPin
+                          size={16}
+                          className="mt-1 shrink-0 text-blue-300"
+                        />
+                        <span>
+                          {[
+                            view.propertyAddress,
+                            view.neighborhood,
+                            view.city,
+                            view.stateCode,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                  {view.propertyCode && (
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-slate-400">
+                      <Hash size={13} /> Ref.{' '}
+                      {String(view.propertyCode).slice(-8)}
+                    </span>
+                  )}
+                </div>
+                {(view.bedrooms ||
+                  view.bathrooms ||
+                  view.area ||
+                  view.parkingSpaces) && (
+                  <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {view.bedrooms != null && (
+                      <div className="rounded-xl border border-white/[0.06] bg-white/[0.025] p-3">
+                        <BedDouble size={17} className="text-blue-300" />
+                        <p className="mt-2 text-lg font-bold">
+                          {view.bedrooms}
+                        </p>
+                        <p className="text-xs text-slate-500">Quartos</p>
+                      </div>
+                    )}
+                    {view.bathrooms != null && (
+                      <div className="rounded-xl border border-white/[0.06] bg-white/[0.025] p-3">
+                        <Bath size={17} className="text-blue-300" />
+                        <p className="mt-2 text-lg font-bold">
+                          {view.bathrooms}
+                        </p>
+                        <p className="text-xs text-slate-500">Banheiros</p>
+                      </div>
+                    )}
+                    {view.area != null && (
+                      <div className="rounded-xl border border-white/[0.06] bg-white/[0.025] p-3">
+                        <Ruler size={17} className="text-blue-300" />
+                        <p className="mt-2 text-lg font-bold">
+                          {view.area}{' '}
+                          <span className="text-xs font-medium text-slate-400">
+                            m²
+                          </span>
+                        </p>
+                        <p className="text-xs text-slate-500">Área</p>
+                      </div>
+                    )}
+                    {view.parkingSpaces != null && (
+                      <div className="rounded-xl border border-white/[0.06] bg-white/[0.025] p-3">
+                        <CarFront size={17} className="text-blue-300" />
+                        <p className="mt-2 text-lg font-bold">
+                          {typeof view.parkingSpaces === 'boolean'
+                            ? view.parkingSpaces
+                              ? 'Sim'
+                              : 'Não'
+                            : view.parkingSpaces}
+                        </p>
+                        <p className="text-xs text-slate-500">Vagas</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-blue-300/15 bg-gradient-to-r from-blue-500/[0.08] to-transparent p-4 sm:p-5">
+              <div className="flex items-center gap-4">
+                {view.brokerAvatar ? (
+                  <img
+                    src={view.brokerAvatar}
+                    alt={view.brokerName}
+                    className="h-16 w-16 rounded-2xl border border-white/10 object-cover"
+                    onError={(event) => {
+                      event.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-blue-300/20 bg-blue-400/10 text-xl font-bold text-blue-200">
+                    {view.brokerName
+                      .split(' ')
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((part) => part[0])
+                      .join('')
+                      .toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-300">
+                    Corretor responsável
+                  </p>
+                  <h3 className="mt-1 truncate text-lg font-bold text-white">
+                    {view.brokerName}
+                  </h3>
+                  <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-400">
+                    <BriefcaseBusiness size={14} className="text-blue-300" />{' '}
+                    {view.brokerPosition}
+                  </p>
+                  {(view.brokerEmail || view.brokerPhone) && (
+                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+                      {view.brokerEmail && (
+                        <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                          <Mail size={13} /> {view.brokerEmail}
+                        </span>
+                      )}
+                      {view.brokerPhone && (
+                        <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                          <Phone size={13} /> {view.brokerPhone}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-300/15 bg-emerald-300/[0.06] text-emerald-300 sm:flex">
+                  <BadgeCheck size={20} />
+                </div>
+              </div>
+            </div>
+
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               <InfoItem
                 icon={Home}
@@ -426,6 +704,19 @@ export default function CommissionDetails() {
                     ? `Pago em ${date(view.paidAt)}`
                     : 'O status será atualizado conforme o financeiro processar a comissão.'
                 }
+              />
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <InfoItem
+                icon={CalendarCheck}
+                label="Data de registro"
+                value={date(commission?.createdAt)}
+              />
+              <InfoItem
+                icon={Building2}
+                label="Valor negociado"
+                value={currency(view.saleAmount)}
+                subvalue="Valor informado para esta venda"
               />
             </div>
           </section>
@@ -544,12 +835,6 @@ export default function CommissionDetails() {
             Leads Na Mão <span className="mx-1 text-slate-700">•</span> Mais
             conexões, mais negócios.
           </p>
-          <button
-            onClick={() => navigate('/commissions')}
-            className="text-sm font-semibold text-blue-300 transition hover:text-blue-200"
-          >
-            Ver central de comissões <span aria-hidden="true">→</span>
-          </button>
         </footer>
       </div>
     </main>
