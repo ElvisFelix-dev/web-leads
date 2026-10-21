@@ -852,14 +852,6 @@ export default function PropertyList() {
           </select>
 
           <button
-            onClick={fetchProperties}
-            className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-5 text-slate-200 hover:bg-slate-700"
-          >
-            <RefreshCcw size={18} />
-            Atualizar
-          </button>
-
-          <button
             onClick={handleExportCSV}
             disabled={loading || filteredProperties.length === 0}
             className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
