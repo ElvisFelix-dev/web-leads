@@ -93,7 +93,10 @@ export function App() {
         <Route path="/about-us" element={<AboutUs />} />
         <Route path="/imoveis" element={<Properties />} />
         <Route path="/map" element={<PropertiesMap />} />
-        <Route path="/proposal-form/:token" element={<PublicProposalForm />} />
+        <Route
+          path="/proposta-publica/:token"
+          element={<PublicProposalForm />}
+        />
 
         {/* Páginas COM sidebar (usam Layout) */}
         <Route element={<Layout />}>
