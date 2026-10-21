@@ -59,7 +59,7 @@ import PropertyFavorites from './pages/PropertyFavorites';
 import WhatsAppQrCode from './pages/WhatsAppQrCode';
 import NotFound from './pages/NotFound';
 import PublicProposalForm from './pages/PublicProposalForm';
-import CommissionDetails from './pages/commissions/CommissionDetails';
+import CommissionDetails from './pages/CommissionDetails';
 
 import ChatPage from './pages/ChatPage';
 import NotificationCenter from './pages/NotificationCenter';
