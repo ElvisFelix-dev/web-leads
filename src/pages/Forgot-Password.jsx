@@ -106,7 +106,7 @@ export default function ForgotPassword() {
             <img
               src={imgLogo}
 
-              alt="LeadsnaMão"
+              alt="CRM NODUS"
 
               className="
               w-24
@@ -310,7 +310,7 @@ export default function ForgotPassword() {
               leading-relaxed
               "
             >
-              Sua conta no LeadsnaMão continua protegida. Enviaremos um link
+              Sua conta no CRM NODUS continua protegida. Enviaremos um link
               exclusivo para você redefinir sua senha rapidamente.
             </p>
 
@@ -482,9 +482,9 @@ export default function ForgotPassword() {
                 text-sm
                 "
               >
-                © {new Date().getFullYear()} LeadsnaMão
+                © {new Date().getFullYear()} CRM NODUS
                 <br />
-                Plataforma inteligente para gestão imobiliária.
+                Tudo conectado. Mais negocios.
               </p>
             </div>
           </div>

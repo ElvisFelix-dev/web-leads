@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 
 /**
- * Página 404 premium — Leads Na Mão.
+ * Página 404 premium — CRM NODUS.
  * Registre no App.jsx: <Route path="*" element={<NotFound />} />
  */
 export default function NotFound() {
@@ -39,10 +39,10 @@ export default function NotFound() {
             </span>
             <span className="text-left">
               <span className="block text-sm font-extrabold tracking-[0.18em] text-white">
-                LEADS <span className="text-blue-400">NA MÃO</span>
+                CRM <span className="text-blue-400">NODUS</span>
               </span>
               <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-[0.22em] text-slate-500">
-                Gestão inteligente de leads
+                Tudo conectado. Mais negocios.
               </span>
             </span>
           </Link>
@@ -126,7 +126,7 @@ export default function NotFound() {
           </div>
 
           <footer className="flex flex-col items-center justify-between gap-2 border-t border-slate-800/80 px-6 py-4 text-center text-[11px] text-slate-600 sm:flex-row sm:px-10">
-            <span>© {new Date().getFullYear()} Leads Na Mão</span>
+            <span>© {new Date().getFullYear()} CRM NODUS</span>
             <span>Conectando oportunidades a novos negócios.</span>
           </footer>
         </div>

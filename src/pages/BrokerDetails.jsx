@@ -132,7 +132,7 @@ export default function BrokerDetails() {
       : `55${digits}`;
 
     const message = encodeURIComponent(
-      `Olá, ${name}! Estou entrando em contato pelo Leads Na Mão CRM.`,
+      `Olá, ${name}! Estou entrando em contato pelo CRM NODUS CRM.`,
     );
 
     window.open(
@@ -631,7 +631,7 @@ export default function BrokerDetails() {
 
         {/* RODAPÉ */}
         <footer className="mt-8 flex flex-col justify-between gap-3 border-t border-white/[0.06] py-5 text-xs text-slate-600 sm:flex-row sm:items-center">
-          <p>Leads Na Mão CRM · Gestão comercial imobiliária</p>
+          <p>CRM NODUS CRM · Gestão comercial imobiliária</p>
 
           <button
             type="button"

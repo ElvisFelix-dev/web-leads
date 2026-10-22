@@ -365,7 +365,7 @@ export default function CommissionDetails() {
   );
 
   const copyAchievement = async () => {
-    const message = `🏆 Conquista realizada no Leads Na Mão!\nParabéns pela venda, ${view.brokerName}!\nImóvel: ${view.propertyName}\nValor da venda: ${currency(view.saleAmount)}\nUma oportunidade transformada em negócio fechado.`;
+    const message = `🏆 Conquista realizada no CRM NODUS!\nParabéns pela venda, ${view.brokerName}!\nImóvel: ${view.propertyName}\nValor da venda: ${currency(view.saleAmount)}\nUma oportunidade transformada em negócio fechado.`;
     try {
       await navigator.clipboard.writeText(message);
       setCopied(true);
@@ -741,7 +741,7 @@ export default function CommissionDetails() {
                 e dedicação. Mais uma oportunidade que virou negócio!”
               </p>
               <footer className="mt-3 text-sm text-slate-500">
-                — Leads Na Mão
+                — CRM NODUS
               </footer>
             </blockquote>
             <button
@@ -832,7 +832,7 @@ export default function CommissionDetails() {
 
         <footer className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-white/[0.07] py-6 text-center sm:flex-row sm:text-left">
           <p className="text-xs text-slate-500">
-            Leads Na Mão <span className="mx-1 text-slate-700">•</span> Mais
+            CRM NODUS <span className="mx-1 text-slate-700">•</span> Mais
             conexões, mais negócios.
           </p>
         </footer>

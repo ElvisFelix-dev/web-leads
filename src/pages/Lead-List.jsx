@@ -695,7 +695,7 @@ export default function LeadsList() {
         {/* FOOTER */}
 
         <div className="mt-5 flex flex-col gap-2 px-1 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-          <span>Leads Na Mão</span>
+          <span>CRM NODUS</span>
 
           <span>Gestão inteligente de leads</span>
         </div>

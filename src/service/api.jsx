@@ -29,6 +29,5 @@ api.interceptors.request.use(
 
 export default api;
 
-//  'https://leadsnamao.onrender.com',
-
-// 'http://localhost:3333',
+// Configure VITE_API_URL in the deployment environment when changing API origin.
+// Example local value: http://localhost:3333 || https://leadsnamao.onrender.com

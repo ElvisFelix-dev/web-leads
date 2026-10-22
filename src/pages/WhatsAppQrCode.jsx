@@ -240,7 +240,7 @@ export default function WhatsAppQrCode() {
 
             <div className="min-w-0">
               <p className="text-lg font-bold tracking-tight text-white">
-                Leads <span className="text-blue-400">Na Mão</span>
+                Leads <span className="text-blue-400">Na </span>
               </p>
               <p className="mt-0.5 text-xs text-slate-500">
                 Central de comunicação
@@ -270,8 +270,8 @@ export default function WhatsAppQrCode() {
           </h1>
 
           <p className="mt-3 max-w-xl text-sm leading-7 text-slate-400 sm:text-base">
-            Centralize as conversas da sua imobiliária no Leads Na Mão e
-            facilite o atendimento aos seus leads em um só lugar.
+            Centralize as conversas da sua imobiliária no CRM NODUS e facilite o
+            atendimento aos seus leads em um só lugar.
           </p>
         </section>
 
@@ -355,8 +355,8 @@ export default function WhatsAppQrCode() {
                     </h3>
 
                     <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-slate-400">
-                      O WhatsApp da sua imobiliária está conectado ao Leads Na
-                      Mão. Você já pode utilizar a sessão integrada conforme as
+                      O WhatsApp da sua imobiliária está conectado ao CRM NODUS.
+                      Você já pode utilizar a sessão integrada conforme as
                       permissões configuradas no CRM.
                     </p>
                   </div>
@@ -612,8 +612,8 @@ export default function WhatsAppQrCode() {
             <div className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3.5 transition-colors hover:border-blue-500/15 hover:bg-blue-500/[0.03]">
               <FaArrowRight className="shrink-0 text-xs text-blue-400" />
               <p className="text-xs leading-5 text-slate-500">
-                Após conectar, volte ao chat do Leads Na Mão para testar o envio
-                e o recebimento de mensagens.
+                Após conectar, volte ao chat do CRM NODUS para testar o envio e
+                o recebimento de mensagens.
               </p>
             </div>
           </aside>
@@ -622,7 +622,7 @@ export default function WhatsAppQrCode() {
         {/* Bottom */}
         <footer className="mt-8 flex flex-col gap-2 border-t border-white/[0.06] pt-5 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
           <p className="text-xs text-slate-600">
-            Leads Na Mão · Gestão imobiliária
+            CRM NODUS · Gestão imobiliária
           </p>
 
           <p className="text-xs text-slate-600">Integração WhatsApp</p>

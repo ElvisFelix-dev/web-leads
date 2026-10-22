@@ -462,7 +462,10 @@ export default function Sidebar({ onCollapseChange }) {
     const active = isActive(item.path);
 
     return (
-      <li key={item.path} className={item.path === '/notifications' ? 'relative' : undefined}>
+      <li
+        key={item.path}
+        className={item.path === '/notifications' ? 'relative' : undefined}
+      >
         <Link
           to={item.path}
           target={item.target}
@@ -737,7 +740,7 @@ export default function Sidebar({ onCollapseChange }) {
                   w-8
                   h-8
                   rounded-lg
-                  bg-blue-600
+
                   flex
                   items-center
                   justify-center
@@ -748,14 +751,14 @@ export default function Sidebar({ onCollapseChange }) {
               >
                 <img
                   src={imgLogo}
-                  alt="LeadsNaMão"
+                  alt="CRM NODUS"
                   className="w-6 h-6 object-contain"
                 />
               </div>
 
               <h1 className="text-lg font-bold text-white">
-                Leads
-                <span className="text-blue-500">NaMão</span>
+                CRM
+                <span className="text-blue-500">NODUS</span>
               </h1>
             </div>
           )}
@@ -778,7 +781,7 @@ export default function Sidebar({ onCollapseChange }) {
             >
               <img
                 src={imgLogo}
-                alt="LeadsNaMão"
+                alt="CRM NODUS"
                 className="w-6 h-6 object-contain"
               />
             </div>
@@ -1045,7 +1048,7 @@ export default function Sidebar({ onCollapseChange }) {
             "
           >
             <p className="text-[10px] text-gray-600 text-center">
-              LeadsNaMão v1.0
+              CRM NODUS v1.0
             </p>
           </div>
         )}

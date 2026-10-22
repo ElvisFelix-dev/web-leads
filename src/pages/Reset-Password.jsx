@@ -169,7 +169,7 @@ export default function ResetPassword() {
             <img
               src={imgLogo}
 
-              alt="LeadsnaMão"
+              alt="CRM NODUS"
 
               className="
               w-24
@@ -563,9 +563,9 @@ export default function ResetPassword() {
                 text-sm
                 "
               >
-                © {new Date().getFullYear()} LeadsnaMão
+                © {new Date().getFullYear()} CRM NODUS
                 <br />
-                Gestão inteligente para corretores.
+                Tudo conectado. Mais negocios.
               </p>
             </div>
           </div>

@@ -7,7 +7,7 @@ self.addEventListener('push', (event) => {
     console.error('[Service Worker] Erro ao interpretar push:', error);
   }
 
-  const title = data.title || 'Leads Na Mão';
+  const title = data.title || 'CRM NODUS';
 
   const options = {
     body: data.body || 'Você recebeu uma nova notificação.',

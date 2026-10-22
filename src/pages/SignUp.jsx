@@ -1,16 +1,8 @@
-import {
-  useState,
-} from "react";
+import { useState } from 'react';
 
-import {
-  Link,
-  useNavigate,
-} from "react-router-dom";
+import { Link, useNavigate } from 'react-router-dom';
 
-import {
-  AiFillEye,
-  AiFillEyeInvisible,
-} from "react-icons/ai";
+import { AiFillEye, AiFillEyeInvisible } from 'react-icons/ai';
 
 import {
   FaArrowRight,
@@ -18,170 +10,79 @@ import {
   FaUsers,
   FaBuilding,
   FaRocket,
-} from "react-icons/fa";
+} from 'react-icons/fa';
 
-import {
-  useForm,
-} from "react-hook-form";
+import { useForm } from 'react-hook-form';
 
-import {
-  yupResolver,
-} from "@hookform/resolvers/yup";
+import { yupResolver } from '@hookform/resolvers/yup';
 
-import * as yup from "yup";
+import * as yup from 'yup';
 
-import {
-  toast,
-} from "react-toastify";
+import { toast } from 'react-toastify';
 
+import FormError from '../components/FormError';
 
-import FormError from "../components/FormError";
+import api from '../service/api';
 
-import api from "../service/api";
-
-import imgLogo from "../assets/logoLead.jpg";
-
+import imgLogo from '../assets/logoLead.jpg';
 
 // =======================================
 // VALIDAÇÃO
 // =======================================
 
 const schema = yup.object({
+  name: yup.string().required('Nome obrigatório'),
 
-  name: yup
-    .string()
-    .required("Nome obrigatório"),
-
-
-  email: yup
-    .string()
-    .email("Email inválido")
-    .required("Email obrigatório"),
-
+  email: yup.string().email('Email inválido').required('Email obrigatório'),
 
   password: yup
     .string()
-    .required("Senha obrigatória")
-    .min(
-      6,
-      "A senha deve ter no mínimo 6 caracteres"
-    )
+    .required('Senha obrigatória')
+    .min(6, 'A senha deve ter no mínimo 6 caracteres')
     .matches(
       /^(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])/,
-      "Use letra maiúscula, número e caractere especial"
+      'Use letra maiúscula, número e caractere especial',
     ),
-
 });
 
-
-
-
-
 export default function SignUp() {
-
-
   const navigate = useNavigate();
 
+  const [showPassword, setShowPassword] = useState(false);
 
-
-  const [
-    showPassword,
-    setShowPassword
-  ] = useState(false);
-
-
-
-  const [
-    loading,
-    setLoading
-  ] = useState(false);
-
-
-
-
+  const [loading, setLoading] = useState(false);
 
   const {
-
     register,
 
     handleSubmit,
 
-    formState: {
-      errors
-    }
-
+    formState: { errors },
   } = useForm({
-
-    resolver: yupResolver(schema)
-
+    resolver: yupResolver(schema),
   });
-
-
-
-
 
   // =======================================
   // CADASTRO
   // =======================================
 
-
   async function onSubmit(data) {
-
-
     try {
-
-
       setLoading(true);
 
+      await api.post('/api/users/register', data);
 
+      toast.success('Cadastro realizado com sucesso!');
 
-      await api.post(
-        "/api/users/register",
-        data
-      );
-
-
-
-      toast.success(
-        "Cadastro realizado com sucesso!"
-      );
-
-
-
-      navigate("/");
-
-
-
+      navigate('/');
     } catch (error) {
-
-
-      toast.error(
-
-        error.response?.data?.message ||
-
-        "Erro ao cadastrar usuário"
-
-      );
-
-
+      toast.error(error.response?.data?.message || 'Erro ao cadastrar usuário');
     } finally {
-
-
       setLoading(false);
-
-
     }
-
-
   }
 
-
-
-
-
-
   return (
-
     <div
       className="
         min-h-screen
@@ -192,9 +93,6 @@ export default function SignUp() {
         p-6
       "
     >
-
-
-
       <div
         className="
           w-full
@@ -209,13 +107,9 @@ export default function SignUp() {
           shadow-2xl
         "
       >
-
-
-
         {/* ==============================
             LADO ESQUERDO FORM
         ============================== */}
-
 
         <div
           className="
@@ -223,9 +117,6 @@ export default function SignUp() {
             md:p-12
           "
         >
-
-
-
           <div
             className="
               flex
@@ -234,11 +125,9 @@ export default function SignUp() {
               mb-8
             "
           >
-
-
             <img
               src={imgLogo}
-              alt="LeadsnaMão"
+              alt="CRM NODUS"
               className="
                 w-14
                 h-14
@@ -247,9 +136,7 @@ export default function SignUp() {
               "
             />
 
-
             <div>
-
               <h1
                 className="
                   text-white
@@ -257,11 +144,8 @@ export default function SignUp() {
                   font-bold
                 "
               >
-
-                LeadsnaMão
-
+                CRM NODUS
               </h1>
-
 
               <p
                 className="
@@ -269,20 +153,10 @@ export default function SignUp() {
                   text-sm
                 "
               >
-
                 CRM Imobiliário
-
               </p>
-
-
             </div>
-
-
           </div>
-
-
-
-
 
           <h2
             className="
@@ -292,12 +166,8 @@ export default function SignUp() {
               mb-3
             "
           >
-
             Crie sua conta
-
           </h2>
-
-
 
           <p
             className="
@@ -305,32 +175,18 @@ export default function SignUp() {
               mb-8
             "
           >
-
-            Comece a organizar seus leads,
-            clientes e oportunidades.
-
+            Comece a organizar seus leads, clientes e oportunidades.
           </p>
 
-
-
-
-
           <form
-            onSubmit={
-              handleSubmit(onSubmit)
-            }
+            onSubmit={handleSubmit(onSubmit)}
             className="
               space-y-5
             "
           >
-
-
-
             <div>
-
-
               <input
-                {...register("name")}
+                {...register('name')}
                 placeholder="Nome completo"
                 className="
                   w-full
@@ -347,25 +203,12 @@ export default function SignUp() {
                 "
               />
 
-
-              <FormError
-                message={
-                  errors.name?.message
-                }
-              />
-
-
+              <FormError message={errors.name?.message} />
             </div>
 
-
-
-
-
             <div>
-
-
               <input
-                {...register("email")}
+                {...register('email')}
                 type="email"
                 placeholder="Seu melhor email"
                 className="
@@ -383,34 +226,17 @@ export default function SignUp() {
                 "
               />
 
-
-              <FormError
-                message={
-                  errors.email?.message
-                }
-              />
-
-
+              <FormError message={errors.email?.message} />
             </div>
-
-
-
 
             <div
               className="
                 relative
               "
             >
-
               <input
-                {...register("password")}
-                type={
-                  showPassword
-                    ?
-                    "text"
-                    :
-                    "password"
-                }
+                {...register('password')}
+                type={showPassword ? 'text' : 'password'}
                 placeholder="Senha segura"
                 className="
                   w-full
@@ -428,14 +254,9 @@ export default function SignUp() {
                 "
               />
 
-
               <button
                 type="button"
-                onClick={() =>
-                  setShowPassword(
-                    !showPassword
-                  )
-                }
+                onClick={() => setShowPassword(!showPassword)}
                 className="
                   absolute
                   right-4
@@ -444,26 +265,14 @@ export default function SignUp() {
                   hover:text-white
                 "
               >
-
-                {
-                  showPassword
-                    ?
-                    <AiFillEyeInvisible size={22} />
-                    :
-                    <AiFillEye size={22} />
-                }
-
-
+                {showPassword ? (
+                  <AiFillEyeInvisible size={22} />
+                ) : (
+                  <AiFillEye size={22} />
+                )}
               </button>
 
-
-              <FormError
-                message={
-                  errors.password?.message
-                }
-              />
-
-
+              <FormError message={errors.password?.message} />
             </div>
             {/* BOTÃO */}
 
@@ -491,26 +300,15 @@ export default function SignUp() {
                 disabled:opacity-50
               "
             >
-
-              {
-                loading
-                  ?
-                  "Criando conta..."
-                  :
-                  <>
-                    Criar minha conta
-
-                    <FaArrowRight />
-
-                  </>
-              }
-
-
+              {loading ? (
+                'Criando conta...'
+              ) : (
+                <>
+                  Criar minha conta
+                  <FaArrowRight />
+                </>
+              )}
             </button>
-
-
-
-
 
             <p
               className="
@@ -520,10 +318,7 @@ export default function SignUp() {
                 pt-4
               "
             >
-
               Já possui uma conta?
-
-
               <Link
                 to="/"
                 className="
@@ -533,34 +328,15 @@ export default function SignUp() {
                   ml-2
                 "
               >
-
                 Entrar
-
               </Link>
-
-
             </p>
-
-
-
           </form>
-
-
         </div>
-
-
-
-
-
-
-
-
 
         {/* ==============================
             LADO DIREITO APRESENTAÇÃO
         ============================== */}
-
-
 
         <div
           className="
@@ -577,12 +353,7 @@ export default function SignUp() {
             overflow-hidden
           "
         >
-
-
-
-
           {/* EFEITOS DE FUNDO */}
-
 
           <div
             className="
@@ -597,7 +368,6 @@ export default function SignUp() {
             "
           />
 
-
           <div
             className="
               absolute
@@ -611,21 +381,12 @@ export default function SignUp() {
             "
           />
 
-
-
-
-
-
-
           <div
             className="
               relative
               z-10
             "
           >
-
-
-
             <span
               className="
                 inline-flex
@@ -642,17 +403,9 @@ export default function SignUp() {
                 mb-6
               "
             >
-
               <FaRocket />
-
               Plataforma para corretores
-
-
             </span>
-
-
-
-
 
             <h2
               className="
@@ -663,18 +416,10 @@ export default function SignUp() {
                 mb-5
               "
             >
-
               Venda mais.
               <br />
-
-              Organize melhor
-              seus clientes.
-
+              Organize melhor seus clientes.
             </h2>
-
-
-
-
 
             <p
               className="
@@ -684,31 +429,17 @@ export default function SignUp() {
                 mb-10
               "
             >
-
-              Tenha controle completo dos seus
-              leads, imóveis e oportunidades
-              em um único lugar.
-
+              Tenha controle completo dos seus leads, imóveis e oportunidades em
+              um único lugar.
             </p>
 
-
-
-
-
-
-
             {/* CARDS BENEFÍCIOS */}
-
-
 
             <div
               className="
                 space-y-4
               "
             >
-
-
-
               <div
                 className="
                   flex
@@ -722,7 +453,6 @@ export default function SignUp() {
                   backdrop-blur
                 "
               >
-
                 <div
                   className="
                     bg-blue-500/20
@@ -731,25 +461,18 @@ export default function SignUp() {
                     text-blue-400
                   "
                 >
-
                   <FaUsers size={24} />
-
                 </div>
 
-
                 <div>
-
                   <h3
                     className="
                       text-white
                       font-bold
                     "
                   >
-
                     Gestão de Leads
-
                   </h3>
-
 
                   <p
                     className="
@@ -757,22 +480,10 @@ export default function SignUp() {
                       text-sm
                     "
                   >
-
                     Organize clientes e oportunidades
-
                   </p>
-
-
                 </div>
-
-
               </div>
-
-
-
-
-
-
 
               <div
                 className="
@@ -787,8 +498,6 @@ export default function SignUp() {
                   backdrop-blur
                 "
               >
-
-
                 <div
                   className="
                     bg-cyan-500/20
@@ -797,26 +506,18 @@ export default function SignUp() {
                     text-cyan-400
                   "
                 >
-
                   <FaChartLine size={24} />
-
                 </div>
 
-
-
                 <div>
-
                   <h3
                     className="
                       text-white
                       font-bold
                     "
                   >
-
                     Dashboard Inteligente
-
                   </h3>
-
 
                   <p
                     className="
@@ -824,22 +525,10 @@ export default function SignUp() {
                       text-sm
                     "
                   >
-
                     Acompanhe sua performance
-
                   </p>
-
-
                 </div>
-
-
               </div>
-
-
-
-
-
-
 
               <div
                 className="
@@ -854,8 +543,6 @@ export default function SignUp() {
                   backdrop-blur
                 "
               >
-
-
                 <div
                   className="
                     bg-purple-500/20
@@ -864,26 +551,18 @@ export default function SignUp() {
                     text-purple-400
                   "
                 >
-
                   <FaBuilding size={24} />
-
                 </div>
 
-
-
                 <div>
-
                   <h3
                     className="
                       text-white
                       font-bold
                     "
                   >
-
                     Gestão Imobiliária
-
                   </h3>
-
 
                   <p
                     className="
@@ -891,9 +570,7 @@ export default function SignUp() {
                       text-sm
                     "
                   >
-
                     Imóveis, visitas e negócios
-
                   </p>
                 </div>
               </div>

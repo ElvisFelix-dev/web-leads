@@ -647,9 +647,9 @@ export default function LeadDetails() {
 </head>
 <body>
   <header class="header">
-    <img class="brand-logo" src="https://res.cloudinary.com/dgdtytc5n/image/upload/v1792639190/logoImg_r1dn1c.png" alt="Logo Leads Na Mão" />
+    <img class="brand-logo" src="https://res.cloudinary.com/dgdtytc5n/image/upload/v1792639190/logoImg_r1dn1c.png" alt="Logo CRM NODUS" />
     <div class="header-copy">
-      <p class="eyebrow">Leads Na Mão · Proposta imobiliária</p>
+      <p class="eyebrow">CRM NODUS · Proposta imobiliária</p>
       <h1>Proposta de aquisição</h1>
       <p class="subtitle">Documento de registro das condições comerciais apresentadas.</p>
     </div>
@@ -690,7 +690,7 @@ export default function LeadDetails() {
     <div class="signature">Corretor / imobiliária</div>
   </div>
   <p class="notice">Este documento registra as informações e condições da proposta disponíveis no CRM na data de emissão. A aceitação, aprovação e eventual formalização da negociação dependem dos procedimentos e instrumentos contratuais aplicáveis.</p>
-  <div class="footer">Documento gerado pelo Leads Na Mão em ${escapeHtml(formatDate(new Date(), true))}.</div>
+  <div class="footer">Documento gerado pelo CRM NODUS em ${escapeHtml(formatDate(new Date(), true))}.</div>
   </main>
   <script>
     window.addEventListener('load', () => {

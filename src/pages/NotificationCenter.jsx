@@ -273,7 +273,7 @@ export default function NotificationCenter() {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.9)]" />
               </span>
-              Leads Na Mão
+              CRM NODUS
               <span className="text-gray-700">/</span>
               <span className="bg-gradient-to-r from-blue-300 to-cyan-300 bg-clip-text text-transparent">
                 Notificações

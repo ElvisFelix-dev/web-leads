@@ -110,7 +110,7 @@ export default function SignIn() {
       justify-center
       px-6
       py-10
-      " 
+      "
     >
       <div
         className="
@@ -145,9 +145,7 @@ export default function SignIn() {
           >
             <img
               src={imgLogo}
-
-              alt="LeadsnaMão"
-
+              alt="CRM NODUS"
               className="
               w-24
               h-24

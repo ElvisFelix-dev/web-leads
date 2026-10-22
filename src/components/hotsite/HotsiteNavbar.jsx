@@ -48,7 +48,7 @@ export default function HotsiteNavbar({ broker, brokerSlug: brokerSlugProp }) {
 
   const name = broker?.name || 'Consultor Imobiliário';
   const avatar = broker?.avatar || broker?.photo || '';
-  const company = broker?.company || 'Leads Na Mão';
+  const company = broker?.company || 'CRM NODUS';
   const phone = broker?.phone || broker?.whatsapp || '';
 
   const basePath = brokerSlug ? `/broker/${brokerSlug}` : '/broker';

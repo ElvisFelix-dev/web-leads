@@ -251,7 +251,7 @@ export default function PublicProposalForm() {
             <CheckCircle2 size={34} />
           </div>
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-300">
-            Leads Na Mão
+            CRM NODUS
           </p>
           <h1 className="mt-3 text-3xl font-semibold">Proposta recebida!</h1>
           <p className="mt-4 leading-7 text-slate-300">
@@ -279,7 +279,7 @@ export default function PublicProposalForm() {
         <header className="mb-8 flex items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-300">
-              Leads Na Mão
+              CRM NODUS
             </p>
             <p className="mt-1 text-sm text-slate-400">
               Proposta imobiliária segura
@@ -539,7 +539,7 @@ export default function PublicProposalForm() {
         )}
 
         <footer className="mt-8 text-center text-xs text-slate-600">
-          Leads Na Mão · Propostas imobiliárias
+          CRM NODUS · Propostas imobiliárias
         </footer>
       </div>
     </main>

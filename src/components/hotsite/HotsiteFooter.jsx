@@ -351,7 +351,7 @@ export default function HotsiteFooter({ broker, brokerSlug }) {
                 rel="noopener noreferrer"
                 className="text-slate-300 hover:text-white transition-colors"
               >
-                Leads Na Mão
+                CRM NODUS
               </a>
             </span>
           </div>

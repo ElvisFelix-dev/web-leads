@@ -906,7 +906,7 @@ export const ChatProvider = ({ children }) => {
   // =========================================================
 
   useEffect(() => {
-    const baseTitle = 'Leads Na Mão';
+    const baseTitle = 'CRM NODUS';
 
     document.title =
       unreadCount > 0
@@ -1604,7 +1604,7 @@ export const ChatProvider = ({ children }) => {
 
     setSocket(null);
 
-    document.title = 'Leads Na Mão';
+    document.title = 'CRM NODUS';
   }, [user]);
 
   // =========================================================
