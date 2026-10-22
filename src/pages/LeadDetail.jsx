@@ -505,6 +505,192 @@ export default function LeadDetails() {
     navigate(`/proposals/create?lead=${lead._id}`);
   };
 
+  // Gera uma versão imprimível da proposta para salvar como PDF pelo navegador.
+  const handleDownloadProposalPdf = () => {
+    if (!latestProposal || !lead) return;
+
+    const escapeHtml = (value) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+    const proposal = latestProposal;
+    const property = proposal.property || {};
+    const propertySnapshot = proposal.propertySnapshot || {};
+    const leadSnapshot = proposal.leadSnapshot || {};
+    const values = proposal.values || {};
+    const address =
+      property.location || property.address || propertySnapshot.address || {};
+    const propertyName =
+      property.name ||
+      property.title ||
+      propertySnapshot.title ||
+      propertySnapshot.name ||
+      'Imóvel não informado';
+    const proposalNumber =
+      proposal.proposalNumber ||
+      proposal.code ||
+      proposal.number ||
+      String(proposal._id || '')
+        .slice(-8)
+        .toUpperCase();
+    const proposalDateValue =
+      proposal.submittedAt ||
+      proposal.createdAt ||
+      proposal.proposalDate ||
+      new Date();
+    const validityDate = proposal.expiresAt
+      ? formatDate(proposal.expiresAt)
+      : proposal.validityDays
+        ? `Válida por ${proposal.validityDays} dias`
+        : 'Não informada';
+    const paymentMethods = {
+      cash: 'À vista',
+      financing: 'Financiamento',
+      fgts: 'FGTS',
+      mixed: 'Pagamento misto',
+    };
+    const currency = (value) =>
+      value === undefined || value === null || value === ''
+        ? 'Não informado'
+        : formatCurrency(value);
+    const addressText = [
+      address.street,
+      address.number,
+      address.complement,
+      address.district,
+      address.city,
+      address.state,
+      address.zipCode,
+    ]
+      .filter(Boolean)
+      .join(', ');
+    const rows = [
+      [
+        'Valor anunciado do imóvel',
+        currency(
+          values.propertyPrice ??
+            property.prices?.salePrice ??
+            propertySnapshot.price,
+        ),
+      ],
+      [
+        'Valor ofertado',
+        currency(values.proposalPrice ?? getProposalValue(proposal)),
+      ],
+      ['Entrada', currency(values.downPayment)],
+      ['Financiamento', currency(values.financing)],
+      ['FGTS', currency(values.fgts)],
+      ['Saldo restante', currency(values.balance)],
+      [
+        'Forma de pagamento',
+        paymentMethods[proposal.paymentMethod] ||
+          formatLabel(proposal.paymentMethod),
+      ],
+      [
+        'Quantidade de parcelas',
+        proposal.installments ? String(proposal.installments) : 'Não informado',
+      ],
+      ['Valor da parcela', currency(proposal.installmentValue)],
+    ];
+
+    const popup = window.open('', '_blank', 'width=900,height=700');
+    if (!popup) {
+      setError(
+        'O navegador bloqueou a janela do PDF. Permita pop-ups para este site e tente novamente.',
+      );
+      return;
+    }
+
+    const documentTitle = `Proposta-${proposalNumber || 'imobiliaria'}`;
+    popup.document.open();
+    popup.document.write(`<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(documentTitle)}</title>
+<style>
+  @page { size: A4; margin: 16mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: #172033; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.5; }
+  .header { padding: 24px 26px; background: #0f2540; color: #fff; border-radius: 12px; }
+  .eyebrow { margin: 0 0 6px; color: #b9d7ff; font-size: 9pt; font-weight: bold; letter-spacing: 1.4px; text-transform: uppercase; }
+  h1 { margin: 0; font-size: 24pt; }
+  .subtitle { margin: 6px 0 0; color: #e3edf9; }
+  .meta { display: flex; justify-content: space-between; gap: 16px; margin: 18px 0 24px; padding-bottom: 12px; border-bottom: 1px solid #dce3ed; color: #536174; font-size: 9.5pt; }
+  h2 { margin: 24px 0 10px; padding-bottom: 7px; border-bottom: 1px solid #dce3ed; color: #0f2540; font-size: 13pt; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field { padding: 10px 12px; background: #f5f7fa; border-radius: 7px; overflow-wrap: anywhere; }
+  .label { display: block; margin-bottom: 3px; color: #64748b; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .4px; }
+  .value { font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { padding: 10px 8px; border-bottom: 1px solid #e5eaf1; text-align: left; }
+  th { color: #526176; font-size: 9pt; font-weight: 600; }
+  td:last-child { text-align: right; font-weight: 600; }
+  .message { padding: 12px 14px; background: #f5f7fa; border-left: 3px solid #2563eb; border-radius: 4px; white-space: pre-wrap; }
+  .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 56px; }
+  .signature { padding-top: 8px; border-top: 1px solid #8793a5; text-align: center; color: #526176; font-size: 9pt; }
+  .notice { margin-top: 30px; color: #6b7280; font-size: 8.5pt; }
+  .footer { margin-top: 24px; padding-top: 10px; border-top: 1px solid #e5eaf1; color: #94a3b8; font-size: 8pt; text-align: center; }
+  @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } .header { border-radius: 0; } }
+</style>
+</head>
+<body>
+  <header class="header">
+    <p class="eyebrow">Leads Na Mão · Proposta imobiliária</p>
+    <h1>Proposta de aquisição</h1>
+    <p class="subtitle">Documento de registro das condições comerciais apresentadas.</p>
+  </header>
+  <div class="meta">
+    <span><strong>Nº da proposta:</strong> ${escapeHtml(proposalNumber || '-')}</span>
+    <span><strong>Data:</strong> ${escapeHtml(formatDate(proposalDateValue, true))}</span>
+    <span><strong>Status:</strong> ${escapeHtml(formatLabel(proposal.status))}</span>
+  </div>
+
+  <h2>Dados do comprador</h2>
+  <div class="grid">
+    <div class="field"><span class="label">Nome</span><span class="value">${escapeHtml(leadSnapshot.name || lead.name || '-')}</span></div>
+    <div class="field"><span class="label">E-mail</span><span class="value">${escapeHtml(leadSnapshot.email || lead.email || '-')}</span></div>
+    <div class="field"><span class="label">Telefone</span><span class="value">${escapeHtml(leadSnapshot.phone || lead.phone || '-')}</span></div>
+    <div class="field"><span class="label">Validade da proposta</span><span class="value">${escapeHtml(validityDate)}</span></div>
+  </div>
+
+  <h2>Imóvel</h2>
+  <div class="grid">
+    <div class="field"><span class="label">Identificação</span><span class="value">${escapeHtml(propertyName)}</span></div>
+    <div class="field"><span class="label">Código do imóvel</span><span class="value">${escapeHtml(property.code || propertySnapshot.code || '-')}</span></div>
+    <div class="field" style="grid-column:1/-1"><span class="label">Endereço</span><span class="value">${escapeHtml(addressText || '-')}</span></div>
+  </div>
+
+  <h2>Valores e condições de pagamento</h2>
+  <table>
+    <thead><tr><th>Descrição</th><th>Condição / valor</th></tr></thead>
+    <tbody>${rows.map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`).join('')}</tbody>
+  </table>
+
+  ${proposal.clientMessage ? `<h2>Observações da proposta</h2><div class="message">${escapeHtml(proposal.clientMessage)}</div>` : ''}
+  ${proposal.broker?.name ? `<h2>Corretor responsável</h2><div class="grid"><div class="field"><span class="label">Nome</span><span class="value">${escapeHtml(proposal.broker.name)}</span></div><div class="field"><span class="label">Contato</span><span class="value">${escapeHtml(proposal.broker.phone || proposal.broker.email || '-')}</span></div></div>` : ''}
+
+  <div class="signatures">
+    <div class="signature">Comprador</div>
+    <div class="signature">Corretor / imobiliária</div>
+  </div>
+  <p class="notice">Este documento registra as informações e condições da proposta disponíveis no CRM na data de emissão. A aceitação, aprovação e eventual formalização da negociação dependem dos procedimentos e instrumentos contratuais aplicáveis.</p>
+  <div class="footer">Documento gerado pelo Leads Na Mão em ${escapeHtml(formatDate(new Date(), true))}.</div>
+  <script>
+    window.addEventListener('load', () => {
+      setTimeout(() => { window.focus(); window.print(); }, 300);
+    });
+  </script>
+</body>
+</html>`);
+    popup.document.close();
+  };
+
   // Gera um link público individual validado pelo backend.
   const handleGeneratePublicProposalLink = async () => {
     if (!lead?._id || generatingPublicLink) return;
@@ -613,22 +799,14 @@ export default function LeadDetails() {
       }
 
       // Localiza/seleciona a conversa WhatsApp vinculada ao lead no CRM.
-      const conversation = await openLeadConversation(lead._id);
+      await openLeadConversation(lead._id);
 
-      if (!conversation?._id) {
-        throw new Error(
-          'A conversa foi aberta, mas não foi possível identificar seu ID para enviar a proposta.',
-        );
-      }
-
-      // Passa o ID exato da conversa selecionada para evitar depender
-      // do formato do vínculo lead/conversa retornado pelo backend.
+      // O ChatArea envia a mensagem usando o fluxo real de envio do CRM.
       navigate('/chat', {
         state: {
           crmWhatsAppSend: {
             requestId: `public-proposal-${lead._id}-${Date.now()}`,
             leadId: String(lead._id),
-            conversationId: String(conversation._id),
             message,
           },
         },
@@ -1434,6 +1612,15 @@ export default function LeadDetails() {
                   >
                     Ver proposta
                     <ChevronRight size={16} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDownloadProposalPdf}
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2.5 text-sm font-medium text-blue-300 transition hover:bg-blue-500/20"
+                  >
+                    <Download size={16} />
+                    Baixar proposta em PDF
                   </button>
                 </div>
               ) : (
