@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   Award,
   CalendarCheck,
-  Check,
   ChevronRight,
   Clock3,
   DollarSign,
@@ -33,7 +32,6 @@ import { toast } from 'react-toastify';
 
 import BrokerPerformanceChart from '../components/brokerDashboard/BrokerPerformanceChart';
 import BrokerLatestLeads from '../components/brokerDashboard/BrokerLatestLeads';
-import BrokerStats from '../components/brokerDashboard/BrokerStats';
 
 import api from '../service/api';
 
@@ -439,9 +437,9 @@ export default function BrokerDetails() {
 
             <Metric
               icon={<DollarSign size={19} />}
-              title="Receita"
-              value={formatMoney(stats.revenue ?? 0)}
-              description="Valor total das vendas concluídas"
+              title="Comissão do corretor"
+              value={formatMoney(getBrokerCommission(stats))}
+              description="Valor da comissão destinado a este corretor"
               accent="amber"
             />
           </div>
@@ -507,8 +505,8 @@ export default function BrokerDetails() {
 
               <Info
                 icon={<DollarSign size={17} />}
-                label="Receita gerada"
-                value={formatCurrency(stats.revenue ?? 0)}
+                label="Comissão do corretor"
+                value={formatMoney(getBrokerCommission(stats))}
               />
 
               <Info
@@ -607,6 +605,7 @@ export default function BrokerDetails() {
                 icon={<Instagram size={18} />}
                 label="Instagram"
                 value={socials.instagram}
+                platform="instagram"
                 accent="pink"
               />
 
@@ -614,6 +613,7 @@ export default function BrokerDetails() {
                 icon={<Linkedin size={18} />}
                 label="LinkedIn"
                 value={socials.linkedin}
+                platform="linkedin"
                 accent="blue"
               />
 
@@ -859,42 +859,73 @@ function Status({ online }) {
   );
 }
 
-function SocialItem({ icon, label, value, accent }) {
-  const href = normalizeSocialUrl(value);
+function SocialItem({ icon, label, value, platform, accent }) {
+  const href = normalizeSocialUrl(value, platform);
+  const displayValue = formatSocialValue(value, platform);
 
   const colors = {
-    pink: 'border-pink-400/10 bg-pink-400/[0.06] text-pink-300',
-    blue: 'border-blue-400/10 bg-blue-400/[0.06] text-blue-300',
+    pink: {
+      icon: 'border-pink-400/15 bg-gradient-to-br from-pink-500/15 to-rose-500/[0.06] text-pink-300',
+      hover: 'hover:border-pink-400/25 hover:bg-pink-400/[0.05]',
+      link: 'text-pink-300 hover:text-pink-200',
+    },
+    blue: {
+      icon: 'border-blue-400/15 bg-gradient-to-br from-blue-500/15 to-sky-500/[0.06] text-blue-300',
+      hover: 'hover:border-blue-400/25 hover:bg-blue-400/[0.05]',
+      link: 'text-blue-300 hover:text-blue-200',
+    },
   };
 
+  const style = colors[accent] || colors.blue;
+
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-xl border border-white/[0.05] bg-white/[0.015] p-3">
+    <div
+      className={`group flex min-w-0 items-center gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-3.5 transition duration-200 ${style.hover}`}
+    >
       <div
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${
-          colors[accent] || colors.blue
-        }`}
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${style.icon}`}
       >
         {icon}
       </div>
 
       <div className="min-w-0 flex-1">
-        <p className="text-xs text-slate-500">{label}</p>
-        <p className="mt-1 break-all text-sm font-medium text-slate-200">
-          {value || 'Não informado'}
+        <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">
+          {label}
+        </p>
+        <p
+          className="mt-1 truncate text-sm font-semibold text-slate-100"
+          title={displayValue || 'Não informado'}
+        >
+          {displayValue || 'Não informado'}
+        </p>
+        <p className="mt-0.5 text-[11px] text-slate-500">
+          {href
+            ? 'Perfil público'
+            : value
+              ? 'Link inválido ou não reconhecido'
+              : 'Adicione o perfil nas configurações'}
         </p>
       </div>
 
-      {href && (
+      {href ? (
         <a
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label={`Abrir ${label}`}
+          aria-label={`Abrir perfil do ${label}`}
           title={`Abrir ${label}`}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/[0.07] hover:text-white"
+          className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-white/[0.07] bg-white/[0.03] px-2.5 text-xs font-semibold transition ${style.link}`}
+        >
+          Abrir
+          <ExternalLink size={13} />
+        </a>
+      ) : (
+        <span
+          aria-hidden="true"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-700"
         >
           <ExternalLink size={15} />
-        </a>
+        </span>
       )}
     </div>
   );
@@ -919,7 +950,69 @@ function normalizePhone(value) {
   return digits;
 }
 
-function normalizeSocialUrl(value) {
+function normalizeSocialUrl(value, platform) {
+  if (!value || typeof value !== 'string') {
+    return '';
+  }
+
+  let cleanValue = value.trim();
+
+  if (!cleanValue) {
+    return '';
+  }
+
+  // Accept URLs without protocol, @username, and plain profile handles.
+  if (!/^https?:\/\//i.test(cleanValue)) {
+    cleanValue = cleanValue.replace(/^@/, '').replace(/^\/+|\/+$/g, '');
+
+    if (!cleanValue || /\s/.test(cleanValue)) {
+      return '';
+    }
+
+    if (/^(www\.)?instagram\.com\//i.test(cleanValue)) {
+      cleanValue = `https://${cleanValue}`;
+    } else if (/^(www\.)?linkedin\.com\//i.test(cleanValue)) {
+      cleanValue = `https://${cleanValue}`;
+    } else if (platform === 'instagram') {
+      cleanValue = `https://www.instagram.com/${cleanValue}`;
+    } else if (platform === 'linkedin') {
+      cleanValue = `https://www.linkedin.com/in/${cleanValue}`;
+    } else {
+      return '';
+    }
+  }
+
+  try {
+    const parsed = new URL(cleanValue);
+
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return '';
+    }
+
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+
+    if (platform === 'instagram') {
+      if (host !== 'instagram.com') return '';
+      if (!parsed.pathname || parsed.pathname === '/') return '';
+    } else if (platform === 'linkedin') {
+      if (host !== 'linkedin.com') return '';
+      if (!/^\/(in|company|school)\//i.test(parsed.pathname)) return '';
+    } else {
+      return '';
+    }
+
+    // Avoid passing through credentials or unexpected URL fragments.
+    parsed.username = '';
+    parsed.password = '';
+    parsed.hash = '';
+
+    return parsed.href;
+  } catch {
+    return '';
+  }
+}
+
+function formatSocialValue(value, platform) {
   if (!value || typeof value !== 'string') {
     return '';
   }
@@ -930,21 +1023,35 @@ function normalizeSocialUrl(value) {
     return '';
   }
 
-  const url = /^https?:\/\//i.test(cleanValue)
-    ? cleanValue
-    : `https://${cleanValue}`;
+  if (!/^https?:\/\//i.test(cleanValue)) {
+    const handle = cleanValue.replace(/^@/, '').replace(/^\/+|\/+$/g, '');
+    return handle ? `@${handle}` : '';
+  }
 
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(cleanValue);
+    const path = parsed.pathname.replace(/^\/+|\/+$/g, '');
 
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
-      return '';
-    }
+    if (!path) return platform === 'instagram' ? 'Instagram' : 'LinkedIn';
 
-    return parsed.href;
+    return platform === 'instagram' ? `@${path.split('/')[0]}` : path;
   } catch {
-    return '';
+    return cleanValue;
   }
+}
+
+function getBrokerCommission(stats = {}) {
+  // The API's comissaoTotal is calculated from the seller/broker share,
+  // not the full commission allocated to the agency.
+  return (
+    Number(
+      stats.comissaoTotal ??
+        stats.brokerCommission ??
+        stats.sellerCommission ??
+        stats.commission?.seller?.amount ??
+        0,
+    ) || 0
+  );
 }
 
 function getInitials(value) {
