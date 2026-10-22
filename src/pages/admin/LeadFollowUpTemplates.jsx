@@ -12,6 +12,8 @@ import {
   FiInfo,
   FiCheckCircle,
   FiArrowLeft,
+  FiAlertTriangle,
+  FiX,
 } from 'react-icons/fi';
 
 import { UserContext } from '../../context/UserContext';
@@ -114,6 +116,7 @@ const makePreview = (message) =>
 
 export default function LeadFollowUpTemplates() {
   const { user } = useContext(UserContext);
+
   const navigate = useNavigate();
 
   const isAdmin = user?.isAdmin === true || user?.role === 'admin';
@@ -125,6 +128,7 @@ export default function LeadFollowUpTemplates() {
   const [saving, setSaving] = useState(false);
 
   const [applying, setApplying] = useState(false);
+  const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
 
   const [selectedStep, setSelectedStep] = useState('D0');
 
@@ -162,6 +166,17 @@ export default function LeadFollowUpTemplates() {
   useEffect(() => {
     if (isAdmin) loadTemplates();
   }, [isAdmin, loadTemplates]);
+
+  useEffect(() => {
+    if (!isApplyModalOpen || applying) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setIsApplyModalOpen(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isApplyModalOpen, applying]);
 
   if (!isAdmin) return <Navigate to="/dashboard" replace />;
 
@@ -212,15 +227,15 @@ export default function LeadFollowUpTemplates() {
     }
   };
 
-  const handleApplyPending = async () => {
-    const confirmed = window.confirm(
-      'Atualizar o texto de todos os follow-ups que ainda estão pendentes? Mensagens enviadas, canceladas ou em processamento não serão alteradas.',
-    );
+  const handleApplyPending = () => {
+    if (saving || applying) return;
+    setIsApplyModalOpen(true);
+  };
 
-    if (!confirmed) return;
+  const confirmApplyPending = async () => {
+    if (applying || saving) return;
 
     setApplying(true);
-
     try {
       const { data } = await api.post(
         '/api/lead-follow-up-templates/apply-pending',
@@ -229,13 +244,12 @@ export default function LeadFollowUpTemplates() {
       toast.success(
         `Atualização concluída: ${data?.updated ?? 0} mensagem(ns) pendente(s) atualizada(s).`,
       );
+      setIsApplyModalOpen(false);
     } catch (error) {
       console.error(
         '[CentralFollowUps] Erro ao aplicar mensagens pendentes:',
-
         error,
       );
-
       toast.error(
         error?.response?.data?.message ||
           'Não foi possível atualizar os follow-ups pendentes.',
@@ -284,15 +298,21 @@ export default function LeadFollowUpTemplates() {
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
               type="button"
+
               onClick={() => navigate(-1)}
+
               className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-slate-600 hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-700/40"
             >
               <FiArrowLeft size={17} /> Voltar
             </button>
+
             <button
               type="button"
+
               onClick={handleSave}
+
               disabled={saving}
+
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-950/40 transition hover:-translate-y-0.5 hover:from-blue-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <FiSave /> {saving ? 'Salvando...' : 'Salvar mensagens'}
@@ -497,6 +517,92 @@ export default function LeadFollowUpTemplates() {
           </section>
         </div>
       </div>
+
+      {isApplyModalOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !applying) {
+              setIsApplyModalOpen(false);
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="apply-pending-title"
+            aria-describedby="apply-pending-description"
+            className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-slate-700/80 bg-gradient-to-br from-slate-900 via-slate-950 to-[#080d1b] shadow-[0_30px_100px_rgba(0,0,0,0.65)]"
+          >
+            <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/70 to-transparent" />
+            <div className="p-6 sm:p-7">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
+                  <FiAlertTriangle size={23} />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsApplyModalOpen(false)}
+                  disabled={applying}
+                  aria-label="Fechar confirmação"
+                  className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-4 focus:ring-slate-700/60 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <FiX size={20} />
+                </button>
+              </div>
+
+              <h2
+                id="apply-pending-title"
+                className="mt-5 text-xl font-bold tracking-tight text-white sm:text-2xl"
+              >
+                Atualizar follow-ups pendentes?
+              </h2>
+              <p
+                id="apply-pending-description"
+                className="mt-3 text-sm leading-6 text-slate-300"
+              >
+                O texto salvo dos modelos será aplicado às mensagens que ainda
+                estão pendentes na fila. Essa ação não altera mensagens já
+                enviadas, canceladas ou em processamento.
+              </p>
+
+              <div className="mt-5 flex gap-3 rounded-2xl border border-amber-400/15 bg-amber-400/[0.06] p-4">
+                <FiInfo className="mt-0.5 shrink-0 text-amber-300" size={18} />
+                <p className="text-xs leading-5 text-slate-300">
+                  Confira se você já salvou as mensagens desejadas antes de
+                  confirmar. A alteração será aplicada aos follow-ups pendentes
+                  existentes.
+                </p>
+              </div>
+
+              <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsApplyModalOpen(false)}
+                  disabled={applying}
+                  className="inline-flex items-center justify-center rounded-xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-slate-600 hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-700/50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmApplyPending}
+                  disabled={applying || saving}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-950/40 transition hover:from-blue-500 hover:to-indigo-500 focus:outline-none focus:ring-4 focus:ring-blue-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <FiRefreshCw
+                    size={16}
+                    className={applying ? 'animate-spin' : ''}
+                  />
+                  {applying
+                    ? 'Atualizando pendentes...'
+                    : 'Sim, atualizar mensagens'}
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
