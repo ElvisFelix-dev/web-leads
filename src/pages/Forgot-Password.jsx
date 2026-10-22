@@ -1,38 +1,55 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-
 import { yupResolver } from '@hookform/resolvers/yup';
-
 import * as yup from 'yup';
-
 import { toast } from 'react-toastify';
-
 import {
   FaEnvelope,
   FaArrowLeft,
   FaShieldAlt,
   FaKey,
   FaUserLock,
+  FaArrowRight,
+  FaCheckCircle,
 } from 'react-icons/fa';
 
 import FormError from '../components/FormError';
-
 import api from '../service/api.jsx';
-
 import imgLogo from '../assets/logoImg.png';
-
-// ==================================
-// VALIDAÇÃO
-// ==================================
 
 const schema = yup.object({
   email: yup
     .string()
-    .required('O email é obrigatório')
-    .email('Digite um email válido'),
+    .trim()
+    .required('O e-mail é obrigatório')
+    .email('Digite um e-mail válido'),
 });
 
+const securityHighlights = [
+  {
+    icon: FaShieldAlt,
+    title: 'Recuperação segura',
+    description: 'O processo foi pensado para proteger o acesso à sua conta.',
+    tone: 'blue',
+  },
+  {
+    icon: FaKey,
+    title: 'Link de redefinição',
+    description: 'Use o link recebido por e-mail para criar uma nova senha.',
+    tone: 'cyan',
+  },
+  {
+    icon: FaUserLock,
+    title: 'Seus dados preservados',
+    description: 'A recuperação não altera seus leads nem suas informações.',
+    tone: 'violet',
+  },
+];
+
 export default function ForgotPassword() {
+  const [submitted, setSubmitted] = useState(false);
+
   const {
     register,
     handleSubmit,
@@ -40,456 +57,253 @@ export default function ForgotPassword() {
     reset,
   } = useForm({
     resolver: yupResolver(schema),
+    mode: 'onBlur',
   });
-
-  // ==================================
-  // ENVIAR EMAIL
-  // ==================================
 
   async function onSubmit(data) {
     try {
-      await api.post('/api/users/forgot-password', data);
+      await api.post('/api/users/forgot-password', {
+        email: data.email.trim(),
+      });
 
-      toast.success('Email de recuperação enviado!');
-
+      toast.success('Solicitação de recuperação enviada!');
+      setSubmitted(true);
       reset();
     } catch (error) {
       toast.error(
-        error.response?.data?.message || 'Erro ao enviar solicitação',
+        error.response?.data?.message ||
+          'Não foi possível enviar a solicitação. Tente novamente.',
       );
     }
   }
 
   return (
-    <section
-      className="
-      min-h-screen
-      bg-gray-950
-      flex
-      items-center
-      justify-center
-      px-6
-      py-10
-      "
-    >
+    <main className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-[#050914] px-4 py-8 text-white sm:px-6 lg:px-8">
+      {/* Fundo atmosférico da identidade NODUS */}
       <div
-        className="
-        w-full
-        max-w-6xl
-        grid
-        lg:grid-cols-2
-        bg-gray-900
-        rounded-3xl
-        overflow-hidden
-        border
-        border-gray-800
-        shadow-2xl
-        "
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 overflow-hidden"
       >
-        {/* =================================
-            LADO ESQUERDO - FORM
-        ================================= */}
+        <div className="absolute -left-32 top-[-8rem] h-96 w-96 rounded-full bg-blue-600/15 blur-[110px]" />
+        <div className="absolute -right-24 bottom-[-8rem] h-[28rem] w-[28rem] rounded-full bg-cyan-500/10 blur-[120px]" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(96,165,250,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(96,165,250,0.035)_1px,transparent_1px)] bg-[size:64px_64px] [mask-image:linear-gradient(to_bottom,black,transparent_90%)]" />
+      </div>
 
-        <div
-          className="
-          p-8
-          sm:p-12
-          "
-        >
-          <div
-            className="
-            flex
-            justify-center
-            mb-8
-            "
-          >
-            <img
-              src={imgLogo}
-
-              alt="CRM NODUS"
-
-              className="
-              w-24
-              h-24
-              rounded-full
-              shadow-xl
-              hover:scale-105
-              transition
-              duration-300
-              "
-            />
-          </div>
-
-          <h1
-            className="
-            text-3xl
-            font-bold
-            text-center
-            text-white
-            "
-          >
-            Recuperar senha
-          </h1>
-
-          <p
-            className="
-            text-center
-            text-gray-400
-            mt-3
-            mb-8
-            "
-          >
-            Informe seu email e enviaremos um link para criar uma nova senha.
-          </p>
-
-          <form
-            onSubmit={handleSubmit(onSubmit)}
-
-            className="
-            space-y-6
-            "
-          >
-            <div>
-              <div
-                className="
-                relative
-                "
-              >
-                <FaEnvelope
-                  className="
-                  absolute
-                  left-4
-                  top-4
-                  text-gray-500
-                  "
-                />
-
-                <input
-                  type="email"
-
-                  {...register('email')}
-
-                  placeholder="Digite seu email"
-
-                  className="
-                  w-full
-                  bg-gray-800
-                  border
-                  border-gray-700
-                  rounded-xl
-                  py-3
-                  pl-12
-                  pr-4
-                  text-white
-                  placeholder-gray-500
-                  outline-none
-                  focus:border-blue-500
-                  transition
-                  "
-                />
-              </div>
-
-              <FormError message={errors.email?.message} />
-            </div>
-
-            <button
-              disabled={isSubmitting}
-
-              className="
-              w-full
-              py-4
-              rounded-xl
-              bg-gradient-to-r
-              from-blue-600
-              to-cyan-500
-              text-white
-              font-bold
-              shadow-lg
-              hover:scale-[1.02]
-              transition
-              disabled:opacity-50
-              "
+      <section className="relative z-10 grid w-full max-w-6xl overflow-hidden rounded-[2rem] border border-white/[0.09] bg-[#080f1e]/90 shadow-[0_30px_120px_-35px_rgba(37,99,235,0.35)] backdrop-blur-2xl lg:min-h-[660px] lg:grid-cols-[0.92fr_1.08fr]">
+        {/* Formulário */}
+        <div className="flex flex-col justify-center px-6 py-10 sm:px-10 sm:py-12 lg:px-14">
+          <div className="mx-auto w-full max-w-md">
+            <Link
+              to="/"
+              className="mb-9 inline-flex items-center gap-3 rounded-xl outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-blue-400"
             >
-              {isSubmitting ? 'Enviando...' : 'Enviar link de recuperação'}
-            </button>
+              <img
+                src={imgLogo}
+                alt="CRM NODUS"
+                className="h-12 w-12 rounded-2xl border border-white/10 bg-[#0c1730] object-contain p-1 shadow-lg shadow-blue-950/30"
+              />
+              <span className="text-sm font-semibold tracking-[0.24em] text-white">
+                NODUS
+              </span>
+            </Link>
 
-            <div
-              className="
-              text-center
-              "
-            >
-              <Link
-                to="/"
+            <div className="mb-8">
+              <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-400/20 bg-blue-400/[0.08] px-3 py-1.5 text-xs font-medium text-blue-200">
+                <FaShieldAlt className="text-cyan-300" />
+                Recuperação de acesso
+              </span>
 
-                className="
-                inline-flex
-                items-center
-                gap-2
-                text-blue-400
-                hover:text-blue-300
-                "
-              >
-                <FaArrowLeft />
-                Voltar para login
-              </Link>
-            </div>
-          </form>
-        </div>
+              <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                Vamos recuperar
+                <span className="block bg-gradient-to-r from-blue-300 via-cyan-300 to-blue-500 bg-clip-text text-transparent">
+                  seu acesso.
+                </span>
+              </h1>
 
-        {/* =================================
-            LADO DIREITO - BRANDING
-        ================================= */}
-
-        <div
-          className="
-          hidden
-          lg:flex
-          flex-col
-          justify-center
-          relative
-          overflow-hidden
-          bg-gradient-to-br
-          from-blue-950
-          via-gray-900
-          to-cyan-950
-          p-12
-          "
-        >
-          {/* EFEITOS DE FUNDO */}
-
-          <div
-            className="
-            absolute
-            w-72
-            h-72
-            bg-blue-600/20
-            rounded-full
-            blur-3xl
-            -top-20
-            -right-20
-            "
-          />
-
-          <div
-            className="
-            absolute
-            w-72
-            h-72
-            bg-cyan-500/20
-            rounded-full
-            blur-3xl
-            bottom-0
-            left-0
-            "
-          />
-
-          <div
-            className="
-            relative
-            z-10
-            "
-          >
-            <h2
-              className="
-              text-4xl
-              font-bold
-              text-white
-              leading-tight
-              "
-            >
-              Recupere seu acesso
-              <br />
-              de forma segura
-            </h2>
-
-            <p
-              className="
-              text-gray-300
-              mt-5
-              text-lg
-              leading-relaxed
-              "
-            >
-              Sua conta no CRM NODUS continua protegida. Enviaremos um link
-              exclusivo para você redefinir sua senha rapidamente.
-            </p>
-
-            <div
-              className="
-              mt-10
-              space-y-5
-              "
-            >
-              <div
-                className="
-                flex
-                items-center
-                gap-4
-                bg-white/5
-                border
-                border-white/10
-                rounded-2xl
-                p-4
-                backdrop-blur
-                "
-              >
-                <div
-                  className="
-                  bg-blue-600/20
-                  p-3
-                  rounded-xl
-                  "
-                >
-                  <FaShieldAlt
-                    className="
-                    text-blue-400
-                    text-xl
-                    "
-                  />
-                </div>
-
-                <div>
-                  <h3
-                    className="
-                    text-white
-                    font-semibold
-                    "
-                  >
-                    Segurança protegida
-                  </h3>
-
-                  <p
-                    className="
-                    text-gray-400
-                    text-sm
-                    "
-                  >
-                    Seu link possui validade limitada.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                className="
-                flex
-                items-center
-                gap-4
-                bg-white/5
-                border
-                border-white/10
-                rounded-2xl
-                p-4
-                backdrop-blur
-                "
-              >
-                <div
-                  className="
-                  bg-cyan-600/20
-                  p-3
-                  rounded-xl
-                  "
-                >
-                  <FaKey
-                    className="
-                    text-cyan-400
-                    text-xl
-                    "
-                  />
-                </div>
-
-                <div>
-                  <h3
-                    className="
-                    text-white
-                    font-semibold
-                    "
-                  >
-                    Nova senha
-                  </h3>
-
-                  <p
-                    className="
-                    text-gray-400
-                    text-sm
-                    "
-                  >
-                    Escolha uma nova senha segura.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                className="
-                flex
-                items-center
-                gap-4
-                bg-white/5
-                border
-                border-white/10
-                rounded-2xl
-                p-4
-                backdrop-blur
-                "
-              >
-                <div
-                  className="
-                  bg-purple-600/20
-                  p-3
-                  rounded-xl
-                  "
-                >
-                  <FaUserLock
-                    className="
-                    text-purple-400
-                    text-xl
-                    "
-                  />
-                </div>
-
-                <div>
-                  <h3
-                    className="
-                    text-white
-                    font-semibold
-                    "
-                  >
-                    Continue seus negócios
-                  </h3>
-
-                  <p
-                    className="
-                    text-gray-400
-                    text-sm
-                    "
-                  >
-                    Seus leads e informações continuam seguros.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div
-              className="
-              mt-12
-              border-t
-              border-white/10
-              pt-6
-              "
-            >
-              <p
-                className="
-                text-gray-400
-                text-sm
-                "
-              >
-                © {new Date().getFullYear()} CRM NODUS
-                <br />
-                Tudo conectado. Mais negocios.
+              <p className="mt-3 max-w-sm text-sm leading-6 text-slate-400 sm:text-base">
+                Informe o e-mail associado à sua conta. Enviaremos as instruções
+                para redefinir sua senha.
               </p>
             </div>
+
+            {submitted ? (
+              <div
+                role="status"
+                className="rounded-2xl border border-emerald-300/15 bg-emerald-300/[0.06] p-5"
+              >
+                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-300/10 text-emerald-300">
+                  <FaCheckCircle size={20} />
+                </div>
+                <h2 className="text-base font-semibold text-white">
+                  Confira sua caixa de entrada
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-400">
+                  Se o endereço informado estiver associado a uma conta, você
+                  receberá um e-mail com as próximas instruções. Verifique
+                  também a pasta de spam.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSubmitted(false)}
+                  className="mt-4 text-sm font-medium text-blue-300 transition hover:text-cyan-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                >
+                  Tentar outro endereço
+                </button>
+              </div>
+            ) : (
+              <form
+                onSubmit={handleSubmit(onSubmit)}
+                className="space-y-5"
+                noValidate
+              >
+                <div>
+                  <label
+                    htmlFor="email"
+                    className="mb-2 block text-sm font-medium text-slate-200"
+                  >
+                    E-mail cadastrado
+                  </label>
+                  <div className="relative">
+                    <FaEnvelope
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+                    />
+                    <input
+                      id="email"
+                      type="email"
+                      autoComplete="email"
+                      placeholder="voce@imobiliaria.com.br"
+                      aria-invalid={Boolean(errors.email)}
+                      aria-describedby={
+                        errors.email ? 'forgot-email-error' : undefined
+                      }
+                      {...register('email')}
+                      className={`w-full rounded-xl border bg-[#0b1425] py-3.5 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:ring-4 focus:ring-blue-500/10 ${
+                        errors.email
+                          ? 'border-rose-400/70 focus:border-rose-400'
+                          : 'border-white/10 focus:border-blue-400/70'
+                      }`}
+                    />
+                  </div>
+                  <div id="forgot-email-error">
+                    <FormError message={errors.email?.message} />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="group flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-950/40 transition duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-blue-900/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#080f1e] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
+                >
+                  {isSubmitting
+                    ? 'Enviando solicitação...'
+                    : 'Enviar link de recuperação'}
+                  {!isSubmitting && (
+                    <FaArrowRight className="transition-transform group-hover:translate-x-1" />
+                  )}
+                </button>
+
+                <p className="text-center text-xs leading-5 text-slate-500">
+                  Por segurança, confira se digitou corretamente o e-mail
+                  cadastrado.
+                </p>
+              </form>
+            )}
+
+            <div className="mt-7 text-center">
+              <Link
+                to="/"
+                className="inline-flex items-center gap-2 rounded-lg text-sm font-medium text-blue-300 transition hover:text-cyan-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+              >
+                <FaArrowLeft />
+                Voltar para o login
+              </Link>
+            </div>
+
+            <p className="mt-9 text-center text-xs text-slate-600">
+              © {new Date().getFullYear()} CRM NODUS. Todos os direitos
+              reservados.
+            </p>
           </div>
         </div>
-      </div>
-    </section>
+
+        {/* Painel institucional */}
+        <aside className="relative hidden overflow-hidden border-l border-white/[0.07] bg-[#070d1a] p-10 lg:flex lg:flex-col lg:justify-between xl:p-14">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0"
+          >
+            <div className="absolute right-[-5rem] top-[-4rem] h-80 w-80 rounded-full bg-blue-600/20 blur-[100px]" />
+            <div className="absolute bottom-[-5rem] left-[-4rem] h-72 w-72 rounded-full bg-cyan-500/10 blur-[100px]" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(59,130,246,0.13),transparent_48%)]" />
+          </div>
+
+          <div className="relative z-10">
+            <div className="mb-10 inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/[0.07] px-3 py-1.5 text-xs text-emerald-200">
+              <FaCheckCircle />
+              Processo simples e orientado
+            </div>
+
+            <h2 className="max-w-lg text-4xl font-semibold leading-[1.12] tracking-tight text-white xl:text-5xl">
+              Seu acesso,
+              <span className="block bg-gradient-to-r from-blue-300 via-cyan-300 to-blue-500 bg-clip-text pb-1 text-transparent">
+                de volta às mãos.
+              </span>
+            </h2>
+
+            <p className="mt-5 max-w-md text-base leading-7 text-slate-400">
+              Siga as instruções enviadas por e-mail para criar uma nova senha e
+              continuar sua rotina comercial no NODUS.
+            </p>
+          </div>
+
+          <div className="relative z-10 my-10 space-y-3">
+            {securityHighlights.map(
+              ({ icon: Icon, title, description, tone }) => {
+                const toneClasses = {
+                  blue: 'bg-blue-400/10 text-blue-300 ring-blue-300/10',
+                  cyan: 'bg-cyan-400/10 text-cyan-300 ring-cyan-300/10',
+                  violet: 'bg-violet-400/10 text-violet-300 ring-violet-300/10',
+                };
+
+                return (
+                  <div
+                    key={title}
+                    className="group flex items-center gap-4 rounded-2xl border border-white/[0.07] bg-white/[0.035] p-4 transition duration-300 hover:-translate-y-0.5 hover:border-blue-300/20 hover:bg-white/[0.055]"
+                  >
+                    <div
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1 ${toneClasses[tone]}`}
+                    >
+                      <Icon size={18} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-semibold text-white">
+                        {title}
+                      </h3>
+                      <p className="mt-1 text-xs leading-5 text-slate-400">
+                        {description}
+                      </p>
+                    </div>
+                    <FaArrowRight className="text-xs text-slate-600 transition group-hover:translate-x-1 group-hover:text-blue-300" />
+                  </div>
+                );
+              },
+            )}
+          </div>
+
+          <div className="relative z-10 flex items-center justify-between border-t border-white/[0.08] pt-5">
+            <div>
+              <p className="text-sm font-medium text-slate-200">CRM NODUS</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Tudo conectado. Mais clareza para vender.
+              </p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-blue-300/15 bg-blue-400/[0.08] text-blue-300">
+              <FaKey />
+            </div>
+          </div>
+        </aside>
+      </section>
+    </main>
   );
 }
