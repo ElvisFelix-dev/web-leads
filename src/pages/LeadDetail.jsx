@@ -615,13 +615,17 @@ export default function LeadDetails() {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(documentTitle)}</title>
 <style>
-  @page { size: A4; margin: 16mm; }
+  @page { size: A4; margin: 21mm 19mm; }
   * { box-sizing: border-box; }
-  body { margin: 0; color: #172033; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.5; }
-  .header { padding: 24px 26px; background: #0f2540; color: #fff; border-radius: 12px; }
-  .eyebrow { margin: 0 0 6px; color: #b9d7ff; font-size: 9pt; font-weight: bold; letter-spacing: 1.4px; text-transform: uppercase; }
-  h1 { margin: 0; font-size: 24pt; }
+  body { margin: 0; color: #172033; font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; line-height: 1.55; }
+  .header { display: flex; align-items: center; gap: 18px; padding: 25px 28px; background: #0f2540; color: #fff; border-radius: 12px; }
+  .brand-logo { width: 66px; height: 66px; flex: 0 0 66px; object-fit: contain; border-radius: 50%; background: #fff; padding: 4px; }
+  .header-copy { min-width: 0; }
+  .eyebrow { margin: 0 0 6px; color: #b9d7ff; font-size: 8.5pt; font-weight: bold; letter-spacing: 1.4px; text-transform: uppercase; }
+  h1 { margin: 0; font-size: 23pt; }
   .subtitle { margin: 6px 0 0; color: #e3edf9; }
+  main { width: 100%; }
+  h2, table, .field, .message, .signatures { break-inside: avoid; page-break-inside: avoid; }
   .meta { display: flex; justify-content: space-between; gap: 16px; margin: 18px 0 24px; padding-bottom: 12px; border-bottom: 1px solid #dce3ed; color: #536174; font-size: 9.5pt; }
   h2 { margin: 24px 0 10px; padding-bottom: 7px; border-bottom: 1px solid #dce3ed; color: #0f2540; font-size: 13pt; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -637,15 +641,20 @@ export default function LeadDetails() {
   .signature { padding-top: 8px; border-top: 1px solid #8793a5; text-align: center; color: #526176; font-size: 9pt; }
   .notice { margin-top: 30px; color: #6b7280; font-size: 8.5pt; }
   .footer { margin-top: 24px; padding-top: 10px; border-top: 1px solid #e5eaf1; color: #94a3b8; font-size: 8pt; text-align: center; }
-  @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } .header { border-radius: 0; } }
+  @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } .header { border-radius: 8px; } }
+  @media screen and (max-width: 600px) { .header { padding: 18px; gap: 12px; } .brand-logo { width: 52px; height: 52px; flex-basis: 52px; } h1 { font-size: 19pt; } }
 </style>
 </head>
 <body>
   <header class="header">
-    <p class="eyebrow">Leads Na Mão · Proposta imobiliária</p>
-    <h1>Proposta de aquisição</h1>
-    <p class="subtitle">Documento de registro das condições comerciais apresentadas.</p>
+    <img class="brand-logo" src="https://res.cloudinary.com/dgdtytc5n/image/upload/v1792639190/logoImg_r1dn1c.png" alt="Logo Leads Na Mão" />
+    <div class="header-copy">
+      <p class="eyebrow">Leads Na Mão · Proposta imobiliária</p>
+      <h1>Proposta de aquisição</h1>
+      <p class="subtitle">Documento de registro das condições comerciais apresentadas.</p>
+    </div>
   </header>
+  <main>
   <div class="meta">
     <span><strong>Nº da proposta:</strong> ${escapeHtml(proposalNumber || '-')}</span>
     <span><strong>Data:</strong> ${escapeHtml(formatDate(proposalDateValue, true))}</span>
@@ -682,6 +691,7 @@ export default function LeadDetails() {
   </div>
   <p class="notice">Este documento registra as informações e condições da proposta disponíveis no CRM na data de emissão. A aceitação, aprovação e eventual formalização da negociação dependem dos procedimentos e instrumentos contratuais aplicáveis.</p>
   <div class="footer">Documento gerado pelo Leads Na Mão em ${escapeHtml(formatDate(new Date(), true))}.</div>
+  </main>
   <script>
     window.addEventListener('load', () => {
       setTimeout(() => { window.focus(); window.print(); }, 300);
