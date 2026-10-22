@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useContext, useMemo } from 'react';
 
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import {
   FaUsers,
@@ -97,6 +97,7 @@ const EMOJIS = [
 
 export default function ChatPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useContext(UserContext);
 
   const {
@@ -159,6 +160,7 @@ export default function ChatPage() {
   const audioChunksRef = useRef([]);
   const recordingStreamRef = useRef(null);
   const recordingTimerRef = useRef(null);
+  const autoSendRequestRef = useRef(null);
 
   // ============================================================
   // FORMATADORES E HELPERS
@@ -887,6 +889,89 @@ export default function ChatPage() {
       setSending(false);
     }
   };
+
+  // ============================================================
+  // ENVIO AUTOMÁTICO DO LINK DA PROPOSTA PELO WHATSAPP
+  // O LeadDetails envia a solicitação via location.state.
+  // Esta é a tela de chat usada pelo CRM, então o envio precisa
+  // ser tratado aqui (e não apenas no componente ChatArea).
+  // ============================================================
+
+  useEffect(() => {
+    const request = location.state?.crmWhatsAppSend;
+    const messageText = String(request?.message || '').trim();
+    const requestId = request?.requestId;
+    const targetConversationId = request?.conversationId
+      ? String(request.conversationId)
+      : null;
+
+    if (!messageText || !requestId || !currentConversation?._id) return;
+
+    const currentConversationId = String(currentConversation._id);
+
+    // Evita enviar para outra conversa, mesmo que esteja selecionada.
+    if (
+      targetConversationId &&
+      currentConversationId !== targetConversationId
+    ) {
+      return;
+    }
+
+    if (currentConversation.channel !== 'whatsapp') {
+      setMediaError(
+        'A conversa selecionada não é uma conversa do WhatsApp. O link não foi enviado.',
+      );
+      return;
+    }
+
+    // Impede envio duplicado em re-renderizações e no React Strict Mode.
+    if (autoSendRequestRef.current === requestId) return;
+    autoSendRequestRef.current = requestId;
+
+    const sendProposalLink = async () => {
+      setSending(true);
+      setMediaError('');
+
+      try {
+        await sendMessage(currentConversationId, messageText);
+
+        setInputMessage('');
+        setShowEmojiPicker(false);
+        setShowGifPicker(false);
+
+        // Remove o pedido da navegação depois da confirmação da API.
+        navigate(location.pathname, { replace: true, state: null });
+      } catch (error) {
+        console.error(
+          'Erro ao enviar link da proposta pelo WhatsApp do CRM:',
+          error,
+        );
+
+        // Deixa a mensagem no campo para permitir uma tentativa manual.
+        setInputMessage(messageText);
+        setMediaError(
+          error?.response?.data?.message ||
+            error?.message ||
+            'Não foi possível enviar o link. A mensagem ficou no campo para você tentar novamente.',
+        );
+
+        // Limpa a solicitação automática para não repetir o envio em loop.
+        navigate(location.pathname, { replace: true, state: null });
+        autoSendRequestRef.current = null;
+      } finally {
+        setSending(false);
+      }
+    };
+
+    sendProposalLink();
+  }, [
+    location.state,
+    location.pathname,
+    currentConversation?._id,
+    currentConversation?.channel,
+    sendMessage,
+    navigate,
+  ]);
 
   // ============================================================
   // UPLOAD DE ARQUIVOS, IMAGENS, ÁUDIO E VÍDEO
