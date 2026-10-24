@@ -33,6 +33,8 @@ export default function Contact() {
   const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [submittedWhatsappConsent, setSubmittedWhatsappConsent] =
+    useState(false);
   const [error, setError] = useState('');
 
   const regions = [
@@ -167,11 +169,15 @@ export default function Contact() {
 
         // Consentimento explícito coletado pelo formulário.
         // O backend deve persistir a autorização com segurança.
-        whatsappConsent: form.whatsappConsent,
+        whatsappConsent: {
+          status: form.whatsappConsent ? 'granted' : 'unknown',
+          source: form.whatsappConsent ? 'site' : '',
+        },
       });
 
       console.log('Lead criado:', response.data);
 
+      setSubmittedWhatsappConsent(form.whatsappConsent);
       setSuccess(true);
       setForm(initialForm);
 
@@ -284,7 +290,7 @@ export default function Contact() {
                       solicitação e entrar em contato.
                     </p>
 
-                    {form.whatsappConsent && (
+                    {submittedWhatsappConsent && (
                       <p className="mt-3 text-sm text-blue-400">
                         Sua autorização de contato pelo WhatsApp foi enviada
                         junto com a solicitação.

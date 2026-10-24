@@ -153,6 +153,8 @@ export default function PropertyPage() {
   const [formErrors, setFormErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [submittedWhatsappConsent, setSubmittedWhatsappConsent] =
+    useState(false);
 
   // ==========================================================
   // TOAST
@@ -758,9 +760,11 @@ export default function PropertyPage() {
         sessionId: getSessionId(),
 
         visitorId: getVisitorId(),
+        // Envia o consentimento no formato esperado pelo backend.
+        // Só registra "granted" quando a pessoa marcou explicitamente a caixa.
         whatsappConsent: {
-          status: form.whatsappConsent ? 'granted' : 'unknown',
-          source: form.whatsappConsent ? 'broker_hotsite' : '',
+          status: form.whatsappConsent === true ? 'granted' : 'unknown',
+          source: form.whatsappConsent === true ? 'broker_hotsite' : '',
         },
       };
 
@@ -774,6 +778,7 @@ export default function PropertyPage() {
 
       await api.post('/api/leads/hotsite', payload);
 
+      setSubmittedWhatsappConsent(form.whatsappConsent === true);
       setSuccess(true);
 
       setForm({
@@ -1329,6 +1334,12 @@ export default function PropertyPage() {
 
                           <span>Solicitação enviada com sucesso</span>
                         </div>
+                        {submittedWhatsappConsent && (
+                          <p className="mt-3 text-xs leading-5 text-blue-300">
+                            Sua autorização para contato pelo WhatsApp foi
+                            enviada junto com sua solicitação.
+                          </p>
+                        )}
                       </div>
 
                       <button
@@ -1341,7 +1352,10 @@ export default function PropertyPage() {
                             phone: '',
                             email: '',
                             message: '',
+                            whatsappConsent: false,
                           });
+                          setSubmittedWhatsappConsent(false);
+                          setFormErrors({});
                         }}
                         className="mt-4 w-full rounded-2xl border border-white/10 bg-white/[0.025] py-3.5 text-sm font-medium text-gray-300 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-white"
                       >
