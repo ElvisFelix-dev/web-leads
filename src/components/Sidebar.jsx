@@ -1048,7 +1048,7 @@ export default function Sidebar({ onCollapseChange }) {
             "
           >
             <p className="text-[10px] text-gray-600 text-center">
-              CRM NODUS v1.0
+              CRM NODUS v1.3
             </p>
           </div>
         )}
