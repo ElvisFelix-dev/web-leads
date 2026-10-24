@@ -147,6 +147,7 @@ export default function PropertyPage() {
     phone: '',
     email: '',
     message: '',
+    whatsappConsent: false,
   });
 
   const [formErrors, setFormErrors] = useState({});
@@ -757,6 +758,10 @@ export default function PropertyPage() {
         sessionId: getSessionId(),
 
         visitorId: getVisitorId(),
+        whatsappConsent: {
+          status: form.whatsappConsent ? 'granted' : 'unknown',
+          source: form.whatsappConsent ? 'broker_hotsite' : '',
+        },
       };
 
       console.log('====================================');
@@ -776,6 +781,7 @@ export default function PropertyPage() {
         phone: '',
         email: '',
         message: '',
+        whatsappConsent: false,
       });
 
       setFormErrors({});
@@ -1435,6 +1441,39 @@ export default function PropertyPage() {
                             placeholder={`Olá! Tenho interesse no imóvel ${propertyName}. Gostaria de receber mais informações.`}
                             className="w-full resize-none rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3.5 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500/50 focus:bg-white/[0.05] focus:ring-1 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                           />
+                        </div>
+
+                        {/* CONSENTIMENTO OPCIONAL PARA WHATSAPP */}
+                        <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
+                          <label
+                            htmlFor="hotsite-whatsapp-consent"
+                            className="flex cursor-pointer items-start gap-3"
+                          >
+                            <input
+                              id="hotsite-whatsapp-consent"
+                              name="whatsappConsent"
+                              type="checkbox"
+                              checked={form.whatsappConsent}
+                              onChange={(event) =>
+                                setForm((current) => ({
+                                  ...current,
+                                  whatsappConsent: event.target.checked,
+                                }))
+                              }
+                              disabled={submitting}
+                              className="mt-1 h-4 w-4 shrink-0 accent-blue-500"
+                            />
+                            <span className="text-sm leading-6 text-gray-300">
+                              Autorizo o contato pelo WhatsApp sobre este imóvel
+                              e o recebimento de mensagens relacionadas ao meu
+                              interesse. Posso retirar essa autorização a
+                              qualquer momento.
+                              <span className="mt-1 block text-xs text-gray-500">
+                                Opcional. Você pode enviar sua solicitação sem
+                                marcar esta opção.
+                              </span>
+                            </span>
+                          </label>
                         </div>
 
                         {/* BUTTON */}

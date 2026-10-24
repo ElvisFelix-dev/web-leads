@@ -466,6 +466,8 @@ export default function PropertyDetails() {
     email: '',
     phone: '',
     message: '',
+    // Consentimento explícito e opcional para contato pelo WhatsApp.
+    whatsappConsent: false,
   });
 
   /* ==========================================================
@@ -831,6 +833,10 @@ export default function PropertyDetails() {
         email: form.email.trim().toLowerCase(),
         phone: form.phone.trim(),
         message: form.message.trim(),
+        whatsappConsent: {
+          status: form.whatsappConsent ? 'granted' : 'unknown',
+          source: form.whatsappConsent ? 'property_page' : '',
+        },
         source: 'public',
         sourceType: 'property_page',
         region: propertyRegion,
@@ -887,6 +893,7 @@ export default function PropertyDetails() {
         email: '',
         phone: '',
         message: '',
+        whatsappConsent: false,
       });
     }, 200);
   }
@@ -2186,6 +2193,38 @@ export default function PropertyDetails() {
                     <div className="mt-1 flex justify-end text-xs text-gray-500">
                       {form.message.length}/500
                     </div>
+                  </div>
+
+                  {/* CONSENTIMENTO OPCIONAL PARA WHATSAPP */}
+                  <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
+                    <label
+                      htmlFor="property-whatsapp-consent"
+                      className="flex cursor-pointer items-start gap-3"
+                    >
+                      <input
+                        id="property-whatsapp-consent"
+                        name="whatsappConsent"
+                        type="checkbox"
+                        checked={form.whatsappConsent}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            whatsappConsent: event.target.checked,
+                          }))
+                        }
+                        className="mt-1 h-4 w-4 shrink-0 accent-blue-500"
+                      />
+
+                      <span className="text-sm leading-6 text-gray-300">
+                        Autorizo o contato pelo WhatsApp sobre este imóvel e o
+                        recebimento de mensagens relacionadas ao meu interesse.
+                        Posso retirar essa autorização a qualquer momento.
+                        <span className="mt-1 block text-xs text-gray-500">
+                          Opcional. Você pode enviar sua solicitação sem marcar
+                          esta opção.
+                        </span>
+                      </span>
+                    </label>
                   </div>
 
                   <div className="rounded-2xl border border-white/10 bg-gray-800 p-4">

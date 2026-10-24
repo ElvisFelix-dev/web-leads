@@ -1,4 +1,5 @@
 // src/pages/Contact.jsx
+
 import { useState } from 'react';
 import {
   User,
@@ -7,11 +8,11 @@ import {
   MessageSquare,
   Send,
   CheckCircle2,
-  ArrowLeft,
   Building2,
   MapPin,
+  MessageCircle,
+  ShieldCheck,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
 
 import Header from '../../components/site/Header';
 import Footer from '../../components/site/Footer';
@@ -20,19 +21,20 @@ import api from '../../service/api';
 import { toast } from 'react-toastify';
 
 export default function Contact() {
-  const [form, setForm] = useState({
+  const initialForm = {
     name: '',
     email: '',
     phone: '',
     region: 'central',
     message: '',
-  });
+    whatsappConsent: false,
+  };
 
+  const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
-  // 🔥 REGIÕES DISPONÍVEIS
   const regions = [
     { value: 'central', label: 'Centro' },
     { value: 'zona_sul', label: 'Zona Sul' },
@@ -43,117 +45,143 @@ export default function Contact() {
     { value: 'grande_sp', label: 'Grande SP' },
   ];
 
-  /* ==========================================================
-     VALIDAÇÕES
-  ========================================================== */
+  // ============================================================
+  // VALIDAÇÕES
+  // ============================================================
 
   const validateEmail = (email) => {
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    return emailRegex.test(email);
+
+    return emailRegex.test(email.trim());
   };
 
   const validatePhone = (phone) => {
-    // Remove todos os caracteres não numéricos
     const numbers = phone.replace(/\D/g, '');
-    // Verifica se tem 10 ou 11 dígitos (com ou sem 9)
+
     if (numbers.length < 10 || numbers.length > 11) {
       return false;
     }
-    // Verifica se o DDD é válido (11 a 99)
-    const ddd = parseInt(numbers.substring(0, 2));
-    if (ddd < 11 || ddd > 99) {
-      return false;
-    }
-    return true;
+
+    const ddd = Number(numbers.substring(0, 2));
+
+    return ddd >= 11 && ddd <= 99;
   };
+
+  // ============================================================
+  // FORMATAÇÃO DE TELEFONE
+  // ============================================================
 
   const formatPhone = (value) => {
-    const numbers = value.replace(/\D/g, '');
+    const numbers = value.replace(/\D/g, '').slice(0, 11);
+
     if (numbers.length <= 2) {
       return numbers;
-    } else if (numbers.length <= 6) {
-      return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
-    } else if (numbers.length <= 10) {
-      return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 6)}-${numbers.slice(6)}`;
-    } else {
-      return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`;
     }
+
+    if (numbers.length <= 6) {
+      return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
+    }
+
+    if (numbers.length <= 10) {
+      return `(${numbers.slice(0, 2)}) ${numbers.slice(
+        2,
+        6,
+      )}-${numbers.slice(6)}`;
+    }
+
+    return `(${numbers.slice(0, 2)}) ${numbers.slice(
+      2,
+      7,
+    )}-${numbers.slice(7)}`;
   };
 
-  /* ==========================================================
-     HANDLERS
-  ========================================================== */
+  // ============================================================
+  // HANDLERS
+  // ============================================================
 
   const handleChange = (field, value) => {
-    // 🔥 SE FOR TELEFONE, APLICAR MÁSCARA
-    if (field === 'phone') {
-      const formatted = formatPhone(value);
-      setForm((prev) => ({ ...prev, [field]: formatted }));
-      return;
-    }
+    const nextValue = field === 'phone' ? formatPhone(value) : value;
 
     setForm((prev) => ({
       ...prev,
-      [field]: value,
+      [field]: nextValue,
     }));
+
+    if (error) {
+      setError('');
+    }
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
+    if (loading) return;
+
     setError('');
-    setSuccess(false);
+
+    const name = form.name.trim();
+    const email = form.email.trim().toLowerCase();
+    const phone = form.phone.trim();
+    const message = form.message.trim();
+
+    if (name.length < 2) {
+      const messageError = 'Informe seu nome completo.';
+
+      setError(messageError);
+      toast.error(messageError);
+      return;
+    }
+
+    if (!validateEmail(email)) {
+      const messageError =
+        'Digite um e-mail válido, por exemplo: nome@email.com.';
+
+      setError(messageError);
+      toast.error(messageError);
+      return;
+    }
+
+    if (!validatePhone(phone)) {
+      const messageError =
+        'Digite um telefone válido, por exemplo: (11) 99999-9999.';
+
+      setError(messageError);
+      toast.error(messageError);
+      return;
+    }
+
     setLoading(true);
 
-    // 🔥 VALIDAR EMAIL
-    if (!validateEmail(form.email)) {
-      setError('Por favor, digite um e-mail válido (ex: nome@email.com)');
-      toast.error('Por favor, digite um e-mail válido (ex: nome@email.com)');
-      setLoading(false);
-      return;
-    }
-
-    // 🔥 VALIDAR TELEFONE
-    if (!validatePhone(form.phone)) {
-      setError('Por favor, digite um telefone válido (ex: (11) 99999-9999)');
-      toast.error('Por favor, digite um telefone válido (ex: (11) 99999-9999)');
-      setLoading(false);
-      return;
-    }
-
     try {
-      // 🔥 ENVIAR COM REGIÃO PARA A ROTA CORRETA
       const response = await api.post('/api/lead-capture/site', {
-        name: form.name.trim(),
-        email: form.email.trim().toLowerCase(),
-        phone: form.phone.trim(),
+        name,
+        email,
+        phone,
         region: form.region,
         source: 'public',
         sourceType: 'company_site',
-        notes: form.message.trim(),
-        message: form.message.trim(),
+        notes: message,
+        message,
         landingPage: window.location.href,
         referrer: document.referrer || '',
+
+        // Consentimento explícito coletado pelo formulário.
+        // O backend deve persistir a autorização com segurança.
+        whatsappConsent: form.whatsappConsent,
       });
 
-      console.log('✅ Lead criado:', response.data);
+      console.log('Lead criado:', response.data);
 
       setSuccess(true);
+      setForm(initialForm);
+
       toast.success('Solicitação enviada com sucesso!');
 
-      if (response.data?.assignedTo) {
+      if (response.data?.assignedTo?.name) {
         toast.info(
-          `Seu contato foi encaminhado para ${response.data.assignedTo.name}`,
+          `Seu contato foi encaminhado para ${response.data.assignedTo.name}.`,
         );
       }
-
-      setForm({
-        name: '',
-        email: '',
-        phone: '',
-        region: 'central',
-        message: '',
-      });
     } catch (err) {
       console.error('Erro ao enviar contato:', err.response?.data || err);
 
@@ -168,17 +196,26 @@ export default function Contact() {
     }
   };
 
+  // ============================================================
+  // INTERFACE
+  // ============================================================
+
   return (
-    <div>
+    <div className="min-h-screen bg-gray-950 text-white">
       <Header />
 
-      <main className="min-h-screen bg-gray-950 text-white">
+      <main>
         <section className="relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-950/30 via-gray-950 to-gray-950" />
+          {/* Fundo decorativo */}
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-950/40 via-gray-950 to-gray-950" />
+
+          <div className="pointer-events-none absolute -left-32 top-20 h-80 w-80 rounded-full bg-blue-600/10 blur-3xl" />
+
+          <div className="pointer-events-none absolute -right-32 bottom-10 h-96 w-96 rounded-full bg-indigo-600/10 blur-3xl" />
 
           <div className="relative mx-auto max-w-7xl px-6 py-16 lg:px-8 lg:py-24">
             <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
-              {/* TEXTO */}
+              {/* APRESENTAÇÃO */}
               <div>
                 <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-sm text-blue-400">
                   <Building2 size={16} />
@@ -192,48 +229,72 @@ export default function Contact() {
 
                 <p className="mt-6 max-w-xl text-lg leading-8 text-gray-400">
                   Conte para nós o que você procura. Nossa equipe vai analisar
-                  suas necessidades e entrar em contato para ajudar você a
-                  encontrar as melhores opções.
+                  suas necessidades e ajudar você a encontrar as melhores
+                  opções.
                 </p>
 
                 <div className="mt-10 grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-blue-500/30">
                     <CheckCircle2 size={22} className="mb-3 text-blue-500" />
+
                     <h3 className="font-semibold">Atendimento personalizado</h3>
-                    <p className="mt-1 text-sm text-gray-500">
+
+                    <p className="mt-2 text-sm leading-6 text-gray-400">
                       Entendemos suas necessidades antes de apresentar os
                       imóveis.
                     </p>
                   </div>
 
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                    <CheckCircle2 size={22} className="mb-3 text-blue-500" />
-                    <h3 className="font-semibold">Resposta rápida</h3>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Seu contato chega diretamente para nossa equipe.
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-blue-500/30">
+                    <MessageCircle size={22} className="mb-3 text-blue-500" />
+
+                    <h3 className="font-semibold">Contato facilitado</h3>
+
+                    <p className="mt-2 text-sm leading-6 text-gray-400">
+                      Sua solicitação é encaminhada para nossa equipe comercial.
                     </p>
                   </div>
+                </div>
+
+                <div className="mt-8 flex items-start gap-3 text-sm text-gray-500">
+                  <ShieldCheck
+                    size={20}
+                    className="mt-0.5 shrink-0 text-blue-400"
+                  />
+
+                  <p>
+                    Seus dados são utilizados para atender à sua solicitação. A
+                    autorização para contato pelo WhatsApp é opcional.
+                  </p>
                 </div>
               </div>
 
               {/* FORMULÁRIO */}
-              <div className="rounded-3xl border border-white/10 bg-gray-900/80 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
+              <div className="rounded-3xl border border-white/10 bg-gray-900/80 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl sm:p-8">
                 {success ? (
                   <div className="flex min-h-[540px] flex-col items-center justify-center text-center">
-                    <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-green-500/10 text-green-500">
+                    <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full border border-green-500/20 bg-green-500/10 text-green-400">
                       <CheckCircle2 size={42} />
                     </div>
 
                     <h2 className="text-2xl font-bold">Mensagem enviada!</h2>
-                    <p className="mt-3 max-w-md text-gray-400">
-                      Recebemos seus dados com sucesso. Nossa equipe entrará em
-                      contato com você em breve.
+
+                    <p className="mt-3 max-w-md leading-7 text-gray-400">
+                      Recebemos seus dados. Nossa equipe vai analisar sua
+                      solicitação e entrar em contato.
                     </p>
+
+                    {form.whatsappConsent && (
+                      <p className="mt-3 text-sm text-blue-400">
+                        Sua autorização de contato pelo WhatsApp foi enviada
+                        junto com a solicitação.
+                      </p>
+                    )}
 
                     <button
                       type="button"
                       onClick={() => setSuccess(false)}
-                      className="mt-8 rounded-xl bg-blue-600 px-6 py-3 font-semibold transition hover:bg-blue-700"
+                      className="mt-8 rounded-xl bg-blue-600 px-6 py-3 font-semibold transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-gray-900"
                     >
                       Enviar outra mensagem
                     </button>
@@ -244,23 +305,32 @@ export default function Contact() {
                       <h2 className="text-2xl font-bold">
                         Fale com um especialista
                       </h2>
-                      <p className="mt-2 text-sm text-gray-400">
-                        Preencha seus dados e entraremos em contato.
+
+                      <p className="mt-2 text-sm leading-6 text-gray-400">
+                        Preencha seus dados para encontrarmos as melhores opções
+                        para você.
                       </p>
                     </div>
 
                     {/* NOME */}
                     <div>
-                      <label className="mb-2 block text-sm font-medium text-gray-300">
-                        Nome <span className="text-red-400">*</span>
+                      <label
+                        htmlFor="contact-name"
+                        className="mb-2 block text-sm font-medium text-gray-300"
+                      >
+                        Nome completo <span className="text-red-400">*</span>
                       </label>
+
                       <div className="relative">
                         <User
                           size={18}
                           className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"
                         />
+
                         <input
+                          id="contact-name"
                           type="text"
+                          autoComplete="name"
                           value={form.name}
                           onChange={(e) => handleChange('name', e.target.value)}
                           placeholder="Seu nome completo"
@@ -272,56 +342,71 @@ export default function Contact() {
                       </div>
                     </div>
 
-                    {/* EMAIL COM VALIDAÇÃO */}
+                    {/* EMAIL */}
                     <div>
-                      <label className="mb-2 block text-sm font-medium text-gray-300">
+                      <label
+                        htmlFor="contact-email"
+                        className="mb-2 block text-sm font-medium text-gray-300"
+                      >
                         E-mail <span className="text-red-400">*</span>
                       </label>
+
                       <div className="relative">
                         <Mail
                           size={18}
                           className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"
                         />
+
                         <input
+                          id="contact-email"
                           type="email"
+                          autoComplete="email"
                           value={form.email}
                           onChange={(e) =>
                             handleChange('email', e.target.value)
                           }
                           placeholder="seu@email.com"
                           required
-                          pattern="[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
-                          title="Digite um e-mail válido (ex: nome@email.com)"
+                          maxLength={254}
                           className="w-full rounded-xl border border-white/10 bg-gray-950 py-3.5 pl-11 pr-4 text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                         />
                       </div>
                     </div>
 
-                    {/* TELEFONE COM VALIDAÇÃO */}
+                    {/* TELEFONE */}
                     <div>
-                      <label className="mb-2 block text-sm font-medium text-gray-300">
+                      <label
+                        htmlFor="contact-phone"
+                        className="mb-2 block text-sm font-medium text-gray-300"
+                      >
                         WhatsApp / Telefone{' '}
                         <span className="text-red-400">*</span>
                       </label>
+
                       <div className="relative">
                         <Phone
                           size={18}
                           className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"
                         />
+
                         <input
+                          id="contact-phone"
                           type="tel"
+                          autoComplete="tel"
+                          inputMode="tel"
                           value={form.phone}
                           onChange={(e) =>
                             handleChange('phone', e.target.value)
                           }
                           placeholder="(11) 99999-9999"
                           required
-                          pattern="\([0-9]{2}\) [0-9]{4,5}-[0-9]{4}"
-                          title="Digite um telefone válido (ex: (11) 99999-9999)"
                           maxLength={16}
+                          pattern="\([0-9]{2}\) [0-9]{4,5}-[0-9]{4}"
+                          title="Digite um telefone válido, por exemplo: (11) 99999-9999"
                           className="w-full rounded-xl border border-white/10 bg-gray-950 py-3.5 pl-11 pr-4 text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                         />
                       </div>
+
                       <p className="mt-1 text-xs text-gray-500">
                         Formato: (DDD) 9XXXX-XXXX ou (DDD) XXXX-XXXX
                       </p>
@@ -329,16 +414,22 @@ export default function Contact() {
 
                     {/* REGIÃO */}
                     <div>
-                      <label className="mb-2 block text-sm font-medium text-gray-300">
+                      <label
+                        htmlFor="contact-region"
+                        className="mb-2 block text-sm font-medium text-gray-300"
+                      >
                         Região de interesse{' '}
                         <span className="text-red-400">*</span>
                       </label>
+
                       <div className="relative">
                         <MapPin
                           size={18}
                           className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"
                         />
+
                         <select
+                          id="contact-region"
                           value={form.region}
                           onChange={(e) =>
                             handleChange('region', e.target.value)
@@ -357,15 +448,21 @@ export default function Contact() {
 
                     {/* MENSAGEM */}
                     <div>
-                      <label className="mb-2 block text-sm font-medium text-gray-300">
+                      <label
+                        htmlFor="contact-message"
+                        className="mb-2 block text-sm font-medium text-gray-300"
+                      >
                         Como podemos ajudar?
                       </label>
+
                       <div className="relative">
                         <MessageSquare
                           size={18}
                           className="absolute left-4 top-4 text-gray-500"
                         />
+
                         <textarea
+                          id="contact-message"
                           rows={4}
                           value={form.message}
                           onChange={(e) =>
@@ -376,14 +473,48 @@ export default function Contact() {
                           className="w-full resize-none rounded-xl border border-white/10 bg-gray-950 py-3.5 pl-11 pr-4 text-white outline-none transition placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                         />
                       </div>
+
                       <div className="mt-1 flex justify-end text-xs text-gray-500">
                         {form.message.length}/500
                       </div>
                     </div>
 
+                    {/* CONSENTIMENTO OPCIONAL PARA WHATSAPP */}
+                    <div className="rounded-xl border border-blue-500/20 bg-blue-500/[0.05] p-4">
+                      <label
+                        htmlFor="contact-whatsapp-consent"
+                        className="flex cursor-pointer items-start gap-3"
+                      >
+                        <input
+                          id="contact-whatsapp-consent"
+                          type="checkbox"
+                          checked={form.whatsappConsent}
+                          onChange={(e) =>
+                            handleChange('whatsappConsent', e.target.checked)
+                          }
+                          className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-blue-500"
+                        />
+
+                        <span className="text-sm leading-6 text-gray-300">
+                          Autorizo a imobiliária a entrar em contato comigo pelo
+                          WhatsApp para tratar da minha solicitação e apresentar
+                          opções de imóveis. Sei que posso retirar esta
+                          autorização a qualquer momento.
+                          <span className="mt-2 block text-xs leading-5 text-gray-500">
+                            Opcional. Deixe desmarcado se não quiser autorizar o
+                            contato pelo WhatsApp. Sua solicitação poderá ser
+                            enviada normalmente.
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+
                     {/* ERRO */}
                     {error && (
-                      <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+                      <div
+                        role="alert"
+                        className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400"
+                      >
                         {error}
                       </div>
                     )}
@@ -392,12 +523,12 @@ export default function Contact() {
                     <button
                       type="submit"
                       disabled={loading}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-4 font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-4 font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {loading ? (
                         <>
                           <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                          Enviando...
+                          Enviando solicitação...
                         </>
                       ) : (
                         <>
@@ -407,9 +538,10 @@ export default function Contact() {
                       )}
                     </button>
 
-                    <p className="text-center text-xs text-gray-600">
-                      Seus dados serão enviados com segurança para nossa equipe
-                      comercial.
+                    <p className="text-center text-xs leading-5 text-gray-500">
+                      Seus dados serão utilizados para processar sua
+                      solicitação. A autorização para contato pelo WhatsApp é
+                      opcional.
                     </p>
                   </form>
                 )}
