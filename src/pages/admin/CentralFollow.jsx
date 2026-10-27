@@ -172,8 +172,6 @@ export default function CentralFollow() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [applying, setApplying] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [testLeadId, setTestLeadId] = useState('');
   const [selectedStep, setSelectedStep] = useState('D0');
   const [selectedVariationId, setSelectedVariationId] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(null);
@@ -377,7 +375,7 @@ export default function CentralFollow() {
       return toast.error('A API de automação não está disponível no backend.');
     setSaving(true);
     try {
-      const safeConfig = { ...config, timezone: TIMEZONE, enabled: false };
+      const safeConfig = { ...config, timezone: TIMEZONE };
       const templatePayload = templates.map((item) => {
         const variations = item.variations.map(({ _id, message, enabled }) => ({
           ...(_id ? { _id } : {}),
@@ -409,7 +407,9 @@ export default function CentralFollow() {
           new Date().toISOString(),
       );
       toast.success(
-        'Regras e mensagens salvas. A automação permanece pausada; nenhum envio real foi ativado.',
+        safeConfig.enabled
+          ? 'Regras e mensagens salvas. A automação está habilitada nas configurações.'
+          : 'Regras e mensagens salvas. A automação permanece pausada.',
       );
     } catch (error) {
       toast.error(
@@ -420,30 +420,6 @@ export default function CentralFollow() {
       await loadAll();
     } finally {
       setSaving(false);
-    }
-  };
-
-  const runTest = async () => {
-    if (!testLeadId.trim())
-      return toast.info('Informe o ID de um lead para executar o teste.');
-    setTesting(true);
-    try {
-      const { data } = await api.post('/api/lead-follow-up-automation/test', {
-        leadId: testLeadId.trim(),
-        step: selectedStep,
-        dryRun: true,
-      });
-      toast.success(
-        data?.message ||
-          'Teste simulado solicitado. Nenhuma mensagem real foi enviada.',
-      );
-    } catch (error) {
-      toast.error(
-        error?.response?.data?.message ||
-          'O teste simulado não foi concluído. Confira o endpoint no backend.',
-      );
-    } finally {
-      setTesting(false);
     }
   };
 
@@ -579,15 +555,21 @@ export default function CentralFollow() {
                 Nas etapas habilitadas
               </div>
             </div>
-            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.05] p-4">
-              <div className="flex items-center gap-2 text-xs text-amber-200">
-                <FiShield /> Estado seguro
+            <div
+              className={`rounded-2xl border p-4 ${config.enabled ? 'border-emerald-500/20 bg-emerald-500/[0.05]' : 'border-amber-500/20 bg-amber-500/[0.05]'}`}
+            >
+              <div
+                className={`flex items-center gap-2 text-xs ${config.enabled ? 'text-emerald-200' : 'text-amber-200'}`}
+              >
+                <FiShield /> Estado da automação
               </div>
-              <div className="mt-2 text-lg font-bold text-amber-200">
-                Envios pausados
+              <div
+                className={`mt-2 text-lg font-bold ${config.enabled ? 'text-emerald-200' : 'text-amber-200'}`}
+              >
+                {config.enabled ? 'Automação habilitada' : 'Envios pausados'}
               </div>
               <div className="mt-1 text-xs text-slate-400">
-                Salvar não ativa envios reais
+                A configuração não substitui as validações de envio do backend.
               </div>
             </div>
           </div>
@@ -699,6 +681,26 @@ export default function CentralFollow() {
                       updateConfig({ windowEnd: event.target.value })
                     }
                     className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-white focus:border-blue-500 focus:outline-none"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-4 rounded-xl border border-blue-500/25 bg-blue-500/[0.06] p-4 sm:col-span-2">
+                  <span>
+                    <span className="block font-semibold text-white">
+                      Habilitar automação de follow-ups
+                    </span>
+                    <span className="mt-1 block text-xs text-slate-400">
+                      O envio real também depende das validações e permissões do
+                      backend.
+                    </span>
+                  </span>
+                  <input
+                    aria-label="Habilitar automação de follow-ups"
+                    type="checkbox"
+                    checked={config.enabled === true}
+                    onChange={(event) =>
+                      updateConfig({ enabled: event.target.checked })
+                    }
+                    className="h-5 w-5 rounded border-slate-600 bg-slate-900 text-blue-500"
                   />
                 </label>
                 <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950/70 p-4 sm:col-span-2">
@@ -1016,54 +1018,46 @@ export default function CentralFollow() {
             </section>
 
             <section className="grid gap-5 lg:grid-cols-2">
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+              <div className="rounded-2xl border border-blue-500/20 bg-blue-500/[0.05] p-5">
                 <div className="mb-4 flex items-center gap-3">
-                  <span className="rounded-xl bg-violet-500/10 p-3 text-violet-300">
-                    <FiShield size={20} />
+                  <span className="rounded-xl bg-blue-500/10 p-3 text-blue-300">
+                    <FiZap size={20} />
                   </span>
                   <div>
                     <h2 className="font-bold text-white">
-                      Teste individual simulado
+                      Fluxo automático do lead
                     </h2>
                     <p className="text-xs text-slate-400">
-                      Valide sem enviar WhatsApp real
+                      Sem informar ID manualmente
                     </p>
                   </div>
                 </div>
-                <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-slate-300">
-                    ID do lead
-                  </span>
-                  <input
-                    value={testLeadId}
-                    onChange={(event) => setTestLeadId(event.target.value)}
-                    placeholder="ID do lead"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white placeholder:text-slate-600 focus:border-blue-500 focus:outline-none"
-                  />
-                </label>
-                <button
-                  type="button"
-                  disabled={testing || !automationApiAvailable}
-                  onClick={runTest}
-                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-violet-400/30 bg-violet-500/10 px-4 py-3 text-sm font-bold text-violet-200 hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {testing ? (
-                    <FiRefreshCw className="animate-spin" />
-                  ) : (
-                    <FiPause />
-                  )}{' '}
-                  {testing ? 'Executando...' : `Simular etapa ${selectedStep}`}
-                </button>
-                <p className="mt-3 text-xs leading-5 text-slate-500">
-                  A chamada envia <code>dryRun: true</code>. O backend deve
-                  validar consentimento, resposta prévia, janela de envio e
-                  deduplicação.
+                <ol className="space-y-3 text-sm leading-5 text-slate-300">
+                  <li>
+                    <strong className="text-white">1.</strong> O lead preenche o
+                    formulário do site e concede consentimento válido para
+                    contato via WhatsApp.
+                  </li>
+                  <li>
+                    <strong className="text-white">2.</strong> O backend cria o
+                    lead e agenda D0 e as próximas etapas automaticamente.
+                  </li>
+                  <li>
+                    <strong className="text-white">3.</strong> O processador
+                    envia D0 e D1 nos horários configurados, respeitando a
+                    janela permitida.
+                  </li>
+                </ol>
+                <p className="mt-4 rounded-xl border border-slate-700 bg-slate-950/60 p-3 text-xs leading-5 text-slate-400">
+                  Esta tela configura as regras; o fluxo depende também da
+                  integração entre formulário, serviço de agendamento e
+                  processador no backend.
                 </p>
               </div>
               <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.05] p-5">
                 <div className="flex items-center gap-2 text-amber-200">
                   <FiShield />
-                  <h2 className="font-bold">Proteções e pendências</h2>
+                  <h2 className="font-bold">Proteções obrigatórias</h2>
                 </div>
                 <ul className="mt-3 space-y-3 text-sm leading-5 text-slate-300">
                   <li className="flex gap-2">
@@ -1072,7 +1066,7 @@ export default function CentralFollow() {
                   </li>
                   <li className="flex gap-2">
                     <FiCheckCircle className="mt-0.5 shrink-0 text-emerald-400" />{' '}
-                    Cancelar sequência após resposta do lead.
+                    Cancelar a sequência após resposta do lead.
                   </li>
                   <li className="flex gap-2">
                     <FiCheckCircle className="mt-0.5 shrink-0 text-emerald-400" />{' '}
@@ -1080,7 +1074,8 @@ export default function CentralFollow() {
                   </li>
                   <li className="flex gap-2">
                     <FiCheckCircle className="mt-0.5 shrink-0 text-emerald-400" />{' '}
-                    Salvar não ativa envios reais.
+                    Auditar a fila pendente antes de liberar envios reais em
+                    lote.
                   </li>
                 </ul>
                 <div className="mt-4 rounded-xl border border-slate-700 bg-slate-950/60 p-3 text-xs leading-5 text-slate-400">
@@ -1091,7 +1086,6 @@ export default function CentralFollow() {
                 </div>
               </div>
             </section>
-
             <div className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-2 text-xs leading-5 text-slate-400">
                 <FiInfo className="mt-0.5 shrink-0 text-blue-300" /> Aplicar
