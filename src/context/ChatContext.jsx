@@ -747,8 +747,44 @@ export const ChatProvider = ({ children }) => {
   useEffect(() => {
     if (!user?._id) return undefined;
 
-    const socketUrl =
-      import.meta.env.VITE_API_URL || 'https\://leadsnamao.onrender.com';
+    // Socket.IO deve conectar à origem do backend, não ao endpoint REST /api.
+    // Se existir uma URL exclusiva para sockets, ela tem prioridade.
+    const configuredSocketUrl = import.meta.env.VITE_SOCKET_URL;
+    const configuredApiUrl = import.meta.env.VITE_API_URL;
+    const socketUrlCandidate =
+      configuredSocketUrl ||
+      configuredApiUrl ||
+      'https://leadsnamao.onrender.com';
+
+    let socketUrl = socketUrlCandidate;
+
+    try {
+      const parsedSocketUrl = new URL(socketUrlCandidate);
+      parsedSocketUrl.pathname = parsedSocketUrl.pathname.replace(/\/+$/, '');
+
+      // Ex.: https://api.exemplo.com/api -> https://api.exemplo.com
+      if (parsedSocketUrl.pathname === '/api') {
+        parsedSocketUrl.pathname = '';
+      }
+
+      parsedSocketUrl.search = '';
+      parsedSocketUrl.hash = '';
+      socketUrl = parsedSocketUrl.toString().replace(/\/$/, '');
+    } catch (error) {
+      console.error(
+        '❌ [CHAT] URL do Socket.IO inválida. Confira VITE_SOCKET_URL/VITE_API_URL:',
+        socketUrlCandidate,
+        error,
+      );
+    }
+
+    console.log('🔎 [CHAT] Diagnóstico da conexão:', {
+      socketUrl,
+      configuredSocketUrl: configuredSocketUrl || null,
+      configuredApiUrl: configuredApiUrl || null,
+      userId: String(user._id),
+      frontendOrigin: window.location.origin,
+    });
 
     const newSocket = io(socketUrl, {
       auth: { userId: String(user._id) },
@@ -773,7 +809,13 @@ export const ChatProvider = ({ children }) => {
     setSocket(newSocket);
 
     const handleConnect = () => {
-      console.log('🔌 Conectado ao chat socket:', newSocket.id);
+      console.log('✅ [CHAT] Socket conectado:', {
+        socketId: newSocket.id,
+        connected: newSocket.connected,
+        transport: newSocket.io?.engine?.transport?.name || 'desconhecido',
+        socketUrl,
+        userId: String(user._id),
+      });
 
       setIsConnected(true);
 
@@ -785,13 +827,25 @@ export const ChatProvider = ({ children }) => {
     };
 
     const handleDisconnect = (reason) => {
-      console.log('🔌 Desconectado do chat socket:', reason);
+      console.warn('⚠️ [CHAT] Socket desconectado:', {
+        reason,
+        socketUrl,
+        socketId: newSocket.id || null,
+        userId: String(user._id),
+      });
 
       setIsConnected(false);
     };
 
     const handleConnectError = (error) => {
-      console.error('❌ Erro de conexão Socket.IO:', error);
+      console.error('❌ [CHAT] Falha na conexão Socket.IO:', {
+        message: error?.message,
+        description: error?.description,
+        context: error?.context,
+        type: error?.type,
+        socketUrl,
+        userId: String(user._id),
+      });
 
       setIsConnected(false);
     };
