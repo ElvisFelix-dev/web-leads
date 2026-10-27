@@ -836,12 +836,35 @@ export default function BrokerEdit() {
           ...form.settings,
           monthlyGoal: Number(form.settings.monthlyGoal) || 0,
           commissionPercentage: Number(form.commissionPercentage) || 0,
+          notifications: Boolean(form.settings.notifications),
+          showcaseEnabled: Boolean(form.settings.showcaseEnabled),
         },
 
         commissionPercentage: Number(form.commissionPercentage) || 0,
 
         capturerCommissionPercentage:
           Number(form.capturerCommissionPercentage) || 0,
+
+        brokerSettings: {
+          ...form.brokerSettings,
+          specializedRegions: form.brokerSettings.specializedRegions || [],
+          specializedTypes: form.brokerSettings.specializedTypes || [],
+          isActive: Boolean(form.brokerSettings.isActive),
+          maxActiveLeads: Number(form.brokerSettings.maxActiveLeads) || 1,
+          priority: Number(form.brokerSettings.priority) || 0,
+          availableDays: form.brokerSettings.availableDays || [],
+          workHours: {
+            start: form.brokerSettings.workHours?.start || '09:00',
+            end: form.brokerSettings.workHours?.end || '18:00',
+          },
+          acceptedLeadTypes: form.brokerSettings.acceptedLeadTypes || [],
+          minPropertyValue: Number(form.brokerSettings.minPropertyValue) || 0,
+          maxPropertyValue:
+            form.brokerSettings.maxPropertyValue === '' ||
+            form.brokerSettings.maxPropertyValue == null
+              ? null
+              : Number(form.brokerSettings.maxPropertyValue),
+        },
 
         isActive: Boolean(form.isActive),
 

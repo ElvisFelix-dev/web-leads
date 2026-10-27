@@ -240,7 +240,7 @@ export default function WhatsAppQrCode() {
 
             <div className="min-w-0">
               <p className="text-lg font-bold tracking-tight text-white">
-                Leads <span className="text-blue-400">Na </span>
+                CRM<span className="text-blue-400">NODUS</span>
               </p>
               <p className="mt-0.5 text-xs text-slate-500">
                 Central de comunicação
