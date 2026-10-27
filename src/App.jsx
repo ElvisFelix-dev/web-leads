@@ -63,7 +63,7 @@ import CommissionDetails from './pages/CommissionDetails';
 
 import ChatPage from './pages/ChatPage';
 import NotificationCenter from './pages/NotificationCenter';
-import LeadFollowUpTemplates from './pages/admin/LeadFollowUpTemplates';
+import CentralFollow from './pages/admin/CentralFollow';
 
 export function App() {
   return (
@@ -142,7 +142,7 @@ export function App() {
           <Route path="/commissions" element={<CommissionApproval />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/notifications" element={<NotificationCenter />} />
-          <Route path="/admin/follow-ups" element={<LeadFollowUpTemplates />} />
+          <Route path="/central-follow-ups" element={<CentralFollow />} />
           <Route path="/qr" element={<WhatsAppQrCode />} />
           <Route path="/commissions/:id" element={<CommissionDetails />} />
           <Route path="*" element={<NotFound />} />

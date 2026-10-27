@@ -282,7 +282,7 @@ export default function Sidebar({ onCollapseChange }) {
     },
 
     {
-      path: '/admin/follow-ups',
+      path: '/central-follow-ups',
       label: 'Central de Follow-ups',
       icon: <FaRegEdit />,
     },
